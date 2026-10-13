@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Bottom panel: animation list, transport controls and the dopesheet.
+// Bottom panel: animation list, transport controls and the dopesheet (the graph editor is graph.js).
 
 import { Animation, BONE_CHANNELS, SLOT_CHANNELS } from '../core/animation.js';
 import { EASE_IN, EASE_IN_OUT, EASE_OUT, LINEAR, STEPPED, cloneCurve, isBezier } from '../core/curve.js';
@@ -106,6 +106,27 @@ export function renderControls(app, el) {
       h('span', { class: 'mono' }, `frame ${String(Math.round(app.time * FPS)).padStart(3, ' ')}  ${app.time.toFixed(2)}s`),
       h('span', { class: 'vsep' }),
       h('button', { disabled: app.mode !== Mode.Animate, onclick: () => edit.keySelection(app) }, '◆ Key (K)'),
+      h('span', { class: 'vsep' }),
+      h(
+        'span',
+        { class: 'segmented', title: 'Timeline view' },
+        [
+          ['dopesheet', 'Dopesheet'],
+          ['graph', 'Graph'],
+        ].map(([id, label]) =>
+          h(
+            'button',
+            {
+              class: app.timelineView === id ? 'active' : '',
+              onclick: () => {
+                app.timelineView = id;
+                app.changed();
+              },
+            },
+            label,
+          ),
+        ),
+      ),
     ]
       .flat()
       .filter(Boolean),
@@ -333,7 +354,7 @@ export class Dopesheet {
         app.selectedKeys = new Set([hit.key]);
         app.changed();
       }
-      if (app.selectedKeys.size) this.contextMenu(e.clientX, e.clientY);
+      if (app.selectedKeys.size) curveMenu(app, e.clientX, e.clientY);
       return;
     }
     if (e.button !== 0) return;
@@ -414,7 +435,7 @@ export class Dopesheet {
       app.playing = false;
       app.mode = Mode.Animate;
     } else if (press.move || press.retime) {
-      this.resortAll();
+      resortAnimation(app.currentAnimation());
       const n = app.selectedKeys.size;
       app.setStatus(`${press.move ? 'Moved' : 'Retimed'} ${n} key${n === 1 ? '' : 's'}`);
     } else if (press.box) {
@@ -429,40 +450,39 @@ export class Dopesheet {
     }
     app.changed();
   }
+}
 
-  /** Keeps every key list sorted by time after keys moved. */
-  resortAll() {
-    const anim = this.app.currentAnimation();
+/** Keeps every key list sorted by time after keys moved. */
+export function resortAnimation(anim) {
+  if (!anim) return;
+  const sort = (keys) => keys.sort((a, b) => a.time - b.time);
+  for (const tl of [...anim.bones, ...anim.slots]) for (const v of Object.values(tl)) if (Array.isArray(v)) sort(v);
+  for (const tl of [...anim.deform, ...anim.ik]) sort(tl.keys);
+  sort(anim.drawOrder);
+  sort(anim.events);
+  const last = anim.lastKeyTime();
+  if (last > anim.duration) anim.duration = last;
+}
+
+/** Curve presets and delete for the selected keys. */
+export function curveMenu(app, x, y) {
+  const setCurve = (curve) => () => {
+    const anim = app.currentAnimation();
     if (!anim) return;
-    const sort = (keys) => keys.sort((a, b) => a.time - b.time);
-    for (const tl of [...anim.bones, ...anim.slots]) for (const v of Object.values(tl)) if (Array.isArray(v)) sort(v);
-    for (const tl of [...anim.deform, ...anim.ik]) sort(tl.keys);
-    sort(anim.drawOrder);
-    sort(anim.events);
-    const last = anim.lastKeyTime();
-    if (last > anim.duration) anim.duration = last;
-  }
-
-  contextMenu(x, y) {
-    const app = this.app;
-    const setCurve = (curve) => () => {
-      const anim = app.currentAnimation();
-      if (!anim) return;
-      // Attachment, draw order and event keys have no curve.
-      const skip = new Set([...anim.events, ...anim.drawOrder, ...anim.slots.flatMap((s) => s.attachment ?? [])]);
-      for (const k of app.selectedKeys) if (!skip.has(k)) k.curve = cloneCurve(curve);
-      app.changed();
-    };
-    popupMenu(x, y, [
-      { label: 'Linear', action: setCurve(LINEAR) },
-      { label: 'Ease in-out', action: setCurve(EASE_IN_OUT) },
-      { label: 'Ease in', action: setCurve(EASE_IN) },
-      { label: 'Ease out', action: setCurve(EASE_OUT) },
-      { label: 'Stepped', action: setCurve(STEPPED) },
-      'separator',
-      { label: app.selectedKeys.size > 1 ? `Delete ${app.selectedKeys.size} keys` : 'Delete key', action: () => deleteSelectedKeys(app) },
-    ]);
-  }
+    // Attachment, draw order and event keys have no curve.
+    const skip = new Set([...anim.events, ...anim.drawOrder, ...anim.slots.flatMap((s) => s.attachment ?? [])]);
+    for (const k of app.selectedKeys) if (!skip.has(k)) k.curve = cloneCurve(curve);
+    app.changed();
+  };
+  popupMenu(x, y, [
+    { label: 'Linear', action: setCurve(LINEAR) },
+    { label: 'Ease in-out', action: setCurve(EASE_IN_OUT) },
+    { label: 'Ease in', action: setCurve(EASE_IN) },
+    { label: 'Ease out', action: setCurve(EASE_OUT) },
+    { label: 'Stepped', action: setCurve(STEPPED) },
+    'separator',
+    { label: app.selectedKeys.size > 1 ? `Delete ${app.selectedKeys.size} keys` : 'Delete key', action: () => deleteSelectedKeys(app) },
+  ]);
 }
 
 function diamond(ctx, c, r, fill) {

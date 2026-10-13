@@ -12,6 +12,7 @@ import * as edit from './edit.js';
 import * as toolbar from './toolbar.js';
 import * as tree from './tree.js';
 import * as inspector from './inspector.js';
+import { GraphEditor } from './graph.js';
 import { Dopesheet, deleteSelectedKeys, renderControls } from './timeline.js';
 import { Viewport } from './viewport.js';
 import { closeMenu, h, isMenuOpen, popupMenu, widgetState } from './widgets.js';
@@ -248,6 +249,7 @@ splitter($('#split-bottom'), '--bottom', 'y', -1, 120);
 
 const viewport = new Viewport(app, $('#viewport'));
 const dopesheet = new Dopesheet(app, $('#dopesheet'), $('#dopesheet canvas'));
+const graph = new GraphEditor(app, $('#graph'), $('#graph canvas'));
 const renderMenuBar = buildMenuBar();
 
 let pointersDown = 0;
@@ -287,7 +289,15 @@ function frame(now) {
   }
 
   viewport.draw();
-  dopesheet.draw();
+  const showGraph = app.timelineView === 'graph' && !!app.currentAnimation();
+  $('#graph').hidden = !showGraph;
+  if (showGraph) {
+    $('#dopesheet').hidden = true;
+    $('.dopesheet-wrap .empty').hidden = true;
+    graph.draw();
+  } else {
+    dopesheet.draw();
+  }
   for (const p of panels) {
     if (p.built !== app.version && !editingIn(p.el)) {
       p.built = app.version;
@@ -311,4 +321,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // Development builds expose the editor for debugging from the console.
-if (import.meta.env.DEV) window.rigby = { app, memoryFs, dopesheet };
+if (import.meta.env.DEV) window.rigby = { app, memoryFs, dopesheet, graph };

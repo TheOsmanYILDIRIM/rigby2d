@@ -47,6 +47,8 @@ export class App {
     this.saveTarget = null;
     this.images = new Images();
     this.sel = null;
+    /** Bottom panel view: 'dopesheet' or 'graph'. */
+    this.timelineView = 'dopesheet';
     /** Selected dopesheet keys (the key objects themselves). */
     this.selectedKeys = new Set();
     /** Additionally selected bones (the primary selection is `sel`). */
