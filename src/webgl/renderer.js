@@ -163,14 +163,14 @@ export class WebGLRenderer {
   }
 
   /** Draws every visible region and mesh of a posed skeleton in draw order. */
-  drawSkeleton(sk, pose, lookup, { tint = [1, 1, 1, 1] } = {}) {
+  drawSkeleton(sk, pose, lookup, { tint = [1, 1, 1, 1], skip = null } = {}) {
     const corners = new Float32Array(8);
     const uv = [0, 0];
     for (const i of pose.drawOrder) {
       const slot = sk.slots[i];
       if (!slot) continue;
       const att = pose.slotAttachment(sk, i);
-      if (!att) continue;
+      if (!att || skip?.(i, att)) continue;
       const type = att.type ?? 'region';
       if (type !== 'region' && type !== 'mesh' && type !== 'linkedmesh') continue;
       const source = type === 'region' ? att : sk.meshSource(i, att);
@@ -220,6 +220,44 @@ export class WebGLRenderer {
         for (let k = 0; k < tris.length; k++) this.indices[this.indexCount++] = base + tris[k];
       }
     }
+  }
+
+  /** Draws a solid line from (x0, y0) to (x1, y1) in world units, `width` units thick. */
+  line(x0, y0, x1, y1, width, color) {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-9) return;
+    const nx = (-dy / len) * (width / 2);
+    const ny = (dx / len) * (width / 2);
+    this.use(this.white(), 'normal');
+    if (!this.reserve(4, 6)) return;
+    const base = this.vertexCount;
+    this.vertex(x0 + nx, y0 + ny, 0.5, 0.5, color, null);
+    this.vertex(x1 + nx, y1 + ny, 0.5, 0.5, color, null);
+    this.vertex(x1 - nx, y1 - ny, 0.5, 0.5, color, null);
+    this.vertex(x0 - nx, y0 - ny, 0.5, 0.5, color, null);
+    this.index(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+
+  /** A 1x1 white texture for solid colors. */
+  white() {
+    if (!this.whiteTexture) {
+      const gl = this.gl;
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      this.whiteTexture = { texture, width: 1, height: 1, pma: false };
+    }
+    return this.whiteTexture;
+  }
+
+  /** Frees a texture made by `createTexture`. */
+  deleteTexture(tex) {
+    if (this.texture === tex) this.flush();
+    this.gl.deleteTexture(tex.texture);
   }
 
   use(tex, blend) {
@@ -295,6 +333,7 @@ export class WebGLRenderer {
     gl.deleteBuffer(this.vertexBuffer);
     gl.deleteBuffer(this.indexBuffer);
     gl.deleteProgram(this.program);
+    if (this.whiteTexture) gl.deleteTexture(this.whiteTexture.texture);
   }
 }
 

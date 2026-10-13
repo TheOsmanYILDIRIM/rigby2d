@@ -6,6 +6,7 @@ import { makeBone } from '../core/model.js';
 import { Pose } from '../core/pose.js';
 import { FPS, Mode, TOOLS, selBone, selSlot } from './app.js';
 import * as edit from './edit.js';
+import { GLView } from './glview.js';
 
 const SELECTED = 'rgb(255,170,40)';
 const BONE = 'rgb(110,200,230)';
@@ -14,10 +15,13 @@ const DRAG_THRESHOLD = 3;
 const rgba = (rgb, a) => rgb.replace('rgb(', 'rgba(').replace(')', `,${a})`);
 
 export class Viewport {
-  constructor(app, canvas) {
+  constructor(app, canvas, glCanvas = null) {
     this.app = app;
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
+    /** WebGL layer under this canvas for attachments, or null (Canvas 2D only). */
+    this.glCanvas = glCanvas;
+    this.glView = glCanvas ? GLView.create(glCanvas) : null;
     this.width = 1;
     this.height = 1;
     /** Active tool drag: { kind: 'bone'|'slot'|'create', index, start, last }. */
@@ -72,16 +76,25 @@ export class Viewport {
     const dpr = this.resize();
     const ctx = this.ctx;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = 'rgb(38,38,38)';
-    ctx.fillRect(0, 0, this.width, this.height);
-
     if (app.frameRequest) {
       this.frameAll();
       app.frameRequest = false;
     }
-    this.drawGrid();
     const pose = app.pose();
-    this.drawAttachments(pose, dpr);
+    const t0 = performance.now();
+    const gl = app.renderer !== 'canvas' && this.glView?.draw(app, pose, this.width, this.height, dpr);
+    if (this.glCanvas) this.glCanvas.hidden = !gl;
+    if (gl) {
+      // The WebGL layer drew the background, grid and attachments; this canvas only overlays.
+      ctx.clearRect(0, 0, this.width, this.height);
+      this.drawOutlines(pose);
+    } else {
+      ctx.fillStyle = 'rgb(38,38,38)';
+      ctx.fillRect(0, 0, this.width, this.height);
+      this.drawGrid();
+      this.drawAttachments(pose, dpr);
+    }
+    this.attachmentTime = performance.now() - t0;
     if (app.showBones) this.drawBones(pose);
     if (this.drag?.kind === 'box') {
       const { from, to } = this.drag;
@@ -184,6 +197,20 @@ export class Viewport {
       ctx.restore();
       if (!hasImage) this.outline(q, pts, 'rgb(255,0,200)');
       if (selSlot(app.sel) === q.slot) this.outline(q, pts, SELECTED);
+    }
+  }
+
+  /** Outlines of the selected slot and of attachments whose image is missing. */
+  drawOutlines(pose) {
+    const app = this.app;
+    const selected = selSlot(app.sel);
+    for (const q of pose.quads(app.doc)) {
+      const img = app.images.get(q.attachment.image);
+      const missing = !img || !img.width || !img.height;
+      if (!missing && selected !== q.slot) continue;
+      const pts = q.positions.map((p) => this.toScreen(p));
+      if (missing) this.outline(q, pts, 'rgb(255,0,200)');
+      if (selected === q.slot) this.outline(q, pts, SELECTED);
     }
   }
 

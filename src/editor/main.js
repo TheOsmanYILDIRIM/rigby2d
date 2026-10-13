@@ -5,7 +5,7 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import './style.css';
-import { App, Mode } from './app.js';
+import { App, Mode, saveSetting } from './app.js';
 import { ACTIONS, PRESETS, REPEATING, actionFor, actionsFor, comboOf, shortcutLabel } from './keymap.js';
 import { memoryFs } from './platform.js';
 import * as edit from './edit.js';
@@ -80,6 +80,19 @@ function menus() {
       ),
       { label: 'Fit the skeleton in view', shortcut: sc('view.fit'), action: () => (app.frameRequest = true) },
       { label: 'Zoom to 100%', shortcut: sc('view.actual'), action: () => zoomActual() },
+      'separator',
+      ...[
+        ['webgl', 'WebGL'],
+        ['canvas', 'Canvas 2D'],
+      ].map(([id, label]) => ({
+        label: `${app.renderer === id ? '● ' : '○ '}Draw with ${label}`,
+        action: () => {
+          app.renderer = id;
+          saveSetting('rigby.renderer', id);
+          app.setStatus(id === 'webgl' && !viewport.glView ? 'WebGL is not available here; drawing with Canvas 2D' : `Viewport drawing: ${label}`);
+          app.changed();
+        },
+      })),
       'separator',
       ...Object.entries(PRESETS).map(([id, p]) => ({
         label: `${app.keymap === id ? '● ' : '○ '}Shortcuts: ${p.label}`,
@@ -247,7 +260,7 @@ splitter($('#split-bottom'), '--bottom', 'y', -1, 120);
 
 // ---- main loop --------------------------------------------------------------------------------
 
-const viewport = new Viewport(app, $('#viewport'));
+const viewport = new Viewport(app, $('#viewport'), $('#viewport-gl'));
 const dopesheet = new Dopesheet(app, $('#dopesheet'), $('#dopesheet canvas'));
 const graph = new GraphEditor(app, $('#graph'), $('#graph canvas'));
 const renderMenuBar = buildMenuBar();
@@ -321,4 +334,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // Development builds expose the editor for debugging from the console.
-if (import.meta.env.DEV) window.rigby = { app, memoryFs, dopesheet, graph };
+if (import.meta.env.DEV) window.rigby = { app, memoryFs, dopesheet, graph, viewport };

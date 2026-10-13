@@ -139,6 +139,37 @@ blend mode for every visible region and mesh. `examples/webgl.html` is a small p
 - The runtime evaluates IK, transform and path constraints. Physics constraints are kept in the
   file but not simulated yet.
 
+## Performance
+
+Measured on a desktop PC in Chromium and Node 20; numbers vary with hardware. Rigs are described
+by size: **M** has 67 bones and 276 mesh vertices, **L** 76 bones and 667 weighted mesh vertices
+with 9 IK constraints, **XL** 143 bones and 879 mesh vertices with 21 transform and path
+constraints.
+
+**Runtime** (`src/core`): animate one character for one frame (apply the animation, solve
+constraints, compute world transforms and vertices), median of 2000 frames:
+
+| Rig | Before optimization | Now | Characters per 16 ms frame |
+| --- | ---: | ---: | ---: |
+| M | 192 µs | 47 µs | ~330 |
+| L | 373 µs | 72 µs | ~220 |
+| XL | 476 µs | 184 µs | ~85 |
+
+**WebGL renderer** (`src/webgl`): 50 XL characters, each animated and drawn every frame, take
+21.6 ms per frame including the GPU (0.43 ms per character) in a single draw call.
+
+**Editor viewport**: drawing one animation frame, median and 95th percentile of 120 frames:
+
+| Rig | Canvas 2D | WebGL | Speed-up |
+| --- | ---: | ---: | ---: |
+| M | 1.4 ms (p95 7.7 ms) | 0.4 ms (p95 0.5 ms) | 3.5x |
+| L | 2.6 ms (p95 8.6 ms) | 0.5 ms (p95 0.7 ms) | 5.2x |
+| XL | 3.6 ms (p95 9.7 ms) | 1.0 ms (p95 1.6 ms) | 3.6x |
+
+The attachments alone draw 5 to 7 times faster with WebGL; the rest of a frame is the bone and
+handle overlay, which stays on Canvas 2D. The editor uses WebGL when available and falls back to
+Canvas 2D (switch in **View**).
+
 ## Project structure
 
 ```
@@ -162,11 +193,11 @@ coding style and pull request process.
 
 ## Disclaimer
 
-Rigby2D is an independent open-source project. It is not affiliated with, endorsed by, or sponsored by Esoteric Software LLC. Spine is a trademark of Esoteric Software LLC.
+Rigby2D is an independent open-source project. It is not affiliated with, endorsed by, or sponsored by the makers of any other animation software. All trademarks belong to their respective owners.
 
 Rigby2D reads and writes the skeleton JSON, binary `.skel` and texture atlas file formats solely for interoperability, so that users can work with their own exported files. This support was implemented clean-room:
 
 - **JSON and atlas formats:** implemented from publicly available documentation.
 - **Binary `.skel` format:** implemented from the publicly documented binary layout of earlier versions and by comparing JSON and binary exports of the same skeleton (black-box observation of exported data).
 
-No Esoteric Software source code, runtimes, editor files or assets are used or distributed with Rigby2D. Compatibility with files from any particular editor or runtime version is provided as-is and is not guaranteed.
+No third-party source code, runtimes, editor files or assets are used or distributed with Rigby2D. Compatibility with files from any particular editor or runtime version is provided as-is and is not guaranteed.

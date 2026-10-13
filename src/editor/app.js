@@ -40,6 +40,22 @@ export const selSlot = (sel) => (sel && sel.slot !== undefined ? sel.slot : null
 
 const errorText = (e) => (e && e.message) || String(e);
 
+function loadSetting(key, fallback) {
+  try {
+    return globalThis.localStorage?.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveSetting(key, value) {
+  try {
+    globalThis.localStorage?.setItem(key, value);
+  } catch {
+    // Settings are a convenience; ignore storage errors.
+  }
+}
+
 export class App {
   constructor() {
     this.doc = new Skeleton();
@@ -77,6 +93,8 @@ export class App {
     this.selectedKeys.clear();
     this.status = 'Welcome to Rigby2D. File ▸ New sample to explore, or import a PSD / PNGs.';
     this.showBones = true;
+    /** Viewport drawing: 'webgl' (default when available) or 'canvas'. */
+    this.renderer = loadSetting('rigby.renderer', 'webgl');
     this.frameRequest = false;
     /** Bumped on every state change so panels know to refresh. */
     this.version = 0;
