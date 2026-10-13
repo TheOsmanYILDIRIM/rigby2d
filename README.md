@@ -123,9 +123,10 @@ function frame(dt) {
   parents come first, slots are in draw order, attachments live in skins, and animations hold bone,
   slot, deform, draw-order, IK and event timelines with keys relative to the setup pose. Images
   come from a `.atlas` texture atlas or loose files in the skeleton's `images` folder.
-- Binary `.skel` support covers format 4.3 skeletons with IK constraints, the default skin, region
-  and mesh attachments, and bone, slot, IK, draw-order and event keys. Rigs using other features
-  (extra skins, other constraint types, deform keys, …) export to `.json` instead.
+- Binary `.skel` support covers format 4.3 skeletons with IK, transform and path constraints, skins,
+  region, mesh, linked mesh, bounding box, path and clipping attachments, and bone, slot, IK,
+  transform, deform, draw-order and event keys. Rigs using other features (physics constraints,
+  point attachments, image sequences, …) export to `.json` instead.
 
 ## Project structure
 

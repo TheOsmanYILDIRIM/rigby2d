@@ -3,11 +3,14 @@
 // skeleton JSON object structure, so all other code works with one representation.
 //
 // The layout was determined clean-room by comparing paired JSON and binary exports of the same
-// skeleton (black-box observation of exported data). Only features present in those samples are
+// skeleton (black-box observation of exported data). Only encodings that were observed are
 // supported; anything else stops with a clear error instead of producing a guessed encoding.
-// Supported: header, bones, slots, IK constraints, the default skin with region and mesh
-// attachments, events, and animations with bone, slot attachment/rgba, IK, draw order and event
-// timelines.
+// Supported: header, bones, slots (including dark tint), IK, transform and path constraints,
+// skins (with skin bones and constraints), region, mesh, linked mesh, bounding box, path and
+// clipping attachments, events, and animations with bone, slot attachment/rgba/rgba2, IK,
+// transform, deform, draw order and event timelines.
+// Not yet supported: physics and slider constraints, point attachments, sequences, rgb/alpha/rgb2
+// slot keys, path/physics constraint keys and stepped IK keys.
 //
 // Encoding: big-endian floats/ints; varints (7 bits per byte, low bits first; signed values are
 // zig-zag encoded); strings are a varint byte length + 1 (0 = null) then UTF-8; "ref" strings are
@@ -30,18 +33,61 @@ const BONE_TIMELINES = [
   ['shearx', 1],
   ['sheary', 1],
 ];
+const CONSTRAINT_IK = 0;
+const CONSTRAINT_PATH = 1;
+const CONSTRAINT_TRANSFORM = 2;
+const IK_SKIN = 0x01;
+const IK_BEND_NEGATIVE = 0x04;
+const IK_MIX_NOT_0 = 0x20;
+const IK_MIX_NOT_1 = 0x40;
+/** IK key flags: the previous segment is a bezier (8 floats follow) or stepped. */
+const IK_KEY_BEZIER = 0x80;
+const IK_KEY_STEPPED = 0x40;
+const POSITION_MODES = ['fixed', 'percent'];
+const SPACING_MODES = ['length', 'fixed', 'percent', 'proportional'];
+const ROTATE_MODES = ['tangent', 'chain', 'chainScale'];
+const TRANSFORM_PROPERTIES = ['rotate', 'x', 'y', 'scaleX', 'scaleY', 'shearY'];
+const TRANSFORM_OFFSETS = ['rotation', 'x', 'y', 'scaleX', 'scaleY', 'shearY'];
+/** Mix key, the property it applies to, and the mix it defaults to (index) when omitted. */
+const TRANSFORM_MIXES = [
+  ['mixRotate', 'rotate'],
+  ['mixX', 'x'],
+  ['mixY', 'y', 1],
+  ['mixScaleX', 'scaleX'],
+  ['mixScaleY', 'scaleY', 3],
+  ['mixShearY', 'shearY'],
+];
 const SLOT_ATTACHMENT = 0;
 const SLOT_RGBA = 1;
+const SLOT_RGBA2 = 3;
 const ATTACHMENT_REGION = 0;
+const ATTACHMENT_BOUNDINGBOX = 1;
 const ATTACHMENT_MESH = 2;
+const ATTACHMENT_LINKED_MESH = 3;
+/** Linked meshes: inherit the source mesh's deform keys. */
+const LINKED_TIMELINES = 0x80;
+const ATTACHMENT_PATH = 4;
+const ATTACHMENT_CLIPPING = 6;
+/** Path attachments: constant speed, weighted vertices. */
+const PATH_CONSTANT_SPEED = 0x20;
+const PATH_WEIGHTED = 0x40;
+/** Colors exporters leave out of JSON when unchanged. */
+const DEFAULT_COLORS = { boundingbox: '60f000ff', path: 'ff7f00ff' };
+/** Region/mesh: the attachment has a name different from its key. */
+const FLAG_NAME = 0x08;
 const FLAG_PATH = 0x10;
+const FLAG_COLOR = 0x20;
+/** Regions: rotation is present. Meshes: vertices are weighted. */
+const FLAG_ROTATION = 0x80;
 const FLAG_WEIGHTED = 0x80;
 const CURVE_LINEAR = 0;
 const CURVE_STEPPED = 1;
 const CURVE_BEZIER = 2;
 const DEFAULT_BONE_COLOR = '9b9b9bff';
-/** Constraint and animation sections whose encoding is not known yet (always empty here). */
-const UNKNOWN_ANIMATION_SECTIONS = 5;
+/** Animation sections between transform and deform keys whose encoding is not known yet (must be empty). */
+const UNKNOWN_ANIMATION_SECTIONS = 3;
+const ATTACHMENT_DEFORM = 0;
+const TRANSFORM_KEY_MIXES = TRANSFORM_MIXES.map(([key]) => key);
 
 class Unsupported extends Error {
   constructor(what) {
@@ -59,6 +105,12 @@ class Reader {
     this.v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     this.strings = [];
     this.dec = new TextDecoder();
+    this.slots = [];
+  }
+  slotName(i) {
+    const s = this.slots[i];
+    if (!s) throw new Error('invalid slot index in .skel data');
+    return s.name;
   }
   check(n) {
     if (this.p + n > this.b.length) throw new Error('unexpected end of .skel data');
@@ -110,6 +162,12 @@ class Reader {
   }
   color() {
     return this.uint().toString(16).padStart(8, '0');
+  }
+  color3() {
+    this.check(3);
+    const hex = [...this.b.subarray(this.p, this.p + 3)].map((x) => x.toString(16).padStart(2, '0')).join('');
+    this.p += 3;
+    return hex;
   }
 }
 
@@ -222,36 +280,65 @@ export function readSkeletonBinary(bytes) {
     const color = r.color();
     const dark = r.color();
     if (color !== 'ffffffff') s.color = color;
-    if (dark !== 'ffffffff') s.dark = dark.slice(0, 6);
+    if (dark !== 'ffffffff') s.dark = dark.slice(2);
     const attachment = r.ref();
     if (attachment !== null) s.attachment = attachment;
     const blend = BLEND[r.byte()] ?? 'normal';
     if (blend !== 'normal') s.blend = blend;
     if (nonessential && !r.bool()) s._visible = false;
     out.slots.push(s);
+    r.slots.push(s);
   }
 
-  // Constraints (IK only).
+  // Constraints, in application order.
   out.constraints = [];
   const nConstraints = r.varint();
   for (let i = 0; i < nConstraints; i++) {
     const name = r.string();
     const type = r.byte();
-    if (type !== 0) throw new Unsupported(`Constraint type ${type} ('${name}')`);
     const bones = [];
     const n = r.varint();
     for (let k = 0; k < n; k++) bones.push(out.bones[r.varint()].name);
-    const target = out.bones[r.varint()].name;
-    const flags = r.byte();
-    if (flags & ~0x24) throw new Unsupported(`IK constraint options (flags 0x${flags.toString(16)}) on '${name}'`);
-    const c = { type: 'ik', name, target, bones };
-    if (flags & 0x04) c.bendPositive = false;
-    out.constraints.push(c);
+    if (type === CONSTRAINT_IK) out.constraints.push(readIk(r, name, bones, out));
+    else if (type === CONSTRAINT_PATH) out.constraints.push(readPath(r, name, bones, out));
+    else if (type === CONSTRAINT_TRANSFORM) out.constraints.push(readTransform(r, name, bones, out));
+    else throw new Unsupported(`Constraint type ${type} ('${name}')`);
   }
+  if (!out.constraints.length) delete out.constraints;
 
   // Skins: the default skin, then named skins.
   out.skins = [{ name: 'default', attachments: readSkin(r, out, nonessential) }];
-  if (r.varint() !== 0) throw new Unsupported('Additional skins');
+  const nSkins = r.varint();
+  for (let i = 0; i < nSkins; i++) {
+    const skin = { name: r.string() };
+    if (nonessential) {
+      const color = r.color();
+      if (color !== 'ffffffff') skin._color = color;
+    }
+    const nBones = r.varint();
+    if (nBones) skin.bones = [];
+    for (let k = 0; k < nBones; k++) skin.bones.push(out.bones[r.varint()].name);
+    const nConstraintRefs = r.varint();
+    for (let k = 0; k < nConstraintRefs; k++) {
+      const c = out.constraints?.[r.varint()];
+      if (!c) throw new Error('invalid constraint index in .skel data');
+      (skin[c.type] ??= []).push(c.name);
+    }
+    skin.attachments = readSkin(r, out, nonessential);
+    out.skins.push(skin);
+  }
+  for (const skin of out.skins) {
+    for (const [slot, atts] of Object.entries(skin.attachments)) {
+      for (const a of Object.values(atts)) {
+        if (a.type !== 'linkedmesh') continue;
+        if (a._skinIndex !== undefined) {
+          a.skin = out.skins[a._skinIndex]?.name;
+          delete a._skinIndex;
+        }
+        if (out.slots[a._sourceSlot]?.name === slot) delete a._sourceSlot;
+      }
+    }
+  }
 
   // Events.
   out.events = {};
@@ -276,6 +363,8 @@ export function readSkeletonBinary(bytes) {
     eventNames.push(name);
   }
 
+  if (!eventNames.length) delete out.events;
+
   // Animations.
   out.animations = {};
   const nAnimations = r.varint();
@@ -285,6 +374,125 @@ export function readSkeletonBinary(bytes) {
   }
   if (r.p !== bytes.length) throw new Error(`unexpected data after the animations (${bytes.length - r.p} bytes)`);
   return out;
+}
+
+function readIk(r, name, bones, out) {
+  const target = out.bones[r.varint()].name;
+  const flags = r.byte();
+  if (flags & ~(IK_SKIN | IK_BEND_NEGATIVE | IK_MIX_NOT_0 | IK_MIX_NOT_1)) {
+    throw new Unsupported(`IK constraint options (flags 0x${flags.toString(16)}) on '${name}'`);
+  }
+  const c = { type: 'ik', name, target, bones };
+  if (flags & IK_SKIN) c.skin = true;
+  // Single-bone constraints have no bend direction; exporters leave it out.
+  if (flags & IK_BEND_NEGATIVE && bones.length > 1) c.bendPositive = false;
+  const mix = readMix(r, flags & IK_MIX_NOT_0, flags & IK_MIX_NOT_1);
+  if (mix !== 1) c.mix = mix;
+  return c;
+}
+
+/** A mix stored as two flags, "not 0" and "not 1"; a float follows only when both are set. */
+function readMix(r, not0, not1) {
+  if (!not0) return 0;
+  if (!not1) return 1;
+  return r.float();
+}
+
+function readPath(r, name, bones, out) {
+  const slot = out.slots[r.varint()].name;
+  const flags = r.byte();
+  if (flags & ~0x3f) throw new Unsupported(`Path constraint options (flags 0x${flags.toString(16)}) on '${name}'`);
+  const c = { type: 'path', name, slot, bones };
+  if (flags & 0x01) c.skin = true;
+  const positionMode = POSITION_MODES[(flags >> 1) & 1];
+  const spacingMode = SPACING_MODES[(flags >> 2) & 3];
+  const rotateMode = ROTATE_MODES[(flags >> 4) & 3];
+  if (positionMode !== 'percent') c.positionMode = positionMode;
+  if (spacingMode !== 'length') c.spacingMode = spacingMode;
+  if (rotateMode !== 'tangent') c.rotateMode = rotateMode;
+  const position = r.float();
+  const spacing = r.float();
+  if (position) c.position = position;
+  if (spacing) c.spacing = spacing;
+  const mixRotate = r.float();
+  const mixX = r.float();
+  const mixY = r.float();
+  if (mixRotate !== 1) c.mixRotate = mixRotate;
+  if (mixX !== 1) c.mixX = mixX;
+  if (mixY !== mixX) c.mixY = mixY;
+  return c;
+}
+
+function readTransform(r, name, bones, out) {
+  const mappedByName = (r.transformMapped ??= new Map());
+  const source = out.bones[r.varint()].name;
+  const flags = r.byte();
+  if (flags & 0x1e) throw new Unsupported(`Transform constraint options (flags 0x${flags.toString(16)}) on '${name}'`);
+  const c = { type: 'transform', name, source, bones };
+  if (flags & 0x01) c.skin = true;
+  const properties = {};
+  const mapped = new Set();
+  for (let p = flags >> 5; p > 0; p--) {
+    const from = TRANSFORM_PROPERTIES[r.byte()];
+    if (!from) throw new Unsupported(`Transform property on '${name}'`);
+    const entry = {};
+    const offset = r.float();
+    if (offset) entry.offset = offset;
+    entry.to = {};
+    const nTo = r.varint();
+    for (let t = 0; t < nTo; t++) {
+      const to = TRANSFORM_PROPERTIES[r.byte()];
+      if (!to) throw new Unsupported(`Transform property on '${name}'`);
+      const target = {};
+      const toOffset = r.float();
+      const max = r.float();
+      const scale = r.float();
+      if (toOffset) target.offset = toOffset;
+      if (max !== 1) target.max = max;
+      if (scale !== 1) target.scale = scale;
+      entry.to[to] = target;
+      mapped.add(to);
+    }
+    properties[from] = entry;
+  }
+  const offsets = r.byte();
+  if (offsets & ~0x3f) throw new Unsupported(`Transform offsets on '${name}'`);
+  TRANSFORM_OFFSETS.forEach((key, bit) => {
+    if (offsets & (1 << bit)) c[key] = r.float();
+  });
+  c.properties = properties;
+  mappedByName.set(name, mapped);
+  const mixes = r.byte();
+  if (mixes & ~0x3f) throw new Unsupported(`Transform mixes on '${name}'`);
+  const value = TRANSFORM_MIXES.map((_, bit) => (mixes & (1 << bit) ? r.float() : 0));
+  // Mixes of unmapped properties have no effect; exporters leave them (and defaults) out.
+  TRANSFORM_MIXES.forEach(([key, property, sameAs], bit) => {
+    if (!mapped.has(property)) return;
+    const def = sameAs === undefined ? 1 : value[sameAs];
+    if (value[bit] !== def) c[key] = value[bit];
+  });
+  return c;
+}
+
+/** Reads a vertex count and vertices (weighted: size hint, then bone count + bone/x/y/weight). */
+function readVertices(r, a, weighted) {
+  const count = r.varint();
+  a.vertexCount = count;
+  a.vertices = [];
+  if (weighted) {
+    r.varint(); // size hint
+    for (let v = 0; v < count; v++) {
+      const n = r.varint();
+      a.vertices.push(n);
+      for (let k = 0; k < n; k++) a.vertices.push(r.varint(), r.float(), r.float(), r.float());
+    }
+  } else {
+    for (let k = 0; k < count * 2; k++) a.vertices.push(r.float());
+  }
+}
+
+function setColor(a, color) {
+  if (color !== DEFAULT_COLORS[a.type]) a.color = color;
 }
 
 function readSkin(r, out, nonessential) {
@@ -304,14 +512,49 @@ function readSkin(r, out, nonessential) {
 }
 
 function readAttachment(r, flags, key, nonessential) {
-  const type = flags & 0x0f;
-  const known = FLAG_PATH | FLAG_WEIGHTED | 0x0f;
+  const type = flags & 0x07;
+  if (type === ATTACHMENT_BOUNDINGBOX || type === ATTACHMENT_CLIPPING) {
+    if (flags !== type) throw new Unsupported(`Attachment options (flags 0x${flags.toString(16)}) on '${key}'`);
+    const a = { type: type === ATTACHMENT_CLIPPING ? 'clipping' : 'boundingbox' };
+    if (type === ATTACHMENT_CLIPPING) a.end = r.slotName(r.varint());
+    readVertices(r, a, false);
+    if (nonessential) setColor(a, r.color());
+    return a;
+  }
+  if (type === ATTACHMENT_PATH) {
+    if (flags !== (ATTACHMENT_PATH | PATH_CONSTANT_SPEED | PATH_WEIGHTED)) {
+      throw new Unsupported(`Path attachment options (flags 0x${flags.toString(16)}) on '${key}'`);
+    }
+    const a = { type: 'path' };
+    readVertices(r, a, true);
+    a.lengths = [];
+    for (let k = 0; k < a.vertexCount / 3; k++) a.lengths.push(r.float());
+    if (nonessential) setColor(a, r.color());
+    return a;
+  }
+  if (type === ATTACHMENT_LINKED_MESH) {
+    if (flags & ~(FLAG_NAME | LINKED_TIMELINES | 0x07)) throw new Unsupported(`Linked mesh options (flags 0x${flags.toString(16)}) on '${key}'`);
+    const a = { type: 'linkedmesh' };
+    if (flags & FLAG_NAME) a.name = r.ref();
+    a._sourceSlot = r.varint();
+    const skin = r.varint();
+    a.source = r.ref();
+    if (skin) a._skinIndex = skin;
+    if (!(flags & LINKED_TIMELINES)) a.timelines = false;
+    if (nonessential) {
+      a.width = r.float();
+      a.height = r.float();
+    }
+    return a;
+  }
+  const known = FLAG_NAME | FLAG_PATH | FLAG_COLOR | FLAG_WEIGHTED | 0x07;
   if (flags & ~known) throw new Unsupported(`Attachment options (flags 0x${flags.toString(16)}) on '${key}'`);
   const a = {};
+  if (flags & FLAG_NAME) a.name = r.ref();
   if (type === ATTACHMENT_REGION) {
-    if ((flags & 0xe0) !== 0x80) a._flags = flags;
     if (flags & FLAG_PATH) a.path = r.ref();
-    a.rotation = r.float();
+    if (flags & FLAG_COLOR) a.color = r.color();
+    a.rotation = flags & FLAG_ROTATION ? r.float() : 0;
     a.x = r.float();
     a.y = r.float();
     a.scaleX = r.float();
@@ -324,6 +567,7 @@ function readAttachment(r, flags, key, nonessential) {
   if (type !== ATTACHMENT_MESH) throw new Unsupported(`Attachment type ${type} ('${key}')`);
   a.type = 'mesh';
   if (flags & FLAG_PATH) a.path = r.ref();
+  if (flags & FLAG_COLOR) a.color = r.color();
   a.hull = r.varint();
   const count = r.varint();
   a.vertices = [];
@@ -374,6 +618,32 @@ function readCurveKeys(r, frames, read) {
   return keys;
 }
 
+/** Deform keys: time, the previous segment's curve, then a value count, start offset and values. */
+function readDeformKeys(r, frames) {
+  const keys = [];
+  for (let f = 0; f < frames; f++) {
+    const key = {};
+    const time = r.float();
+    if (time) key.time = time;
+    if (f > 0) {
+      const type = r.byte();
+      const prev = keys[f - 1];
+      if (type === CURVE_STEPPED) prev.curve = 'stepped';
+      else if (type === CURVE_BEZIER) prev.curve = [r.float(), r.float(), r.float(), r.float()];
+      else if (type !== CURVE_LINEAR) throw new Error(`invalid curve type ${type}`);
+    }
+    const count = r.varint();
+    if (count) {
+      const offset = r.varint();
+      if (offset) key.offset = offset;
+      key.vertices = [];
+      for (let k = 0; k < count; k++) key.vertices.push(r.float());
+    }
+    keys.push(key);
+  }
+  return keys;
+}
+
 function readAnimation(r, out, eventNames) {
   const anim = {};
   r.varint(); // total timeline count
@@ -400,6 +670,13 @@ function readAnimation(r, out, eventNames) {
         timelines.rgba = readCurveKeys(r, frames, (rr, key) => {
           key.color = rr.color();
           return 4;
+        });
+      } else if (type === SLOT_RGBA2) {
+        r.varint(); // bezier count
+        timelines.rgba2 = readCurveKeys(r, frames, (rr, key) => {
+          key.light = rr.color();
+          key.dark = rr.color3();
+          return 7;
         });
       } else {
         throw new Unsupported(`Slot timeline type ${type}`);
@@ -437,11 +714,11 @@ function readAnimation(r, out, eventNames) {
   for (let i = 0; i < nIk; i++) {
     const constraint = out.constraints[r.varint()].name;
     const frames = r.varint();
-    if (r.varint() !== 0) throw new Unsupported('Curved IK keys');
+    r.varint(); // bezier count
     const keys = ((anim.ik ??= {})[constraint] = []);
     for (let f = 0; f < frames; f++) {
       const flags = r.byte();
-      if (flags & 0xc0) throw new Unsupported('Curved IK keys');
+      if (flags & IK_KEY_STEPPED) throw new Unsupported('Stepped IK keys');
       const key = {};
       const time = r.float();
       if (time) key.time = time;
@@ -451,11 +728,49 @@ function readAnimation(r, out, eventNames) {
       if (!(flags & 0x08)) key.bendPositive = false;
       if (flags & 0x10) key.compress = true;
       if (flags & 0x20) key.stretch = true;
+      // The curve of the segment ending at this key: mix and softness, 4 floats each.
+      if (flags & IK_KEY_BEZIER) {
+        const curve = [];
+        for (let k = 0; k < 8; k++) curve.push(r.float());
+        if (f > 0) keys[f - 1].curve = curve;
+      }
       keys.push(key);
     }
   }
+  const nTransform = r.varint();
+  for (let i = 0; i < nTransform; i++) {
+    const constraint = out.constraints[r.varint()].name;
+    const frames = r.varint();
+    r.varint(); // bezier count
+    const mapped = r.transformMapped?.get(constraint) ?? new Set(TRANSFORM_PROPERTIES);
+    (anim.transform ??= {})[constraint] = readCurveKeys(r, frames, (rr, key) => {
+      TRANSFORM_MIXES.forEach(([mix, property]) => {
+        const v = rr.float();
+        if (v !== 1 && mapped.has(property)) key[mix] = v;
+      });
+      return TRANSFORM_KEY_MIXES.length;
+    });
+  }
   for (let s = 0; s < UNKNOWN_ANIMATION_SECTIONS; s++) {
-    if (r.varint() !== 0) throw new Unsupported('Transform, path or physics constraint keys, or deform keys');
+    if (r.varint() !== 0) throw new Unsupported('Path or physics constraint keys');
+  }
+  const nSkins = r.varint();
+  for (let i = 0; i < nSkins; i++) {
+    const skin = out.skins[r.varint()]?.name;
+    if (!skin) throw new Error('invalid skin index in .skel data');
+    const nSlots = r.varint();
+    for (let k = 0; k < nSlots; k++) {
+      const slot = r.slotName(r.varint());
+      const nAttachments = r.varint();
+      for (let a = 0; a < nAttachments; a++) {
+        const attachment = r.ref();
+        const type = r.byte();
+        if (type !== ATTACHMENT_DEFORM) throw new Unsupported(`Attachment timeline type ${type}`);
+        const frames = r.varint();
+        r.varint(); // bezier count
+        (((anim.attachments ??= {})[skin] ??= {})[slot] ??= {})[attachment] = { deform: readDeformKeys(r, frames) };
+      }
+    }
   }
   const nDraw = r.varint();
   for (let i = 0; i < nDraw; i++) {
@@ -470,7 +785,8 @@ function readAnimation(r, out, eventNames) {
   if (r.varint() !== 0) throw new Unsupported('An unknown animation section');
   const nEvents = r.varint();
   for (let i = 0; i < nEvents; i++) {
-    const key = { time: r.float(), name: eventNames[r.varint()] };
+    const time = r.float();
+    const key = { ...(time ? { time } : {}), name: eventNames[r.varint()] };
     const int = r.varint(false);
     const float = r.float();
     const def = out.events[key.name] ?? {};
@@ -554,6 +870,10 @@ class Writer {
     }
     this.varint(i + 1);
   }
+  color3(hex) {
+    const h = (hex ?? '000000').toLowerCase();
+    for (let i = 0; i < 6; i += 2) this.byte(parseInt(h.slice(i, i + 2), 16));
+  }
   color(hex, def = 'ffffffff') {
     const h = (hex ?? def).toLowerCase();
     this.uint(parseInt((h.length === 6 ? `${h}ff` : h).slice(0, 8), 16));
@@ -571,12 +891,15 @@ function collectRefs(json) {
     for (const atts of Object.values(skin.attachments ?? {})) {
       for (const [key, a] of Object.entries(atts)) {
         refs.push(key);
+        if (a.name !== undefined && a.name !== key) refs.push(a.name);
+        if (a.type === 'linkedmesh') refs.push(a.source ?? a.parent);
         if (a.path !== undefined) refs.push(a.path);
       }
     }
   }
   for (const anim of Object.values(json.animations ?? {})) {
     for (const timelines of Object.values(anim.slots ?? {})) for (const k of timelines.attachment ?? []) if (k.name) refs.push(k.name);
+    for (const slots of Object.values(anim.attachments ?? {})) for (const atts of Object.values(slots)) refs.push(...Object.keys(atts));
   }
   return refs;
 }
@@ -612,6 +935,15 @@ export function writeSkeletonBinary(json) {
   head.string(sk.audio ?? null);
 
   const boneIndex = new Map((json.bones ?? []).map((b, i) => [b.name, i]));
+  const skinIndex = new Map((json.skins ?? []).map((sk, i) => [sk.name, i]));
+  /** Target properties each transform constraint maps. */
+  const transformMapped = new Map();
+  for (const c of json.constraints ?? []) {
+    if (c.type !== 'transform') continue;
+    const set = new Set();
+    for (const entry of Object.values(c.properties ?? {})) for (const to of Object.keys(entry.to ?? {})) set.add(to);
+    transformMapped.set(c.name, set);
+  }
   const slotIndex = new Map((json.slots ?? []).map((s, i) => [s.name, i]));
   const constraintIndex = new Map();
 
@@ -635,7 +967,7 @@ export function writeSkeletonBinary(json) {
     w.string(s.name);
     w.varint(boneIndex.get(s.bone));
     w.color(s.color);
-    w.color(s.dark ? `${s.dark.slice(0, 6)}ff` : null);
+    w.color(s.dark ? `00${s.dark.slice(0, 6)}` : null);
     w.ref(s.attachment ?? null);
     w.byte(Math.max(0, BLEND.indexOf(s.blend ?? 'normal')));
     w.bool(s._visible ?? true);
@@ -644,31 +976,46 @@ export function writeSkeletonBinary(json) {
   const constraints = json.constraints ?? [];
   w.varint(constraints.length);
   constraints.forEach((c, i) => {
-    if (c.type !== 'ik') throw new Unsupported(`'${c.type}' constraints`);
-    if ((c.mix ?? 1) !== 1 || c.softness || c.compress || c.stretch || c.uniform || c.skin) {
-      throw new Unsupported(`IK constraint options other than bend direction ('${c.name}')`);
-    }
-    constraintIndex.set(c.name, i);
+    constraintIndex.set(`${c.type}:${c.name}`, i);
     w.string(c.name);
-    w.byte(0);
-    w.varint(c.bones.length);
-    for (const b of c.bones) w.varint(boneIndex.get(b));
-    w.varint(boneIndex.get(c.target));
-    w.byte(0x20 | (c.bendPositive === false ? 0x04 : 0));
+    if (c.type === 'ik') writeIk(w, c, boneIndex);
+    else if (c.type === 'path') writePath(w, c, boneIndex, slotIndex);
+    else if (c.type === 'transform') writeTransform(w, c, boneIndex);
+    else throw new Unsupported(`'${c.type}' constraints`);
   });
 
   const skins = json.skins ?? [];
-  const defaultSkin = skins.find((s) => s.name === 'default') ?? { attachments: {} };
-  if (skins.some((s) => s.name !== 'default')) throw new Unsupported('Additional skins');
-  const slotsWithAttachments = Object.entries(defaultSkin.attachments ?? {});
-  w.varint(slotsWithAttachments.length);
-  for (const [slot, atts] of slotsWithAttachments) {
-    w.varint(slotIndex.get(slot));
-    const entries = Object.entries(atts);
-    w.varint(entries.length);
-    for (const [key, a] of entries) writeAttachment(w, key, a);
+  const writeSkinAttachments = (skin) => {
+    const slotsWithAttachments = Object.entries(skin.attachments ?? {});
+    w.varint(slotsWithAttachments.length);
+    for (const [slot, atts] of slotsWithAttachments) {
+      w.varint(slotIndex.get(slot));
+      const entries = Object.entries(atts);
+      w.varint(entries.length);
+      for (const [key, a] of entries) writeAttachment(w, key, a, slotIndex, skinIndex, slot);
+    }
+  };
+  writeSkinAttachments(skins.find((sk) => sk.name === 'default') ?? { attachments: {} });
+  const others = skins.filter((sk) => sk.name !== 'default');
+  w.varint(others.length);
+  for (const skin of others) {
+    w.string(skin.name);
+    w.color(skin._color ?? skin.color ?? 'ffffffff');
+    const bones = skin.bones ?? [];
+    w.varint(bones.length);
+    for (const b of bones) w.varint(boneIndex.get(b));
+    const refs = [];
+    for (const type of ['ik', 'transform', 'path', 'physics']) {
+      for (const name of skin[type] ?? []) {
+        const index = constraintIndex.get(`${type}:${name}`);
+        if (index === undefined) throw new Error(`unknown ${type} constraint '${name}' in skin '${skin.name}'`);
+        refs.push(index);
+      }
+    }
+    w.varint(refs.length);
+    for (const i of refs) w.varint(i);
+    writeSkinAttachments(skin);
   }
-  w.varint(0); // additional skins
 
   const eventNames = Object.keys(json.events ?? {});
   w.varint(eventNames.length);
@@ -689,7 +1036,7 @@ export function writeSkeletonBinary(json) {
   w.varint(animations.length);
   for (const [name, anim] of animations) {
     w.string(name);
-    writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, eventNames, events: json.events ?? {} });
+    writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, skinIndex, transformMapped, eventNames, events: json.events ?? {} });
   }
 
   // Header, then the (possibly extended) string table, then the body.
@@ -706,19 +1053,155 @@ export function writeSkeletonBinary(json) {
   return out;
 }
 
-function writeAttachment(w, key, a) {
+function writeBones(w, c, boneIndex) {
+  w.varint(c.bones.length);
+  for (const b of c.bones) w.varint(boneIndex.get(b));
+}
+
+function writeIk(w, c, boneIndex) {
+  if (c.softness || c.compress || c.stretch || c.uniform) throw new Unsupported(`IK softness, compress, stretch or uniform ('${c.name}')`);
+  w.byte(CONSTRAINT_IK);
+  writeBones(w, c, boneIndex);
+  w.varint(boneIndex.get(c.target));
+  const mix = c.mix ?? 1;
+  const bendNegative = c.bones.length < 2 || c.bendPositive === false;
+  w.byte((c.skin ? IK_SKIN : 0) | (bendNegative ? IK_BEND_NEGATIVE : 0) | (mix !== 0 ? IK_MIX_NOT_0 : 0) | (mix !== 1 ? IK_MIX_NOT_1 : 0));
+  if (mix !== 0 && mix !== 1) w.float(mix);
+}
+
+function writePath(w, c, boneIndex, slotIndex) {
+  if (c.rotation) throw new Unsupported(`Path constraint rotation offsets ('${c.name}')`);
+  w.byte(CONSTRAINT_PATH);
+  writeBones(w, c, boneIndex);
+  w.varint(slotIndex.get(c.slot ?? c.target));
+  const position = Math.max(0, POSITION_MODES.indexOf(c.positionMode ?? 'percent'));
+  const spacing = Math.max(0, SPACING_MODES.indexOf(c.spacingMode ?? 'length'));
+  const rotate = Math.max(0, ROTATE_MODES.indexOf(c.rotateMode ?? 'tangent'));
+  w.byte((c.skin ? 0x01 : 0) | (position << 1) | (spacing << 2) | (rotate << 4));
+  w.float(c.position ?? 0);
+  w.float(c.spacing ?? 0);
+  const mixX = c.mixX ?? 1;
+  w.float(c.mixRotate ?? 1);
+  w.float(mixX);
+  w.float(c.mixY ?? mixX);
+}
+
+function writeTransform(w, c, boneIndex) {
+  for (const key of ['local', 'relative', 'additive', 'clamp']) if (c[key]) throw new Unsupported(`Transform constraint '${key}' option ('${c.name}')`);
+  const properties = Object.entries(c.properties ?? {});
+  if (properties.length > 7) throw new Unsupported(`More than 7 transform properties ('${c.name}')`);
+  w.byte(CONSTRAINT_TRANSFORM);
+  writeBones(w, c, boneIndex);
+  w.varint(boneIndex.get(c.source));
+  w.byte((properties.length << 5) | (c.skin ? 0x01 : 0));
+  const mapped = new Set();
+  for (const [from, entry] of properties) {
+    const fromId = TRANSFORM_PROPERTIES.indexOf(from);
+    if (fromId < 0) throw new Unsupported(`Transform property '${from}' ('${c.name}')`);
+    w.byte(fromId);
+    w.float(entry.offset ?? 0);
+    const targets = Object.entries(entry.to ?? {});
+    w.varint(targets.length);
+    for (const [to, t] of targets) {
+      const toId = TRANSFORM_PROPERTIES.indexOf(to);
+      if (toId < 0) throw new Unsupported(`Transform property '${to}' ('${c.name}')`);
+      w.byte(toId);
+      w.float(t.offset ?? 0);
+      w.float(t.max ?? 1);
+      w.float(t.scale ?? 1);
+      mapped.add(to);
+    }
+  }
+  let offsets = 0;
+  TRANSFORM_OFFSETS.forEach((key, bit) => {
+    if (c[key]) offsets |= 1 << bit;
+  });
+  w.byte(offsets);
+  for (const key of TRANSFORM_OFFSETS) if (c[key]) w.float(c[key]);
+  const values = [];
+  TRANSFORM_MIXES.forEach(([key, property, sameAs], bit) => {
+    const def = sameAs === undefined ? 1 : values[sameAs];
+    values[bit] = mapped.has(property) ? (c[key] ?? def) : 0;
+  });
+  let mixes = 0;
+  values.forEach((v, bit) => {
+    if (v !== 0) mixes |= 1 << bit;
+  });
+  w.byte(mixes);
+  for (const v of values) if (v !== 0) w.float(v);
+}
+
+function writeVertexAttachment(w, key, a, type, slotIndex) {
+  const count = a.vertexCount ?? a.vertices.length / 2;
+  const weighted = a.vertices.length > count * 2;
+  if (type === 'path') {
+    if (!weighted || a.closed || a.constantSpeed === false) throw new Unsupported(`Path attachments that are closed, not constant speed or unweighted ('${key}')`);
+  } else if (weighted) {
+    throw new Unsupported(`Weighted '${type}' attachments ('${key}')`);
+  }
+  if (a.sequence !== undefined) throw new Unsupported(`Sequences ('${key}')`);
+  w.ref(key);
+  if (type === 'boundingbox') w.byte(ATTACHMENT_BOUNDINGBOX);
+  else if (type === 'clipping') w.byte(ATTACHMENT_CLIPPING);
+  else w.byte(ATTACHMENT_PATH | PATH_CONSTANT_SPEED | PATH_WEIGHTED);
+  if (type === 'clipping') w.varint(slotIndex.get(a.end));
+  w.varint(count);
+  if (weighted) {
+    let hint = 0;
+    for (let i = 0; i < a.vertices.length; ) {
+      const n = a.vertices[i];
+      hint += 1 + n;
+      i += 1 + n * 4;
+    }
+    w.varint(hint);
+    for (let i = 0; i < a.vertices.length; ) {
+      const n = a.vertices[i++];
+      w.varint(n);
+      for (let k = 0; k < n; k++) {
+        w.varint(a.vertices[i++]);
+        w.float(a.vertices[i++]);
+        w.float(a.vertices[i++]);
+        w.float(a.vertices[i++]);
+      }
+    }
+  } else {
+    for (const v of a.vertices) w.float(v);
+  }
+  if (type === 'path') for (const l of a.lengths ?? []) w.float(l);
+  w.color(a.color ?? DEFAULT_COLORS[type] ?? 'ce3a3aff');
+}
+
+function writeLinkedMesh(w, key, a, slotIndex, skinIndex, slot) {
+  if (a.path !== undefined || a.color !== undefined || a.sequence !== undefined) throw new Unsupported(`Linked meshes with a path, color or sequence ('${key}')`);
+  const named = a.name !== undefined && a.name !== key;
+  w.ref(key);
+  w.byte(ATTACHMENT_LINKED_MESH | (named ? FLAG_NAME : 0) | (a.timelines === false || a.deform === false ? 0 : LINKED_TIMELINES));
+  if (named) w.ref(a.name);
+  w.varint(a._sourceSlot ?? slotIndex.get(slot));
+  const skin = a.skin ? skinIndex.get(a.skin) : 0;
+  if (skin === undefined) throw new Error(`unknown skin '${a.skin}'`);
+  w.varint(skin);
+  w.ref(a.source ?? a.parent);
+  w.float(a.width ?? 0);
+  w.float(a.height ?? 0);
+}
+
+function writeAttachment(w, key, a, slotIndex, skinIndex, slot) {
   const type = a.type ?? 'region';
+  if (type === 'boundingbox' || type === 'clipping' || type === 'path') return writeVertexAttachment(w, key, a, type, slotIndex);
+  if (type === 'linkedmesh') return writeLinkedMesh(w, key, a, slotIndex, skinIndex, slot);
   if (type !== 'region' && type !== 'mesh') throw new Unsupported(`'${type}' attachments ('${key}')`);
   if (a.sequence !== undefined) throw new Unsupported(`Sequences ('${key}')`);
-  if (a.color && a.color.toLowerCase() !== 'ffffffff') throw new Unsupported(`Attachment colors ('${key}')`);
-  if (a.name !== undefined && a.name !== key) throw new Unsupported(`Attachment names that differ from their key ('${key}')`);
+  const named = a.name !== undefined && a.name !== key;
   w.ref(key);
   if (type === 'region') {
-    let flags = (a._flags ?? 0x80) & ~FLAG_PATH & ~0x0f;
-    if (a.path !== undefined) flags |= FLAG_PATH;
-    w.byte(flags | ATTACHMENT_REGION);
+    const rotation = a.rotation ?? 0;
+    w.byte((rotation ? FLAG_ROTATION : 0) | (named ? FLAG_NAME : 0) | (a.path !== undefined ? FLAG_PATH : 0) | (a.color !== undefined ? FLAG_COLOR : 0) | ATTACHMENT_REGION);
+    if (named) w.ref(a.name);
     if (a.path !== undefined) w.ref(a.path);
-    for (const [k, def] of [['rotation', 0], ['x', 0], ['y', 0], ['scaleX', 1], ['scaleY', 1], ['width', 0], ['height', 0]]) w.float(a[k] ?? def);
+    if (a.color !== undefined) w.color(a.color);
+    if (rotation) w.float(rotation);
+    for (const [k, def] of [['x', 0], ['y', 0], ['scaleX', 1], ['scaleY', 1], ['width', 0], ['height', 0]]) w.float(a[k] ?? def);
     return;
   }
   const count = a.uvs.length / 2;
@@ -726,8 +1209,10 @@ function writeAttachment(w, key, a) {
   if (a.triangles.length !== 3 * (2 * count - a.hull - 2)) {
     throw new Unsupported(`Meshes whose triangle count is not 2 x vertices - hull - 2 ('${key}')`);
   }
-  w.byte((weighted ? FLAG_WEIGHTED : 0) | (a.path !== undefined ? FLAG_PATH : 0) | ATTACHMENT_MESH);
+  w.byte((weighted ? FLAG_WEIGHTED : 0) | (named ? FLAG_NAME : 0) | (a.path !== undefined ? FLAG_PATH : 0) | (a.color !== undefined ? FLAG_COLOR : 0) | ATTACHMENT_MESH);
+  if (named) w.ref(a.name);
   if (a.path !== undefined) w.ref(a.path);
+  if (a.color !== undefined) w.color(a.color);
   w.varint(a.hull);
   w.varint(count);
   if (weighted) {
@@ -777,20 +1262,38 @@ function writeCurveKeys(w, keys, values) {
   });
 }
 
+function writeSegmentCurve(w, c) {
+  if (c === 'stepped') w.byte(CURVE_STEPPED);
+  else if (Array.isArray(c)) {
+    w.byte(CURVE_BEZIER);
+    for (const v of c) w.float(v);
+  } else w.byte(CURVE_LINEAR);
+}
+
 function bezierCount(keys, n) {
   let count = 0;
   for (let f = 0; f + 1 < keys.length; f++) if (Array.isArray(keys[f].curve)) count += n;
   return count;
 }
 
-function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, eventNames, events }) {
-  for (const key of ['deform', 'attachments', 'transform', 'path', 'physics']) {
+function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, skinIndex, transformMapped, eventNames, events }) {
+  for (const key of ['deform', 'path', 'physics']) {
     if (anim[key] && Object.keys(anim[key]).length) throw new Unsupported(`'${key}' animation keys`);
   }
   const slots = Object.entries(anim.slots ?? {});
   const bones = Object.entries(anim.bones ?? {});
   const ik = Object.entries(anim.ik ?? {});
-  let total = ik.length + (anim.drawOrder?.length ? 1 : 0) + (anim.events?.length ? 1 : 0);
+  const transform = Object.entries(anim.transform ?? {});
+  const deform = [];
+  for (const [skin, slots] of Object.entries(anim.attachments ?? {})) {
+    for (const [slot, atts] of Object.entries(slots)) {
+      for (const [attachment, timelines] of Object.entries(atts)) {
+        for (const kind of Object.keys(timelines)) if (kind !== 'deform') throw new Unsupported(`'${kind}' attachment keys`);
+        if (timelines.deform) deform.push({ skin, slot, attachment, keys: timelines.deform });
+      }
+    }
+  }
+  let total = ik.length + transform.length + deform.length + (anim.drawOrder?.length ? 1 : 0) + (anim.events?.length ? 1 : 0);
   for (const [, t] of slots) total += Object.keys(t).length;
   for (const [, t] of bones) total += Object.keys(t).length;
   w.varint(total);
@@ -824,6 +1327,16 @@ function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, eventN
             } else w.byte(CURVE_LINEAR);
           }
         });
+      } else if (kind === 'rgba2') {
+        w.byte(SLOT_RGBA2);
+        w.varint(keys.length);
+        w.varint(bezierCount(keys, 7));
+        keys.forEach((k, f) => {
+          w.float(k.time ?? 0);
+          w.color(k.light);
+          w.color3(k.dark);
+          if (f > 0) writeSegmentCurve(w, keys[f - 1].curve);
+        });
       } else {
         throw new Unsupported(`'${kind}' slot keys`);
       }
@@ -849,11 +1362,12 @@ function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, eventN
 
   w.varint(ik.length);
   for (const [name, keys] of ik) {
-    w.varint(constraintIndex.get(name));
+    w.varint(constraintIndex.get(`ik:${name}`));
     w.varint(keys.length);
-    w.varint(0);
-    for (const k of keys) {
-      if (k.curve !== undefined && k.curve !== 'linear') throw new Unsupported('Curved IK keys');
+    w.varint(bezierCount(keys, 2));
+    keys.forEach((k, f) => {
+      if (k.curve === 'stepped') throw new Unsupported('Stepped IK keys');
+      const curve = f > 0 && Array.isArray(keys[f - 1].curve) ? keys[f - 1].curve : null;
       const mix = k.mix ?? 1;
       let flags = 0;
       if (mix !== 0) flags |= 0x01;
@@ -862,14 +1376,65 @@ function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, eventN
       if (k.bendPositive !== false) flags |= 0x08;
       if (k.compress) flags |= 0x10;
       if (k.stretch) flags |= 0x20;
+      if (curve) flags |= IK_KEY_BEZIER;
       w.byte(flags);
       w.float(k.time ?? 0);
       if ((flags & 0x03) === 0x03) w.float(mix);
       if (flags & 0x04) w.float(k.softness);
-    }
+      if (curve) for (const v of curve) w.float(v);
+    });
   }
 
+  w.varint(transform.length);
+  for (const [name, keys] of transform) {
+    const index = constraintIndex.get(`transform:${name}`);
+    if (index === undefined) throw new Error(`unknown transform constraint '${name}'`);
+    w.varint(index);
+    w.varint(keys.length);
+    w.varint(bezierCount(keys, TRANSFORM_KEY_MIXES.length));
+    const mapped = transformMapped.get(name) ?? new Set(TRANSFORM_PROPERTIES);
+    keys.forEach((k, f) => {
+      w.float(k.time ?? 0);
+      for (const [mix, property] of TRANSFORM_MIXES) w.float(mapped.has(property) ? (k[mix] ?? 1) : 0);
+      if (f > 0) writeSegmentCurve(w, keys[f - 1].curve);
+    });
+  }
   for (let s = 0; s < UNKNOWN_ANIMATION_SECTIONS; s++) w.varint(0);
+  // Deform keys grouped by skin, then slot.
+  const bySkin = new Map();
+  for (const d of deform) {
+    if (!bySkin.has(d.skin)) bySkin.set(d.skin, new Map());
+    const slots = bySkin.get(d.skin);
+    if (!slots.has(d.slot)) slots.set(d.slot, []);
+    slots.get(d.slot).push(d);
+  }
+  w.varint(bySkin.size);
+  for (const [skin, slots] of bySkin) {
+    const index = skinIndex.get(skin);
+    if (index === undefined) throw new Error(`unknown skin '${skin}'`);
+    w.varint(index);
+    w.varint(slots.size);
+    for (const [slot, list] of slots) {
+      w.varint(slotIndex.get(slot));
+      w.varint(list.length);
+      for (const d of list) {
+        w.ref(d.attachment);
+        w.byte(ATTACHMENT_DEFORM);
+        w.varint(d.keys.length);
+        w.varint(bezierCount(d.keys, 1));
+        d.keys.forEach((k, f) => {
+          w.float(k.time ?? 0);
+          if (f > 0) writeSegmentCurve(w, d.keys[f - 1].curve);
+          const values = k.vertices ?? [];
+          w.varint(values.length);
+          if (values.length) {
+            w.varint(k.offset ?? 0);
+            for (const v of values) w.float(v);
+          }
+        });
+      }
+    }
+  }
 
   const draw = anim.drawOrder ?? anim.draworder ?? [];
   w.varint(draw.length);

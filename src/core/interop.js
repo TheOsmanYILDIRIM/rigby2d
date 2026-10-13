@@ -44,7 +44,7 @@ const WHITE = [1, 1, 1, 1];
 const DEFAULT_ATTACHMENT_COLORS = { boundingbox: '60F000FF', path: 'FF7F00FF', point: 'F1F100FF', clipping: 'CE3A3AFF' };
 const KNOWN_ATTACHMENT_FIELDS = new Set([
   'type', 'name', 'path', 'x', 'y', 'rotation', 'scaleX', 'scaleY', 'width', 'height', 'color', 'uvs', 'triangles', 'hull', 'edges',
-  'vertices', 'vertexCount', 'parent', 'skin', 'deform', 'timelines', 'closed', 'constantSpeed', 'lengths', 'end', 'sequence',
+  'vertices', 'vertexCount', 'parent', 'source', 'skin', 'deform', 'timelines', 'closed', 'constantSpeed', 'lengths', 'end', 'sequence',
 ]);
 const rest = (o, known) => {
   const out = {};
@@ -252,6 +252,7 @@ function readAttachment(key, a, slot) {
   const att = { name: key, type, image: a.path ?? a.name ?? key };
   if (a.name !== undefined && a.name !== key) att.sourceName = a.name;
   att.color = hexToColor(a.color, hexToColor(DEFAULT_ATTACHMENT_COLORS[type], WHITE));
+  if (a.color !== undefined && DEFAULT_ATTACHMENT_COLORS[type]) att.colorSet = true;
   if (type === 'region' || type === 'point') {
     att.offset = { x: a.x ?? 0, y: a.y ?? 0, rotation: a.rotation ?? 0, scale_x: a.scaleX ?? 1, scale_y: a.scaleY ?? 1, shear_x: 0, shear_y: 0 };
   }
@@ -269,7 +270,7 @@ function readAttachment(key, a, slot) {
     Object.assign(att, decodeVertices(a.vertices, att.uvs.length / 2));
   }
   if (type === 'linkedmesh') {
-    att.parent = a.parent;
+    att.parent = a.parent ?? a.source;
     att.skin = a.skin ?? null;
     att.deform = a.deform ?? a.timelines ?? true;
     att.width = a.width ?? 0;
@@ -528,14 +529,14 @@ function writeCurve(key, next, values, nextValues, v4, out) {
   out.curve = arr;
 }
 
-function writeNumericKeys(keys, toValues, toFields, v4) {
+function writeNumericKeys(keys, toValues, toFields, v4, toNextValues = toValues) {
   return keys.map((k, i) => {
     const next = keys[i + 1];
     const values = toValues(k.value);
     const out = {};
     if (!v4 || k.time !== 0) out.time = round(k.time);
     Object.assign(out, toFields(k.value));
-    writeCurve(k, next, values, next ? toValues(next.value) : values, v4, out);
+    writeCurve(k, next, values, next ? toNextValues(next.value) : values, v4, out);
     return out;
   });
 }
@@ -599,7 +600,9 @@ function writeJson(sk, version) {
   const keptVersion = sk.header?.version && String(sk.header.version).startsWith(version) ? sk.header.version : `${version}.0`;
   // Keep the stored bounds while they still describe the setup pose, so unchanged files round-trip.
   const bounds = setupBounds(sk);
-  const stored = ['x', 'y', 'width', 'height'].every((k) => typeof header[k] === 'number' && Math.abs(header[k] - bounds[k]) < 0.01);
+  const hasStored = ['x', 'y', 'width', 'height'].every((k) => typeof header[k] === 'number');
+  const empty = bounds.width === 0 && bounds.height === 0;
+  const stored = hasStored && (empty || ['x', 'y', 'width', 'height'].every((k) => Math.abs(header[k] - bounds[k]) < 0.01));
   const json = { skeleton: { hash: '', ...header, [VERSION_FIELD]: keptVersion, ...(stored ? {} : bounds) } };
 
   json.bones = sk.bones.map((b) => {
@@ -677,7 +680,7 @@ function writeJson(sk, version) {
 
   const writeAttachments = (list) => {
     const out = {};
-    for (const a of list) out[a.name] = writeAttachment(a, slotName);
+    for (const a of list) out[a.name] = writeAttachment(a, slotName, v43);
     return out;
   };
   const defaultSkin = { name: 'default', attachments: {} };
@@ -717,7 +720,7 @@ function writeJson(sk, version) {
   return { json, warnings };
 }
 
-function writeAttachment(a, slotName) {
+function writeAttachment(a, slotName, v43) {
   const o = {};
   if (a.type !== 'region') o.type = a.type;
   if (a.sourceName !== undefined) o.name = a.sourceName;
@@ -738,7 +741,7 @@ function writeAttachment(a, slotName) {
   }
   if (a.type === 'linkedmesh') {
     if (a.skin) o.skin = a.skin;
-    o.parent = a.parent;
+    o[v43 ? 'source' : 'parent'] = a.parent;
     if (a.deform === false) o.deform = false;
   }
   if (a.type === 'boundingbox' || a.type === 'path' || a.type === 'clipping') {
@@ -754,7 +757,7 @@ function writeAttachment(a, slotName) {
   if (a.width !== undefined && (a.type === 'region' || a.width)) o.width = round(a.width);
   if (a.height !== undefined && (a.type === 'region' || a.height)) o.height = round(a.height);
   const def = hexToColor(DEFAULT_ATTACHMENT_COLORS[a.type], WHITE);
-  if (a.color && a.color.some((c, i) => Math.abs(c - def[i]) > 1e-3)) o.color = colorToHex(a.color, 4);
+  if (a.color && (a.colorSet || a.color.some((c, i) => Math.abs(c - def[i]) > 1e-3))) o.color = colorToHex(a.color, 4);
   if (a.sequence !== undefined) o.sequence = clone(a.sequence);
   if (a.extra) Object.assign(o, clone(a.extra));
   return o;
@@ -838,7 +841,7 @@ function writeAnimation(anim, sk, { v4, boneName, slotName, warnings }) {
         if (v.offset) o.offset = v.offset;
         if (v.vertices.length) o.vertices = v.vertices.map(round);
         return o;
-      }, v4);
+      }, v4, () => [1]);
       // 3.8 deform curves are written as if the value went 0 -> 1, which matches normalized form.
       const skin = t.skin ?? 'default';
       const slotKey = slotName(t.slot);
@@ -864,7 +867,12 @@ function writeAnimation(anim, sk, { v4, boneName, slotName, warnings }) {
       return o;
     });
   }
-  if (anim.events.length) out.events = anim.events.map((e) => ({ ...clone(e), time: round(e.time) }));
+  if (anim.events.length) {
+    out.events = anim.events.map((e) => {
+      const { time, ...rest } = clone(e);
+      return v4 && !time ? rest : { time: round(time), ...rest };
+    });
+  }
   for (const [k, v] of Object.entries(anim.extra)) {
     if (!['bones', 'slots', 'attachments', 'transform', 'path', 'physics'].includes(k)) out[k] = clone(v);
   }

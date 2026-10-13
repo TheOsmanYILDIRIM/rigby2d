@@ -515,6 +515,7 @@ function readAttachment(a) {
   }
   if (type === 'clipping') out.end = index(a.end, 'end', true);
   if (a.sequence !== undefined) out.sequence = raw(a.sequence);
+  if (a.colorSet) out.colorSet = true;
   Object.assign(out, extraOf(a));
   return out;
 }
@@ -532,6 +533,7 @@ function writeAttachment(a) {
   }
   if (a.weights) o.weights = a.weights.map((v) => v.map((w) => ({ ...w })));
   if (a.sequence !== undefined) o.sequence = raw(a.sequence);
+  if (a.colorSet) o.colorSet = true;
   writeExtra(o, a);
   return o;
 }

@@ -66,20 +66,83 @@ const FIXTURE = {
   },
 };
 
-test('binary round trip of the fixture is lossless', () => {
-  const bytes = writeSkeletonBinary(structuredClone(FIXTURE));
+const near = (a, b) => {
+  if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 1e-4;
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    return [...keys].every((k) => near(a[k], b[k]));
+  }
+  return a === b;
+};
+
+const roundTrip = (fixture) => {
+  const bytes = writeSkeletonBinary(structuredClone(fixture));
   assert.ok(isSkeletonBinary(bytes));
   const back = readSkeletonBinary(bytes);
   delete back._strings;
-  const near = (a, b) => {
-    if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 1e-4;
-    if (a && b && typeof a === 'object' && typeof b === 'object') {
-      const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-      return [...keys].every((k) => near(a[k], b[k]));
-    }
-    return a === b;
-  };
+  return back;
+};
+
+test('binary round trip of the fixture is lossless', () => {
+  const back = roundTrip(FIXTURE);
   assert.ok(near(back, FIXTURE), JSON.stringify(back).slice(0, 400));
+});
+
+// Constraints, extra skins and the remaining attachment and key types.
+const RICH = structuredClone(FIXTURE);
+RICH.slots.push({ name: 'rope', bone: 'hip', attachment: 'rope-path' }, { name: 'mask', bone: 'hip', attachment: 'mask' });
+RICH.slots[1].dark = '102030';
+RICH.constraints.push(
+  {
+    type: 'transform',
+    name: 'follow',
+    source: 'hip',
+    bones: ['target'],
+    x: 4,
+    rotation: 15,
+    properties: { x: { to: { x: { max: 100 } } }, rotate: { offset: 2, to: { rotate: { max: 100, scale: 0.5 } } } },
+    mixX: 0.5,
+    mixRotate: 0.25,
+  },
+  { type: 'path', name: 'along', slot: 'rope', bones: ['upper', 'lower'], spacingMode: 'percent', rotateMode: 'chainScale', spacing: 0.5, mixX: 0.75 },
+  { type: 'ik', name: 'reach', target: 'target', bones: ['hip'], mix: 0.4, skin: true },
+);
+const atts = RICH.skins[0].attachments;
+atts.body.tinted = { name: 'body-tint', color: '80ff80ff', width: 10, height: 10 };
+atts.body.hitbox = { type: 'boundingbox', vertexCount: 3, vertices: [0, 0, 10, 0, 0, 10] };
+atts.mask = { mask: { type: 'clipping', end: 'leg', vertexCount: 3, vertices: [0, 0, 5, 0, 0, 5], color: 'ce3a3aff' } };
+atts.rope = {
+  'rope-path': { type: 'path', vertexCount: 3, lengths: [42], vertices: [1, 2, 0, 0, 1, 1, 2, 10, 0, 1, 1, 3, 20, 0, 1] },
+};
+RICH.skins.push({
+  name: 'armor',
+  bones: ['target'],
+  ik: ['reach'],
+  attachments: {
+    leg: { leg: { type: 'linkedmesh', name: 'leg-armor', source: 'leg', width: 50, height: 20 } },
+    body: { body: { path: 'armor/body', width: 44, height: 64, rotation: 5 } },
+  },
+});
+const run = RICH.animations.run;
+run.slots.leg = { rgba2: [{ light: 'ffffffff', dark: '000000', curve: [0.1, 1, 0.2, 1, 0.1, 1, 0.2, 1, 0.1, 1, 0.2, 1, 0.1, 1, 0.2, 1, 0.1, 0, 0.2, 0.1, 0.1, 0, 0.2, 0.1, 0.1, 0, 0.2, 0.1] }, { time: 0.4, light: 'ff0000ff', dark: '102030' }] };
+run.ik['leg-ik'][0].curve = [0.1, 0, 0.3, 0.5, 0.1, 0, 0.3, 10];
+run.transform = { follow: [{ mixX: 0, mixRotate: 0.5, curve: 'stepped' }, { time: 0.5, mixX: 0.5 }] };
+run.attachments = {
+  default: { leg: { leg: { deform: [{ curve: [0.1, 0, 0.2, 1] }, { time: 0.5, offset: 2, vertices: [1, 2, 3, 4] }, { time: 1 }] } } },
+};
+
+test('binary round trip with constraints, skins and every supported attachment type', () => {
+  const back = roundTrip(RICH);
+  assert.ok(near(back, RICH), JSON.stringify(back).slice(0, 600));
+});
+
+test('the document model loads the rich fixture from binary', () => {
+  const { skeleton } = readSkeletonJson(roundTrip(RICH), 'rich');
+  assert.equal(skeleton.skins.length, 1);
+  assert.equal(skeleton.skins[0].slots.find((e) => e.attachments[0].type === 'linkedmesh').attachments[0].parent, 'leg');
+  assert.equal(skeleton.ik.length, 2);
+  assert.equal(skeleton.extra.constraints.length, 2);
+  assert.equal(skeleton.animations[0].deform.length, 1);
 });
 
 test('binary through the document model', () => {
@@ -102,11 +165,11 @@ test('the sample robot exports to binary', () => {
 });
 
 test('unsupported features stop with a clear error', () => {
-  const withSkin = structuredClone(FIXTURE);
-  withSkin.skins.push({ name: 'armor', attachments: {} });
-  assert.throws(() => writeSkeletonBinary(withSkin), /not supported in \.skel/);
+  const withPoint = structuredClone(FIXTURE);
+  withPoint.skins[0].attachments.body.marker = { type: 'point', x: 1, y: 2 };
+  assert.throws(() => writeSkeletonBinary(withPoint), /not supported in \.skel/);
   const withPath = structuredClone(FIXTURE);
-  withPath.constraints.push({ type: 'path', name: 'p', bones: ['hip'], target: 'body' });
+  withPath.constraints.push({ type: 'physics', name: 'p', bone: 'hip' });
   assert.throws(() => writeSkeletonBinary(withPath), /not supported in \.skel/);
   assert.ok(!isSkeletonBinary(new TextEncoder().encode('{"skeleton":{}}')));
 });
