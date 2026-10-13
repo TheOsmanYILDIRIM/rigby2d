@@ -25,7 +25,7 @@ function menus() {
     File: [
       { label: 'New', action: () => app.newDocument() },
       { label: 'New sample (robot)', action: () => app.newSample() },
-      { label: 'Open… (.rigby, or import skeleton .json)', shortcut: 'Ctrl+O', action: () => app.openDialog() },
+      { label: 'Open… (.rigby, or import .json / .skel)', shortcut: 'Ctrl+O', action: () => app.openDialog() },
       'separator',
       { label: 'Save', shortcut: 'Ctrl+S', action: () => app.save(false) },
       { label: 'Save as…', shortcut: 'Ctrl+Shift+S', action: () => app.save(true) },
@@ -36,6 +36,7 @@ function menus() {
       { label: 'Export as format 3.8…', action: () => app.exportSkeletonJson('3.8') },
       { label: 'Export as format 4.2…', action: () => app.exportSkeletonJson('4.2') },
       { label: 'Export as format 4.3…', action: () => app.exportSkeletonJson('4.3') },
+      { label: 'Export .skel + atlas (4.3)…', action: () => app.exportSkeletonBinary() },
       'separator',
       { label: 'Quit', action: () => (inTauri ? getCurrentWindow().close() : window.close()) },
     ],

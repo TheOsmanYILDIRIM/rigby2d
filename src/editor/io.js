@@ -5,6 +5,7 @@
 import { readPsd } from 'ag-psd';
 
 import { parseAtlas, regionPlacement, writeAtlas } from '../core/atlas.js';
+import { readSkeletonBinary, writeSkeletonBinary } from '../core/binary.js';
 import { isSkeletonJson, readSkeletonJson, writeSkeletonJson } from '../core/interop.js';
 
 import { transform } from '../core/math.js';
@@ -75,11 +76,15 @@ async function loadImage(fs, path) {
 export const WORKFILE_EXT = 'rigby';
 
 /**
- * Opens a `.rigby` work file, or imports skeleton JSON (with its .atlas, or loose images from the
- * skeleton's images folder). Returns { doc, warnings, imported }.
+ * Opens a `.rigby` work file, or imports a skeleton (.json or binary .skel, with its .atlas or loose
+ * images from the skeleton's images folder). Returns { doc, warnings, imported }.
  */
 export async function openProject(path, fs, images) {
   if (path.toLowerCase().endsWith(`.${WORKFILE_EXT}`)) return { ...(await openWorkfile(path, fs, images)), imported: false };
+  if (path.toLowerCase().endsWith('.skel')) {
+    const obj = readSkeletonBinary(await fs.readFile(path));
+    return { ...(await openSkeletonJson(path, fs, obj, images)), imported: true };
+  }
   const json = await fs.readText(path).catch((e) => {
     throw new Error(`reading ${path}: ${e}`);
   });
@@ -276,14 +281,29 @@ function packSheet(doc, images) {
  */
 export async function exportSkeletonJson(path, fs, doc, images, version) {
   const { json, warnings } = writeSkeletonJson(doc, { version });
+  const atlasPath = await writePackedAtlas(path, fs, doc, images);
+  await fs.writeText(path, JSON.stringify(json, null, 2));
+  return { atlasPath, warnings };
+}
+
+/** Exports a binary skeleton: `<name>.skel` (format 4.3), `<name>.atlas` and `<name>.png`. */
+export async function exportSkeletonBinary(path, fs, doc, images) {
+  const { json, warnings } = writeSkeletonJson(doc, { version: '4.3', binary: true });
+  const bytes = writeSkeletonBinary(json);
+  const atlasPath = await writePackedAtlas(path, fs, doc, images);
+  await fs.writeFile(path, bytes);
+  return { atlasPath, warnings };
+}
+
+/** Packs the used images into `<name>.png` and writes `<name>.atlas`. Returns the atlas path. */
+async function writePackedAtlas(path, fs, doc, images) {
   const { sheet, width, height, regions } = packSheet(doc, images);
   const pngPath = withExtension(path, 'png');
   const atlasPath = withExtension(path, 'atlas');
   const page = { name: basename(pngPath), width, height, filter: ['Linear', 'Linear'], regions: regions.map((r) => ({ ...r, rotate: 0, index: -1 })) };
   await fs.writeFile(pngPath, await encodePng(sheet));
   await fs.writeText(atlasPath, writeAtlas([page]));
-  await fs.writeText(path, JSON.stringify(json, null, 2));
-  return { atlasPath, warnings };
+  return atlasPath;
 }
 
 // ---- import -----------------------------------------------------------------------------------

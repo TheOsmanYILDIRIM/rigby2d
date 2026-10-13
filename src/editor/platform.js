@@ -183,12 +183,12 @@ export async function confirmDialog(message, title) {
  */
 export async function pickProject() {
   if (isDesktop) {
-    const path = await open({ filters: [{ name: 'Rigby2D work file or skeleton JSON', extensions: ['rigby', 'json'] }] });
+    const path = await open({ filters: [{ name: 'Rigby2D work file or skeleton (.json, .skel)', extensions: ['rigby', 'json', 'skel'] }] });
     return path ? { path, fs: desktopFs } : null;
   }
   const files = await pickWithInput({ directory: true });
-  const projects = files.filter((f) => /\.(rigby|json)$/i.test(f.name));
-  if (!projects.length) return files.length ? Promise.reject(new Error('no .rigby or .json file in that folder')) : null;
+  const projects = files.filter((f) => /\.(rigby|json|skel)$/i.test(f.name));
+  if (!projects.length) return files.length ? Promise.reject(new Error('no .rigby, .json or .skel file in that folder')) : null;
   projects.sort((a, b) => Number(/\.rigby$/i.test(b.name)) - Number(/\.rigby$/i.test(a.name)));
   let chosen = projects[0];
   if (projects.length > 1) {

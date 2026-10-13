@@ -257,6 +257,20 @@ export class App {
     }
   }
 
+  /** Writes a binary skeleton (.skel format 4.3 + .atlas + .png). */
+  async exportSkeletonBinary() {
+    const target = await this.guard(() => platform.pickSaveTarget(`${this.doc.name || 'skeleton'}.skel`, 'Binary skeleton', 'skel'));
+    if (!target) return;
+    try {
+      const { atlasPath, warnings } = await io.exportSkeletonBinary(target.path, target.fs, this.doc, this.images);
+      await target.fs.finish();
+      const note = warnings.length ? ` (warnings: ${warnings.join('; ')})` : '';
+      this.setStatus(`Exported ${target.path} and ${atlasPath}${note}`);
+    } catch (e) {
+      this.setStatus(`Binary export failed: ${errorText(e)}`);
+    }
+  }
+
   async importPsd() {
     const [file] = (await this.guard(() => platform.pickImportFiles('Photoshop', ['psd'], false))) ?? [];
     if (!file) return;

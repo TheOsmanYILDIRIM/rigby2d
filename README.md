@@ -28,7 +28,8 @@
 - **Animation** — Setup and Animate modes; posing a bone in Animate mode sets keys automatically.
 - **Dopesheet** — drag keys in time, linear / ease-in / ease-out / ease-in-out / stepped curves, image-swap keys.
 - **Undo / redo** for every edit, with unsaved-change tracking.
-- **Standard skeleton JSON, no proprietary project file** — opens and saves the widely used skeleton `.json` format (3.8; 4.x experimental) with meshes, weights, skins, IK, events, deform and draw-order keys. *Save* writes `.json` + an `images/` folder; *Export* writes `.json` + a packed `.atlas` and `.png` for game runtimes.
+- **`.rigby` work file** — one self-contained file with the whole project and its images (like a `.blend`).
+- **Skeleton import/export** — opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, IK, events, deform and draw-order keys round-trip losslessly.
 - **Runtime included** — a small dependency-free JavaScript runtime (`src/core`) to play exported animations in your game.
 - **Sample character** — *File ▸ New sample (robot)* gives you a rigged, animated character to explore.
 
@@ -71,8 +72,8 @@ npm test
 2. **Draw bones:** press <kbd>B</kbd> and drag in the viewport. Select a bone first to chain children from it.
 3. **Attach images:** select an image and choose its *Bone* in the inspector.
 4. **Animate:** press <kbd>Tab</kbd> for Animate mode, move the time cursor, pose bones. Keys are set as you edit.
-5. **Save:** *File ▸ Save* writes `name.json` plus an `images/` folder. Reopen it any time with *File ▸ Open*.
-6. **Export:** *File ▸ Export JSON + atlas…* writes `name.json`, `name.atlas` and `name.png` for game runtimes.
+5. **Save:** *File ▸ Save* writes your work file `name.rigby`. Reopen it any time with *File ▸ Open*.
+6. **Export:** *File ▸ Export JSON + atlas…* or *Export .skel + atlas* writes the skeleton plus `name.atlas` and `name.png` for game runtimes. *File ▸ Open* also imports existing `.json` / `.skel` exports.
 
 ### Keyboard shortcuts
 
@@ -114,12 +115,17 @@ function frame(dt) {
 }
 ```
 
-### File format
+### File formats
 
-Rigby2D has no project format of its own: everything is standard skeleton JSON. Bones are listed so
-parents come first, slots are in draw order, attachments live in skins, and animations hold bone,
-slot, deform, draw-order, IK and event timelines with keys relative to the setup pose. Images are
-either loose files in the skeleton's `images` folder or regions of a `.atlas` texture atlas.
+- **`.rigby`** — Rigby2D's work file: a ZIP holding `project.json` (the complete document) and
+  `images/*.png`. Use it for saving work in progress.
+- **Skeleton `.json` / `.skel`** — the interchange formats game runtimes load. Bones are listed so
+  parents come first, slots are in draw order, attachments live in skins, and animations hold bone,
+  slot, deform, draw-order, IK and event timelines with keys relative to the setup pose. Images
+  come from a `.atlas` texture atlas or loose files in the skeleton's `images` folder.
+- Binary `.skel` support covers format 4.3 skeletons with IK constraints, the default skin, region
+  and mesh attachments, and bone, slot, IK, draw-order and event keys. Rigs using other features
+  (extra skins, other constraint types, deform keys, …) export to `.json` instead.
 
 ## Project structure
 

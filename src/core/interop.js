@@ -492,7 +492,8 @@ function lastTime(raw, anim) {
 
 // ---- writing ----------------------------------------------------------------------------------
 
-const round = (v) => Math.round(v * 1e5) / 1e5;
+/** JSON output rounds to 5 decimals; binary output keeps full float precision. */
+let round = (v) => Math.round(v * 1e5) / 1e5;
 
 /** Writes a key's curve in file form (`values`/`nextValues` are the key's numeric values). */
 function writeCurve(key, next, values, nextValues, v4, out) {
@@ -560,7 +561,31 @@ function setupBounds(sk) {
  * Converts a Rigby2D Skeleton to a skeleton JSON object. `version` is "3.8" or "4.2".
  * Returns { json, warnings }.
  */
-export function writeSkeletonJson(sk, { version = '3.8' } = {}) {
+export function writeSkeletonJson(sk, { version = '3.8', binary = false } = {}) {
+  const previous = round;
+  if (binary) round = (v) => v;
+  let result;
+  try {
+    result = writeJson(sk, version);
+  } finally {
+    round = previous;
+  }
+  // Binary-only data (`_` keys, e.g. the string table) is kept only when encoding to .skel.
+  if (!binary) stripPrivate(result.json);
+  return result;
+}
+
+function stripPrivate(o) {
+  if (Array.isArray(o)) o.forEach(stripPrivate);
+  else if (o && typeof o === 'object') {
+    for (const k of Object.keys(o)) {
+      if (k.startsWith('_')) delete o[k];
+      else stripPrivate(o[k]);
+    }
+  }
+}
+
+function writeJson(sk, version) {
   const v4 = version.startsWith('4');
   const minor = Number(version.split('.')[1] ?? 0);
   const v42 = v4 && minor >= 2;
@@ -572,7 +597,10 @@ export function writeSkeletonJson(sk, { version = '3.8' } = {}) {
   const header = { ...(clone(sk.header) ?? {}) };
   delete header.version;
   const keptVersion = sk.header?.version && String(sk.header.version).startsWith(version) ? sk.header.version : `${version}.0`;
-  const json = { skeleton: { hash: '', ...header, [VERSION_FIELD]: keptVersion, ...setupBounds(sk) } };
+  // Keep the stored bounds while they still describe the setup pose, so unchanged files round-trip.
+  const bounds = setupBounds(sk);
+  const stored = ['x', 'y', 'width', 'height'].every((k) => typeof header[k] === 'number' && Math.abs(header[k] - bounds[k]) < 0.01);
+  const json = { skeleton: { hash: '', ...header, [VERSION_FIELD]: keptVersion, ...(stored ? {} : bounds) } };
 
   json.bones = sk.bones.map((b) => {
     const o = { name: b.name };
