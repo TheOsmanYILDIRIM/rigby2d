@@ -46,6 +46,8 @@ export class AnimationState {
     /** Playback speed multiplier for every track. */
     this.speed = 1;
     this.listeners = [];
+    /** Seconds since the last `apply`, simulated by physics constraints then. */
+    this.physicsDelta = 0;
   }
 
   /**
@@ -142,6 +144,7 @@ export class AnimationState {
     // Older signature: update(dt).
     if (typeof sk === 'number') [sk, dt] = [null, sk];
     dt *= this.speed;
+    this.physicsDelta += dt;
     for (const entry of [...this.tracks]) {
       if (!entry) continue;
       this.advance(sk, entry, dt);
@@ -217,6 +220,8 @@ export class AnimationState {
   /** Resets `pose` to setup, applies every track in order and updates world transforms. */
   apply(sk, pose) {
     pose.reset(sk);
+    pose.physicsDelta = this.physicsDelta;
+    this.physicsDelta = 0;
     for (const entry of this.tracks) {
       if (!entry) continue;
       const layer = entry.track === 0 ? 1 : entry.alpha;

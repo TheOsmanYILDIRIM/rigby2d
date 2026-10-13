@@ -10,6 +10,7 @@ import {
   constraintSetupState,
   resetConstraintState,
   solvePath,
+  solvePhysics,
   solveTransform,
 } from './constraints.js';
 import { Affine, cloneTransform, copyTransform, lerp, toAffine, wrapDegrees } from './math.js';
@@ -34,6 +35,13 @@ export class Pose {
     this.applied = [];
     this.world = [];
     this.constraintList = null;
+    /**
+     * Physics simulation state by constraint name. It survives `reset`: keep the pose (or share
+     * this map between poses) to simulate over time, and clear it with `resetPhysics`.
+     */
+    this.physics = new Map();
+    /** Seconds of physics to simulate in the next `updateWorld` (0 = only apply offsets). */
+    this.physicsDelta = 0;
     this.setToSetup(sk);
   }
 
@@ -224,6 +232,8 @@ export class Pose {
     this.applied.length = n;
     this.computeWorld(sk);
     const list = this.ensureConstraints(sk);
+    const delta = this.physicsDelta;
+    this.physicsDelta = 0;
     const steps = [...sk.ik.map((c, i) => ({ order: c.order, ik: i })), ...list.map((c, i) => ({ order: c.order, other: i }))];
     steps.sort((x, y) => x.order - y.order);
     for (const step of steps) {
@@ -236,10 +246,22 @@ export class Pose {
       const c = list[step.other];
       if (!constraintActive(sk, c)) continue;
       const state = this.constraintState[step.other];
-      const result = c.type === 'transform' ? solveTransform(this, c, state) : solvePath(sk, this, c, state);
+      let result;
+      if (c.type === 'transform') result = solveTransform(this, c, state);
+      else if (c.type === 'path') result = solvePath(sk, this, c, state);
+      else {
+        let sim = this.physics.get(c.name);
+        if (!sim) this.physics.set(c.name, (sim = {}));
+        result = solvePhysics(sk, this, c, state, sim, delta);
+      }
       if (result?.world) this.setWorlds(sk, result.world);
       else if (result?.local) for (const b of result.local) this.updateBranch(sk, b);
     }
+  }
+
+  /** Clears physics so every simulated bone starts again from its animated pose. */
+  resetPhysics() {
+    this.physics.clear();
   }
 
   /**

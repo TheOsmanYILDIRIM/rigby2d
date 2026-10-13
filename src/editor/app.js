@@ -64,6 +64,9 @@ export class App {
     this.saveTarget = null;
     this.images = new Images();
     this.sel = null;
+    /** Physics simulation state kept between frames while playing, and the time to simulate. */
+    this.physics = new Map();
+    this.physicsDelta = 0;
     /** Events recently crossed during playback: [{ name, at }] (performance.now() times). */
     this.firedEvents = [];
     /** Bottom panel view: 'dopesheet' or 'graph'. */
@@ -146,6 +149,14 @@ export class App {
     const pose = new Pose(this.doc);
     const anim = this.currentAnimation();
     if (this.mode === Mode.Animate && anim) {
+      // Physics simulates while playing (state kept across frames) and rests otherwise.
+      if (this.playing) {
+        pose.physics = this.physics;
+        pose.physicsDelta = this.physicsDelta;
+        this.physicsDelta = 0;
+      } else if (this.physics.size) {
+        this.physics.clear();
+      }
       pose.apply(this.doc, anim, this.time, 1);
       // Unkeyed changes override the animated values until they are keyed or discarded.
       for (const [bone, channels] of this.pending) {
@@ -470,6 +481,7 @@ export class App {
       return;
     }
     const before = this.time;
+    this.physicsDelta += Math.min(dt, 0.1);
     this.time += Math.min(dt, 0.1) * this.playDirection;
     let wrapped = false;
     if (this.time > anim.duration || this.time < 0) {

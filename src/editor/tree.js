@@ -139,7 +139,7 @@ export function render(app, el) {
   const constraints = [
     ...doc.ik.map((c) => row(`⊸ ${c.name}`, { title: `IK: ${c.bones.map((b) => doc.bones[b].name).join(' → ')} → ${doc.bones[c.target].name}` })),
     ...[...(doc.extra.constraints ?? []).map((e) => [e.data.type, e.data.name]), ...['transform', 'path', 'physics'].flatMap((t) => (doc.extra[t] ?? []).map((c) => [t, c.name]))].map(([type, name]) => {
-      const evaluated = type === 'transform' || type === 'path';
+      const evaluated = type === 'transform' || type === 'path' || type === 'physics';
       return row(`⊸ ${name}`, { cls: evaluated ? '' : 'weak', title: evaluated ? `${type} constraint` : `${type} constraint (kept, not evaluated yet)` });
     }),
   ];

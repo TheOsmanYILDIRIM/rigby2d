@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-// Transform and path constraints: compiled from the constraint data kept in `sk.extra` (format
-// 3.8, 4.2 and the 4.3 unified list), animated by the constraint timelines kept in `anim.extra`,
-// and solved on a Pose's world transforms.
+// Transform, path and physics constraints: compiled from the constraint data kept in `sk.extra`
+// (format 3.8, 4.2 and the 4.3 unified list), animated by the constraint timelines kept in
+// `anim.extra`, and solved on a Pose's world transforms.
 
 import { wrapDegrees } from './math.js';
 
@@ -50,11 +50,17 @@ function compile(sk) {
   const slotIndex = new Map(sk.slots.map((s, i) => [s.name, i]));
   const entries = [];
   for (const e of sk.extra?.constraints ?? []) entries.push({ data: e.data, type: e.data.type, order: e.index });
-  for (const type of ['transform', 'path']) {
+  for (const type of ['transform', 'path', 'physics']) {
     (sk.extra?.[type] ?? []).forEach((data, i) => entries.push({ data, type, order: data.order ?? i }));
   }
   const out = [];
   for (const { data, type, order } of entries) {
+    if (type === 'physics') {
+      const bone = boneIndex.get(data.bone);
+      if (bone === undefined) continue;
+      out.push({ name: data.name, order, skinRequired: !!data.skin, bones: [bone], type, bone, ...physicsData(data) });
+      continue;
+    }
     const bones = (data.bones ?? []).map((n) => boneIndex.get(n));
     if (!bones.length || bones.some((b) => b === undefined)) continue;
     const base = { name: data.name, order, skinRequired: !!data.skin, bones };
@@ -69,6 +75,30 @@ function compile(sk) {
     }
   }
   return out;
+}
+
+/** Physics values keys can animate, per constraint or for every constraint flagged global. */
+const PHYSICS_VALUES = ['inertia', 'strength', 'damping', 'mass', 'wind', 'gravity', 'mix'];
+
+/** Physics settings with their defaults; `setup` holds the values keys can animate. */
+function physicsData(d) {
+  const globals = {};
+  for (const key of PHYSICS_VALUES) globals[key] = !!d[`${key}Global`];
+  return {
+    weights: { x: d.x ?? 0, y: d.y ?? 0, rotate: d.rotate ?? 0, scaleX: d.scaleX ?? 0, shearX: d.shearX ?? 0 },
+    limit: d.limit ?? 5000,
+    fps: d.fps ?? 60,
+    globals,
+    setup: {
+      inertia: d.inertia ?? 0.5,
+      strength: d.strength ?? 100,
+      damping: d.damping ?? 0.85,
+      mass: d.mass ?? 1,
+      wind: d.wind ?? 0,
+      gravity: d.gravity ?? 0,
+      mix: d.mix ?? 1,
+    },
+  };
 }
 
 function transformData(d) {
@@ -149,7 +179,7 @@ export function constraintActive(sk, c) {
   const skin = sk.skin ? sk.findSkin(sk.skin) : null;
   if (!skin) return false;
   const e = skin.extra ?? {};
-  return [e.constraints, e.transform, e.path].some((names) => Array.isArray(names) && names.includes(c.name));
+  return [e.constraints, e.transform, e.path, e.physics].some((names) => Array.isArray(names) && names.includes(c.name));
 }
 
 // ---- animation ---------------------------------------------------------------------------------
@@ -157,7 +187,7 @@ export function constraintActive(sk, c) {
 /** Applies the constraint timelines of `anim` at `time` to `states`, blended by `alpha`. */
 export function applyConstraintTimelines(list, states, anim, time, alpha) {
   const extra = anim.extra ?? {};
-  if (!extra.transform && !extra.path) return;
+  if (!extra.transform && !extra.path && !extra.physics) return;
   list.forEach((c, i) => {
     const state = states[i];
     if (c.type === 'transform') {
@@ -176,6 +206,20 @@ export function applyConstraintTimelines(list, states, anim, time, alpha) {
             return [k.mixRotate ?? 1, x, k.mixY ?? x, sx, k.mixScaleY ?? sx, k.mixShearY ?? 1];
           });
       PROPS.forEach((p, j) => (state.mix[p] += (values[j] - state.mix[p]) * alpha));
+    } else if (c.type === 'physics') {
+      // Keys of this constraint, then skeleton-wide keys ("") for values flagged global.
+      for (const [source, global] of [
+        [extra.physics?.[c.name], false],
+        [extra.physics?.[''], true],
+      ]) {
+        if (!source) continue;
+        for (const key of PHYSICS_VALUES) {
+          const keys = source[key];
+          if (!Array.isArray(keys) || !keys.length || (global && !c.globals[key])) continue;
+          const [v] = sampleRaw(keys, time, (k) => [k.value ?? 0]);
+          state[key] += (v - state[key]) * alpha;
+        }
+      }
     } else if (c.type === 'path') {
       const t = extra.path?.[c.name];
       if (!t) return;
@@ -522,4 +566,90 @@ function buildPath(v, att) {
     return evaluate(i, u);
   };
   return { length, at };
+}
+
+// ---- physics -----------------------------------------------------------------------------------
+
+/** Wind and gravity values are scaled by this to accelerations in skeleton units per second². */
+const FORCE_SCALE = 100;
+/** Tip distance used for rotation, scale and shear of bones without a length. */
+const MIN_TIP = 10;
+
+/**
+ * Simulates a physics constraint. The bone's origin and tip each follow the animated pose through
+ * a damped spring: when the animated bone moves, `inertia` of the movement is left behind as an
+ * offset that `strength` pulls back, with `damping` as the velocity kept per 1/60 s, `limit`
+ * as the top speed and wind (+X) and gravity (-Y) as constant forces. The origin offset moves
+ * the bone (x, y weights); the tip offset rotates it (rotate), stretches it (scaleX) and tilts
+ * its X axis (shearX). `sim` is the persistent state; `delta` the seconds to simulate (0 =
+ * only apply the current offsets).
+ */
+export function solvePhysics(sk, pose, c, state, sim, delta) {
+  const w = c.weights;
+  const mix = state.mix;
+  const m = pose.world[c.bone];
+  const axis = Math.hypot(m.a, m.b) || 1;
+  const len = Math.max(MIN_TIP, sk.bones[c.bone].length * axis);
+  const origin = [m.tx, m.ty];
+  const tip = [m.tx + (m.a / axis) * len, m.ty + (m.b / axis) * len];
+  if (!sim.ready) {
+    Object.assign(sim, { ready: true, rest: 0, o: [0, 0], ov: [0, 0], t: [0, 0], tv: [0, 0], lastOrigin: origin, lastTip: tip });
+  }
+  if (delta > 0) {
+    const step = 1 / Math.max(1, c.fps);
+    sim.rest += delta;
+    let steps = Math.floor(sim.rest / step);
+    sim.rest -= steps * step;
+    steps = Math.min(steps, Math.max(1, c.fps)); // at most one second of catching up
+    if (steps > 0) {
+      // Inertia: part of the animated movement since the last update is left behind.
+      for (let k = 0; k < 2; k++) {
+        sim.o[k] -= (origin[k] - sim.lastOrigin[k]) * state.inertia;
+        sim.t[k] -= (tip[k] - sim.lastTip[k]) * state.inertia;
+      }
+      const massInv = state.mass > 0 ? 1 / state.mass : 1;
+      const keep = Math.pow(Math.min(1, Math.max(0, state.damping)), 60 * step);
+      const force = [state.wind * FORCE_SCALE, -state.gravity * FORCE_SCALE];
+      for (let n = 0; n < steps; n++) {
+        for (const [p, v] of [
+          [sim.o, sim.ov],
+          [sim.t, sim.tv],
+        ]) {
+          for (let k = 0; k < 2; k++) v[k] = (v[k] + (force[k] - state.strength * p[k]) * massInv * step) * keep;
+          const speed = Math.hypot(v[0], v[1]);
+          if (speed > c.limit) {
+            v[0] *= c.limit / speed;
+            v[1] *= c.limit / speed;
+          }
+          p[0] += v[0] * step;
+          p[1] += v[1] * step;
+        }
+      }
+      sim.lastOrigin = origin;
+      sim.lastTip = tip;
+    }
+  }
+  if (mix === 0) return null;
+  const out = m.clone();
+  out.tx += sim.o[0] * w.x * mix;
+  out.ty += sim.o[1] * w.y * mix;
+  if (w.rotate || w.scaleX || w.shearX) {
+    const from = [tip[0] - origin[0], tip[1] - origin[1]];
+    const to = [from[0] + sim.t[0], from[1] + sim.t[1]];
+    const angle = wrapDegrees(axisAngle(to[0], to[1]) - axisAngle(from[0], from[1]));
+    rotateLinear(out, angle * w.rotate * mix);
+    if (w.shearX) {
+      // Tilt only the X axis.
+      const r = angle * w.shearX * mix * DEG;
+      const [a, b] = [out.a, out.b];
+      out.a = a * Math.cos(r) - b * Math.sin(r);
+      out.b = a * Math.sin(r) + b * Math.cos(r);
+    }
+    if (w.scaleX) {
+      const f = (Math.hypot(to[0], to[1]) / len - 1) * w.scaleX * mix + 1;
+      out.a *= f;
+      out.b *= f;
+    }
+  }
+  return { world: new Map([[c.bone, out]]) };
 }

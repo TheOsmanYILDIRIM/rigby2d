@@ -9,8 +9,8 @@
 // skins (with skin bones and constraints), region, mesh, linked mesh, bounding box, path and
 // clipping attachments, events, and animations with bone, slot attachment/rgba/rgba2, IK,
 // transform, deform, draw order and event timelines.
-// Not yet supported: physics and slider constraints, point attachments, sequences, rgb/alpha/rgb2
-// slot keys, path/physics constraint keys and stepped IK keys.
+// Not yet supported: slider constraints, point attachments, sequences, rgb/alpha/rgb2 slot keys,
+// path constraint keys, physics keys other than wind, and stepped IK keys.
 //
 // Encoding: big-endian floats/ints; varints (7 bits per byte, low bits first; signed values are
 // zig-zag encoded); strings are a varint byte length + 1 (0 = null) then UTF-8; "ref" strings are
@@ -36,6 +36,23 @@ const BONE_TIMELINES = [
 const CONSTRAINT_IK = 0;
 const CONSTRAINT_PATH = 1;
 const CONSTRAINT_TRANSFORM = 2;
+const CONSTRAINT_PHYSICS = 3;
+/** Physics constraint flags: which bone properties are simulated, the velocity limit and mass. */
+const PHYSICS_PROPERTIES = [
+  [0x02, 'x'],
+  [0x04, 'y'],
+  [0x08, 'rotate'],
+  [0x10, 'scaleX'],
+  [0x20, 'shearX'],
+];
+const PHYSICS_LIMIT = 0x40;
+const PHYSICS_MASS = 0x80;
+/** Physics values that skeleton-wide physics keys can drive, in flag-bit order. */
+const PHYSICS_GLOBALS = ['inertia', 'strength', 'damping', 'mass', 'wind', 'gravity', 'mix'];
+const PHYSICS_DEFAULTS = { inertia: 0.5, strength: 100, damping: 0.85, fps: 60, limit: 5000 };
+/** Physics key types by code (only wind keys have been observed so far). */
+const PHYSICS_KEY_TYPES = { 5: 'wind' };
+const PHYSICS_KEY_CODES = { wind: 5 };
 const IK_SKIN = 0x01;
 const IK_BEND_NEGATIVE = 0x04;
 const IK_MIX_NOT_0 = 0x20;
@@ -84,7 +101,9 @@ const CURVE_LINEAR = 0;
 const CURVE_STEPPED = 1;
 const CURVE_BEZIER = 2;
 const DEFAULT_BONE_COLOR = '9b9b9bff';
-/** Animation sections between transform and deform keys whose encoding is not known yet (must be empty). */
+/** Animation sections between transform and deform keys: path keys (unknown encoding, must be
+ * empty), physics keys, and one more unknown section (must be empty). */
+const ANIMATION_SECTION_PHYSICS = 1;
 const UNKNOWN_ANIMATION_SECTIONS = 3;
 const ATTACHMENT_DEFORM = 0;
 const TRANSFORM_KEY_MIXES = TRANSFORM_MIXES.map(([key]) => key);
@@ -296,6 +315,10 @@ export function readSkeletonBinary(bytes) {
   for (let i = 0; i < nConstraints; i++) {
     const name = r.string();
     const type = r.byte();
+    if (type === CONSTRAINT_PHYSICS) {
+      out.constraints.push(readPhysics(r, name, out));
+      continue;
+    }
     const bones = [];
     const n = r.varint();
     for (let k = 0; k < n; k++) bones.push(out.bones[r.varint()].name);
@@ -420,6 +443,56 @@ function readPath(r, name, bones, out) {
   if (mixRotate !== 1) c.mixRotate = mixRotate;
   if (mixX !== 1) c.mixX = mixX;
   if (mixY !== mixX) c.mixY = mixY;
+  return c;
+}
+
+/** Physics keys: per constraint (index + 1; 0 = every constraint), per type, curve keys. */
+function readPhysicsKeys(r, out, anim) {
+  const n = r.varint();
+  for (let i = 0; i < n; i++) {
+    const index = r.varint();
+    const name = index === 0 ? '' : out.constraints[index - 1]?.name;
+    if (name === undefined) throw new Error('invalid constraint index in .skel data');
+    const nTypes = r.varint();
+    for (let t = 0; t < nTypes; t++) {
+      const code = r.byte();
+      const kind = PHYSICS_KEY_TYPES[code];
+      if (!kind) throw new Unsupported(`Physics key type ${code}`);
+      const frames = r.varint();
+      r.varint(); // bezier count
+      ((anim.physics ??= {})[name] ??= {})[kind] = readCurveKeys(r, frames, (rr, key) => {
+        const v = rr.float();
+        if (v !== 0) key.value = v;
+        return 1;
+      });
+    }
+  }
+}
+
+/** Physics constraint: bone, flags, simulated properties, then the simulation settings. */
+function readPhysics(r, name, out) {
+  const c = { type: 'physics', name, bone: out.bones[r.varint()].name };
+  const flags = r.byte();
+  if (flags & 0x01) c.skin = true;
+  for (const [bit, key] of PHYSICS_PROPERTIES) if (flags & bit) c[key] = r.float();
+  if (flags & PHYSICS_LIMIT) c.limit = r.float();
+  const fps = r.byte();
+  if (fps !== PHYSICS_DEFAULTS.fps) c.fps = fps;
+  for (const key of ['inertia', 'strength', 'damping']) {
+    const v = r.float();
+    if (v !== PHYSICS_DEFAULTS[key]) c[key] = v;
+  }
+  // Mass is stored as its inverse.
+  if (flags & PHYSICS_MASS) c.mass = shortestFloat(Math.fround(1 / r.float()));
+  const wind = r.float();
+  const gravity = r.float();
+  if (wind) c.wind = wind;
+  if (gravity) c.gravity = gravity;
+  const globals = r.byte();
+  if (globals & 0x80) throw new Unsupported(`Physics constraint options (0x${globals.toString(16)}) on '${name}'`);
+  PHYSICS_GLOBALS.forEach((key, i) => {
+    if (globals & (1 << i)) c[`${key}Global`] = true;
+  });
   return c;
 }
 
@@ -752,7 +825,8 @@ function readAnimation(r, out, eventNames) {
     });
   }
   for (let s = 0; s < UNKNOWN_ANIMATION_SECTIONS; s++) {
-    if (r.varint() !== 0) throw new Unsupported('Path or physics constraint keys');
+    if (s === ANIMATION_SECTION_PHYSICS) readPhysicsKeys(r, out, anim);
+    else if (r.varint() !== 0) throw new Unsupported(s === 0 ? 'Path constraint keys' : 'An unknown animation section');
   }
   const nSkins = r.varint();
   for (let i = 0; i < nSkins; i++) {
@@ -981,6 +1055,7 @@ export function writeSkeletonBinary(json) {
     if (c.type === 'ik') writeIk(w, c, boneIndex);
     else if (c.type === 'path') writePath(w, c, boneIndex, slotIndex);
     else if (c.type === 'transform') writeTransform(w, c, boneIndex);
+    else if (c.type === 'physics') writePhysics(w, c, boneIndex);
     else throw new Unsupported(`'${c.type}' constraints`);
   });
 
@@ -1084,6 +1159,33 @@ function writePath(w, c, boneIndex, slotIndex) {
   w.float(c.mixRotate ?? 1);
   w.float(mixX);
   w.float(c.mixY ?? mixX);
+}
+
+function writePhysics(w, c, boneIndex) {
+  if (c.mix !== undefined && c.mix !== 1) throw new Unsupported(`Physics constraint mix ('${c.name}')`);
+  const bone = boneIndex.get(c.bone);
+  if (bone === undefined) throw new Error(`unknown bone '${c.bone}'`);
+  const limit = c.limit !== undefined && c.limit !== PHYSICS_DEFAULTS.limit;
+  const mass = c.mass !== undefined && c.mass !== 1;
+  let flags = c.skin ? 0x01 : 0;
+  for (const [bit, key] of PHYSICS_PROPERTIES) if (c[key]) flags |= bit;
+  if (limit) flags |= PHYSICS_LIMIT;
+  if (mass) flags |= PHYSICS_MASS;
+  w.byte(CONSTRAINT_PHYSICS);
+  w.varint(bone);
+  w.byte(flags);
+  for (const [bit, key] of PHYSICS_PROPERTIES) if (flags & bit) w.float(c[key]);
+  if (limit) w.float(c.limit);
+  w.byte(c.fps ?? PHYSICS_DEFAULTS.fps);
+  for (const key of ['inertia', 'strength', 'damping']) w.float(c[key] ?? PHYSICS_DEFAULTS[key]);
+  if (mass) w.float(1 / c.mass);
+  w.float(c.wind ?? 0);
+  w.float(c.gravity ?? 0);
+  let globals = 0;
+  PHYSICS_GLOBALS.forEach((key, i) => {
+    if (c[`${key}Global`]) globals |= 1 << i;
+  });
+  w.byte(globals);
 }
 
 function writeTransform(w, c, boneIndex) {
@@ -1277,7 +1379,7 @@ function bezierCount(keys, n) {
 }
 
 function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, skinIndex, transformMapped, eventNames, events }) {
-  for (const key of ['deform', 'path', 'physics']) {
+  for (const key of ['deform', 'path']) {
     if (anim[key] && Object.keys(anim[key]).length) throw new Unsupported(`'${key}' animation keys`);
   }
   const slots = Object.entries(anim.slots ?? {});
@@ -1399,7 +1501,29 @@ function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, skinIn
       if (f > 0) writeSegmentCurve(w, keys[f - 1].curve);
     });
   }
-  for (let s = 0; s < UNKNOWN_ANIMATION_SECTIONS; s++) w.varint(0);
+  for (let s = 0; s < UNKNOWN_ANIMATION_SECTIONS; s++) {
+    if (s !== ANIMATION_SECTION_PHYSICS) {
+      w.varint(0);
+      continue;
+    }
+    const physics = Object.entries(anim.physics ?? {});
+    w.varint(physics.length);
+    for (const [name, timelines] of physics) {
+      const index = name === '' ? -1 : constraintIndex.get(`physics:${name}`);
+      if (index === undefined) throw new Error(`unknown physics constraint '${name}'`);
+      w.varint(index + 1);
+      const kinds = Object.entries(timelines);
+      w.varint(kinds.length);
+      for (const [kind, keys] of kinds) {
+        const code = PHYSICS_KEY_CODES[kind];
+        if (code === undefined) throw new Unsupported(`Physics '${kind}' keys`);
+        w.byte(code);
+        w.varint(keys.length);
+        w.varint(bezierCount(keys, 1));
+        writeCurveKeys(w, keys, (k) => [k.value ?? 0]);
+      }
+    }
+  }
   // Deform keys grouped by skin, then slot.
   const bySkin = new Map();
   for (const d of deform) {

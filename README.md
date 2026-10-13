@@ -29,8 +29,8 @@
 - **Dopesheet and graph editor**: multi-key selection, moving and retiming keys, curve presets, bezier handle editing, image-swap keys.
 - **Undo / redo** for every edit, with unsaved-change tracking.
 - **`.rigby` work file**: one self-contained file with the whole project and its images (like a `.blend`).
-- **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, IK, events, deform and draw-order keys round-trip losslessly.
-- **Runtime included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events and constraints, plus a reference WebGL renderer (`src/webgl`).
+- **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, constraints, events, deform and draw-order keys round-trip losslessly.
+- **Runtime included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, IK, transform, path and physics constraints, plus a reference WebGL renderer (`src/webgl`).
 - **Sample character**: *File ▸ New sample (robot)* gives you a rigged, animated character to explore.
 
 ## Getting started
@@ -47,7 +47,7 @@
 
 ```bash
 git clone https://github.com/jaisurya-dev-art/rigby2d.git
-cd rigby
+cd rigby2d
 npm install
 npm run dev
 ```
@@ -69,9 +69,9 @@ npm test
 ## Using Rigby2D
 
 1. **Import art:** *File ▸ Import PSD…* or *File ▸ Import PNG images…*
-2. **Draw bones:** press <kbd>B</kbd> and drag in the viewport. Select a bone first to chain children from it.
+2. **Draw bones:** pick the *Create* tool in the viewport toolbar and drag. Select a bone first to chain children from it.
 3. **Attach images:** select an image and choose its *Bone* in the inspector.
-4. **Animate:** press <kbd>Tab</kbd> for Animate mode, move the time cursor, pose bones. Keys are set as you edit.
+4. **Animate:** switch to Animate mode, move the time cursor and pose bones, then set keys with the key buttons (or turn on *Auto key*). The *Help* menu lists the keyboard shortcuts.
 5. **Save:** *File ▸ Save* writes your work file `name.rigby`. Reopen it any time with *File ▸ Open*.
 6. **Export:** *File ▸ Export JSON + atlas…* or *Export .skel + atlas* writes the skeleton plus `name.atlas` and `name.png` for game runtimes. *File ▸ Open* also imports existing `.json` / `.skel` exports.
 
@@ -116,12 +116,14 @@ blend mode for every visible region and mesh. `examples/webgl.html` is a small p
   parents come first, slots are in draw order, attachments live in skins, and animations hold bone,
   slot, deform, draw-order, IK and event timelines with keys relative to the setup pose. Images
   come from a `.atlas` texture atlas or loose files in the skeleton's `images` folder.
-- Binary `.skel` support covers format 4.3 skeletons with IK, transform and path constraints, skins,
-  region, mesh, linked mesh, bounding box, path and clipping attachments, and bone, slot, IK,
-  transform, deform, draw-order and event keys. Rigs using other features (physics constraints,
-  point attachments, image sequences, …) export to `.json` instead.
-- The runtime evaluates IK, transform and path constraints. Physics constraints are kept in the
-  file but not simulated yet.
+- Binary `.skel` support covers format 4.3 skeletons with IK, transform, path and physics
+  constraints, skins, region, mesh, linked mesh, bounding box, path and clipping attachments, and
+  bone, slot, IK, transform, physics wind, deform, draw-order and event keys. Rigs using other
+  features (slider constraints, point attachments, image sequences, …) export to `.json` instead.
+- The runtime evaluates IK, transform, path and physics constraints. Physics uses Rigby2D's own
+  spring model driven by the stored settings (inertia, strength, damping, mass, wind, gravity,
+  limit, mix), so motion can differ slightly from other tools. It simulates while animations play
+  (`AnimationState` passes the elapsed time); `pose.resetPhysics()` starts it over.
 
 ## Performance benchmark (0.1.0)
 

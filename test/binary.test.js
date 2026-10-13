@@ -168,8 +168,24 @@ test('unsupported features stop with a clear error', () => {
   const withPoint = structuredClone(FIXTURE);
   withPoint.skins[0].attachments.body.marker = { type: 'point', x: 1, y: 2 };
   assert.throws(() => writeSkeletonBinary(withPoint), /not supported in \.skel/);
-  const withPath = structuredClone(FIXTURE);
-  withPath.constraints.push({ type: 'physics', name: 'p', bone: 'hip' });
-  assert.throws(() => writeSkeletonBinary(withPath), /not supported in \.skel/);
+  const withSlider = structuredClone(FIXTURE);
+  withSlider.constraints.push({ type: 'slider', name: 's', bone: 'hip' });
+  assert.throws(() => writeSkeletonBinary(withSlider), /not supported in \.skel/);
   assert.ok(!isSkeletonBinary(new TextEncoder().encode('{"skeleton":{}}')));
+});
+
+test('physics constraints and wind keys round-trip through .skel', () => {
+  const json = structuredClone(FIXTURE);
+  json.constraints.push(
+    { type: 'physics', name: 'sway', bone: 'hip', rotate: 1, scaleX: 0.5, limit: 1500, inertia: 0.25, strength: 80, damping: 0.75, mass: 2, windGlobal: true },
+    { type: 'physics', name: 'bounce', bone: 'hip', x: 0.5, y: 0.75 },
+  );
+  const anim = Object.values(json.animations)[0];
+  anim.physics = {
+    sway: { wind: [{ value: -12.5 }, { time: 0.5, value: 20, curve: 'stepped' }, { time: 1 }] },
+    '': { wind: [{ value: 3 }, { time: 1, value: -3 }] },
+  };
+  const back = readSkeletonBinary(writeSkeletonBinary(structuredClone(json)));
+  assert.deepEqual(back.constraints.filter((c) => c.type === 'physics'), json.constraints.filter((c) => c.type === 'physics'));
+  assert.deepEqual(Object.values(back.animations)[0].physics, anim.physics);
 });

@@ -115,3 +115,49 @@ test('path constraint lays a chain along the path', () => {
   const a = p2.world[1];
   assert.ok(close(Math.hypot(a.a, a.b), 1.5, 1e-2));
 });
+
+// A bone pointing up from a movable root, with rotation physics.
+const physicsRig = (constraint) =>
+  readSkeletonJson({
+    skeleton: { [V]: '4.3.0' },
+    bones: [{ name: 'root' }, { name: 'hair', parent: 'root', rotation: 90, length: 100 }],
+    slots: [],
+    constraints: [{ type: 'physics', name: 'p', bone: 'hair', rotate: 1, ...constraint }],
+    skins: [{ name: 'default', attachments: {} }],
+  }).skeleton;
+
+function simulate(sk, pose, seconds, move = () => {}) {
+  for (let t = 0; t < seconds - 1e-9; t += 1 / 60) {
+    pose.reset(sk);
+    move(pose, t);
+    pose.physicsDelta = 1 / 60;
+    pose.updateWorld(sk);
+  }
+  return rot(pose, sk, 'hair');
+}
+
+test('physics: no simulated time means no effect', () => {
+  const sk = physicsRig({});
+  assert.ok(close(rot(new Pose(sk), sk, 'hair'), 90));
+});
+
+test('physics: a bone lags when its parent moves, then settles back', () => {
+  const sk = physicsRig({});
+  const pose = new Pose(sk);
+  const lagging = simulate(sk, pose, 0.2, (p, t) => (p.local[0].x = Math.min(1, t / 0.1) * 100));
+  // Moving right leaves the tip behind (to the left): the bone tilts counter-clockwise.
+  assert.ok(lagging > 95, `lagging rotation ${lagging}`);
+  const settled = simulate(sk, pose, 5, (p) => (p.local[0].x = 100));
+  assert.ok(Math.abs(settled - 90) < 0.5, `settled rotation ${settled}`);
+});
+
+test('physics: wind and gravity push the tip; mix 0 turns it off', () => {
+  const windy = physicsRig({ wind: 20 });
+  const bent = simulate(windy, new Pose(windy), 5);
+  assert.ok(bent < 85, `wind toward +X bends the upright bone clockwise: ${bent}`);
+  const heavy = physicsRig({ gravity: 20 });
+  heavy.bones[1].setup.rotation = 0; // pointing right
+  assert.ok(simulate(heavy, new Pose(heavy), 5) < -5, 'gravity pulls the tip down');
+  const off = physicsRig({ wind: 20, mix: 0 });
+  assert.ok(close(simulate(off, new Pose(off), 2), 90));
+});
