@@ -30,7 +30,7 @@
 - **Undo / redo** for every edit, with unsaved-change tracking.
 - **`.rigby` work file**: one self-contained file with the whole project and its images (like a `.blend`).
 - **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, IK, events, deform and draw-order keys round-trip losslessly.
-- **Runtime included**: a small dependency-free JavaScript runtime (`src/core`) to play exported animations in your game.
+- **Runtime included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events and constraints, plus a reference WebGL renderer (`src/webgl`).
 - **Sample character**: *File ▸ New sample (robot)* gives you a rigged, animated character to explore.
 
 ## Getting started
@@ -93,27 +93,36 @@ npm test
 
 ## Playing animations in your game
 
-Copy `src/core/` into your project (no dependencies) and render the quads with any 2D renderer:
+Copy `src/core/` into your project (no dependencies). With WebGL, also copy `src/webgl/` for a
+ready-made renderer (one batched draw call per texture and blend mode, two-color tint):
 
 ```js
 import { AnimationState, Pose, parseAtlas, readSkeletonJson } from './core/index.js';
+import { WebGLRenderer } from './webgl/renderer.js';
 
-const { skeleton } = readSkeletonJson(JSON.parse(jsonText), 'hero'); // name.json
-const atlas = parseAtlas(atlasText); // name.atlas: pages and region rectangles
+const { skeleton } = readSkeletonJson(JSON.parse(jsonText), 'hero'); // hero.json
 const pose = new Pose(skeleton);
 const state = new AnimationState();
-state.play(skeleton, 'walk', true, 0.2); // loop, 0.2 s crossfade
+state.play(skeleton, 'walk', true, 0.2);              // track 0, 0.2 s crossfade
+state.setAnimation(skeleton, 1, 'shoot', false, 0.1); // track 1 layers on top
+state.addAnimation(skeleton, 0, 'idle', true, 0.3);   // queued after walk
+state.addListener({ event: (entry, e) => playSound(e.audio ?? e.name) });
+
+const renderer = new WebGLRenderer(gl);
+const textures = renderer.atlasTextures(parseAtlas(atlasText), { 'hero.png': pageImage });
 
 function frame(dt) {
-  state.update(dt);
+  state.update(skeleton, dt);
   state.apply(skeleton, pose);
-  for (const quad of pose.quads(skeleton)) {
-    // quad.positions: 4 world-space corners (TL, TR, BR, BL), Y up
-    // quad.attachment.image: region name in the atlas (meshes: quad.kind === 'mesh', use quad.triangles/uvs)
-    // quad.color: RGBA tint
-  }
+  renderer.begin(canvas.width, canvas.height, { x: 0, y: 200, zoom: 1 });
+  renderer.drawSkeleton(skeleton, pose, textures);
+  renderer.end();
 }
 ```
+
+With another renderer, draw `pose.quads(skeleton)`: world-space positions (Y up), UVs, tint and
+blend mode for every visible region and mesh. `examples/webgl.html` is a small player: run
+`npm run web:dev` and open `/examples/webgl.html`.
 
 ### File formats
 
@@ -135,6 +144,8 @@ function frame(dt) {
 ```
 src/core/       Runtime: data model, skeleton JSON/.skel + atlas I/O, pose evaluation, constraints, playback
 src/editor/     Editor UI: viewport, tree, properties, dopesheet, graph editor, import/export
+src/webgl/      Reference WebGL renderer for the runtime
+examples/       WebGL player example
 src-tauri/      Native desktop shell (window + file dialog/fs plugins only)
 test/           node:test suites
 docs/           Logo and screenshots

@@ -139,3 +139,20 @@ test('looping and crossfade', () => {
   st.apply(sk, pose);
   assert.equal(pose.local[b].rotation, 30);
 });
+
+test('atlas region UVs undo whitespace stripping and rotation', async () => {
+  const { regionEntry } = await import('../src/webgl/renderer.js');
+  const page = { width: 100, height: 100 };
+  // 20x10 image stripped to 16x6 (2 px of whitespace on each side), stored unrotated at (10, 20).
+  const plain = regionEntry(null, { x: 10, y: 20, width: 16, height: 6, rotate: 0, offsetX: 2, offsetY: 2, originalWidth: 20, originalHeight: 10 }, page.width, page.height);
+  assert.deepEqual(plain.trim.map((v) => +v.toFixed(3)), [0.1, 0.2, 0.9, 0.8]);
+  const at = (e, u, v) => e.map(u, v, [0, 0]).map((x) => +(x * 100).toFixed(3));
+  assert.deepEqual(at(plain, 0.1, 0.2), [10, 20]); // packed top-left
+  assert.deepEqual(at(plain, 0.9, 0.8), [26, 26]); // packed bottom-right
+  // Same image stored rotated 90 degrees counter-clockwise: a 6x16 footprint at (40, 50). The
+  // image's top-left lands at the footprint's bottom-left, its top-right at the top-left.
+  const rotated = regionEntry(null, { x: 40, y: 50, width: 16, height: 6, rotate: 90, offsetX: 2, offsetY: 2, originalWidth: 20, originalHeight: 10 }, page.width, page.height);
+  assert.deepEqual(at(rotated, 0.1, 0.2), [40, 66]);
+  assert.deepEqual(at(rotated, 0.9, 0.2), [40, 50]);
+  assert.deepEqual(at(rotated, 0.9, 0.8), [46, 50]);
+});
