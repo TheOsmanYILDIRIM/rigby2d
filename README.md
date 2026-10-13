@@ -150,9 +150,9 @@ coding style and pull request process.
 
 Rigby2D is an independent open-source project. It is not affiliated with, endorsed by, or sponsored by Esoteric Software LLC. Spine is a trademark of Esoteric Software LLC.
 
-Rigby2D reads and writes the skeleton JSON, binary  and texture atlas file formats solely for interoperability, so that users can work with their own exported files. This support was implemented clean-room:
+Rigby2D reads and writes the skeleton JSON, binary `.skel` and texture atlas file formats solely for interoperability, so that users can work with their own exported files. This support was implemented clean-room:
 
 - **JSON and atlas formats:** implemented from publicly available documentation.
-- **Binary  format:** implemented from the publicly documented binary layout of earlier versions and by comparing JSON and binary exports of the same skeleton (black-box observation of exported data).
+- **Binary `.skel` format:** implemented from the publicly documented binary layout of earlier versions and by comparing JSON and binary exports of the same skeleton (black-box observation of exported data).
 
 No Esoteric Software source code, runtimes, editor files or assets are used or distributed with Rigby2D. Compatibility with files from any particular editor or runtime version is provided as-is and is not guaranteed.
