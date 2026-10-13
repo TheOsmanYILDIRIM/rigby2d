@@ -2,7 +2,7 @@
 // Right panel: properties of the current selection.
 
 import { identityTransform, transformEquals } from '../core/math.js';
-import { findAttachment, makeAttachment, uniqueName } from '../core/model.js';
+import { BLEND_MODES, INHERIT_MODES, findAttachment, makeAttachment, uniqueName, vertexCount } from '../core/model.js';
 import { Mode, selBone, selSlot } from './app.js';
 import * as edit from './edit.js';
 import { dragValue, h, select, textField } from './widgets.js';
@@ -61,6 +61,13 @@ function boneUi(app, b) {
         app.changed();
       }, { speed: 0.5, min: 0, disabled: !setupMode }),
     ),
+    ...row(
+      'Inherit',
+      select(INHERIT_MODES.map((m) => [m, m]), bone.inherit ?? 'normal', (m) => {
+        bone.inherit = m;
+        app.changed();
+      }, { disabled: !setupMode }),
+    ),
   );
 
   const local = app.pose().local[b];
@@ -89,6 +96,9 @@ function boneUi(app, b) {
       h('label', null, 'Scale'),
       h('div', { class: 'cell' }, field('scale_x', { ...scl, prefix: 'x ' }), field('scale_y', { ...scl, prefix: 'y ' })),
       keyMarker(app, b, 'scale') ?? h('span'),
+      h('label', null, 'Shear'),
+      h('div', { class: 'cell' }, field('shear_x', { ...pos, prefix: 'x ', suffix: '°' }), field('shear_y', { ...pos, prefix: 'y ', suffix: '°' })),
+      keyMarker(app, b, 'shear') ?? h('span'),
     ),
     h(
       'div',
@@ -142,6 +152,13 @@ function slotUi(app, s) {
         }, { disabled: !setupMode }),
       ),
       row('Tint', color, alpha),
+      row(
+        'Blend',
+        select(BLEND_MODES.map((m) => [m, m]), slot.blend ?? 'normal', (m) => {
+          slot.blend = m;
+          app.changed();
+        }, { disabled: !setupMode }),
+      ),
     ),
     h('hr'),
     h('strong', null, 'Attachments'),
@@ -161,7 +178,9 @@ function slotUi(app, s) {
       }),
       ` ${label}`,
     );
-  out.push(radio(null, '(none)'), ...slot.attachments.map((a) => radio(a.name, a.name)));
+  const skinAtts = app.doc.skin ? app.doc.skinAttachments(s, app.doc.skin) : [];
+  const names = [...new Set([...skinAtts, ...slot.attachments].map((a) => a.name))];
+  out.push(radio(null, '(none)'), ...names.map((n) => radio(n, skinAtts.some((a) => a.name === n) ? `${n}  [${app.doc.skin}]` : n)));
   if (setupMode && app.doc.images.length) {
     out.push(
       select(app.doc.images.map((i) => [i.name, i.name]), undefined, (name) => {
@@ -173,8 +192,24 @@ function slotUi(app, s) {
     );
   }
 
-  const att = visible === null ? undefined : findAttachment(slot, visible);
-  if (att) {
+  const att = visible === null ? undefined : app.doc.attachment(s, visible);
+  if (att && !att.offset) {
+    const source = app.doc.meshSource(s, att);
+    out.push(
+      h('hr'),
+      h('strong', null, `${att.type}: ${visible}`),
+      h(
+        'div',
+        { class: 'grid' },
+        row('Image', att.image),
+        source ? row('Vertices', `${vertexCount(source)}${source.weights ? ' (weighted)' : ''}`) : null,
+        source?.triangles ? row('Triangles', String(source.triangles.length / 3)) : null,
+        att.type === 'linkedmesh' ? row('Parent', `${att.parent}${att.skin ? ` (${att.skin})` : ''}`) : null,
+      ),
+      h('div', { class: 'small weak' }, 'Mesh editing is not available yet; meshes deform with their bones and deform keys.'),
+    );
+  }
+  if (att && att.offset) {
     const num = (obj, key, opts) =>
       dragValue(obj[key], (v) => {
         obj[key] = v;
@@ -251,6 +286,29 @@ function projectUi(app) {
         }),
       ),
     ),
+    app.doc.skins.length
+      ? h(
+          'div',
+          { class: 'grid' },
+          row(
+            'Skin',
+            select([['', 'default'], ...app.doc.skins.map((k) => [k.name, k.name])], app.doc.skin ?? '', (name) => {
+              app.doc.skin = name || null;
+              app.changed();
+            }),
+          ),
+        )
+      : null,
+    app.doc.header
+      ? h('div', { class: 'small weak' }, `Imported from skeleton JSON ${app.doc.header.version ?? ''}. Export again with File ▸ Export skeleton JSON.`)
+      : null,
+    h('hr'),
+    h('strong', null, 'Rig'),
+    h('div', null, `${app.doc.bones.length} bones · ${app.doc.slots.length} slots · ${app.doc.skins.length + 1} skins`),
+    h('div', null, `${app.doc.ik.length} IK constraints · ${app.doc.events.length} events · ${app.doc.animations.length} animations`),
+    ['transform', 'path', 'physics']
+      .filter((k) => app.doc.extra[k]?.length)
+      .map((k) => h('div', { class: 'small weak' }, `${app.doc.extra[k].length} ${k} constraint(s): kept, not evaluated yet`)),
     h('hr'),
     h('strong', null, `Images (${app.doc.images.length})`),
     app.doc.images.length ? null : h('p', null, 'Use File ▸ Import PSD or Import PNG images to add art.'),
@@ -264,7 +322,7 @@ function projectUi(app) {
       h('li', null, 'Press B and drag in the canvas to draw bones (select a bone first to chain children).'),
       h('li', null, 'Select an image and set its Bone in the inspector.'),
       h('li', null, 'Press Tab for Animate mode, move the time cursor, pose bones; keys are set automatically.'),
-      h('li', null, 'File ▸ Export for games writes JSON + atlas for the runtimes.'),
+      h('li', null, 'File ▸ Save writes skeleton JSON + images; File ▸ Export writes JSON + a packed atlas for game runtimes.'),
     ),
   ];
 }

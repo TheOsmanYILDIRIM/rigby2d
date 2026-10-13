@@ -1,12 +1,12 @@
 # Native shell only: hosts the web UI in a window and exposes the dialog/fs plugins.
 # All editor logic lives in ../src (JavaScript).
 [package]
-name = "rigby"
+name = "rigby2d"
 version = "0.1.0"
-description = "Rigby: open-source 2D skeletal animation editor."
+description = "Rigby2D: open-source 2D skeletal animation editor."
 license = "MIT"
 authors = ["jaisurya-dev-art"]
-repository = "https://github.com/jaisurya-dev-art/rigby"
+repository = "https://github.com/jaisurya-dev-art/rigby2d"
 edition = "2021"
 
 [build-dependencies]

@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: MIT
-// Animations: keyframed timelines for bones and slots.
+// Animations: keyframed timelines for bones, slots, attachments, constraints, draw order and events.
 //
-// Bone timeline values are relative to the setup pose: rotation and translation are added,
-// scale is multiplied. A key is { time, value, curve }.
+// Bone timeline values are relative to the setup pose: rotation, translation and shear are added,
+// scale is multiplied. A key is { time, value, curve }; vector values are arrays.
 
 import { LINEAR, ease } from './curve.js';
 import { lerp } from './math.js';
 
-/** Bone channels that can be keyed; each is also the timeline property holding its keys. */
-export const CHANNELS = ['rotate', 'translate', 'scale'];
+/** Bone channels edited with the transform tools. Each is also the timeline property holding its keys. */
+export const CHANNELS = ['rotate', 'translate', 'scale', 'shear'];
+/** Single-axis bone channels (keyed separately from their combined channel). */
+export const SPLIT_CHANNELS = ['translateX', 'translateY', 'scaleX', 'scaleY', 'shearX', 'shearY'];
+/** Every bone timeline channel, in application order. `inherit` keys hold an inherit mode name. */
+export const BONE_CHANNELS = [...CHANNELS, ...SPLIT_CHANNELS, 'inherit'];
+/** Slot timeline channels: attachment name, rgba, rgb, alpha, rgba2 (light rgba + dark rgb), rgb2. */
+export const SLOT_CHANNELS = ['attachment', 'color', 'rgb', 'alpha', 'rgba2', 'rgb2'];
 
 export function makeKey(time, value, curve = LINEAR) {
   return { time, value, curve };
@@ -18,15 +24,15 @@ function copyValue(v) {
   return Array.isArray(v) ? v.slice() : v;
 }
 
-function interpolate(a, b, t) {
-  if (typeof a === 'number') return lerp(a, b, t);
-  if (Array.isArray(a)) return a.map((v, i) => lerp(v, b[i], t));
-  return a; // attachment names hold until the next key
+function interpolate(a, b, t, curve) {
+  if (typeof a === 'number') return lerp(a, b, ease(curve, t, 0));
+  if (Array.isArray(a)) return a.map((v, i) => lerp(v, b[i], ease(curve, t, i)));
+  return a; // names and other discrete values hold until the next key
 }
 
 /** Samples a sorted key list at `time`. Returns `undefined` for an empty list. */
 export function sample(keys, time) {
-  if (keys.length === 0) return undefined;
+  if (!keys || keys.length === 0) return undefined;
   if (time <= keys[0].time) return copyValue(keys[0].value);
   const next = partitionPoint(keys, (k) => k.time <= time);
   if (next >= keys.length) return copyValue(keys[keys.length - 1].value);
@@ -34,7 +40,12 @@ export function sample(keys, time) {
   const b = keys[next];
   const span = b.time - a.time;
   const t = span > 0 ? (time - a.time) / span : 1;
-  return interpolate(a.value, b.value, ease(a.curve, t));
+  return interpolate(a.value, b.value, t, a.curve);
+}
+
+/** Index of the last key at or before `time`, or -1. */
+export function keyIndexAt(keys, time) {
+  return partitionPoint(keys, (k) => k.time <= time) - 1;
 }
 
 function partitionPoint(keys, pred) {
@@ -78,14 +89,39 @@ export function resort(keys, index) {
   return i;
 }
 
+export function emptyBoneTimeline(bone) {
+  const tl = { bone };
+  for (const ch of BONE_CHANNELS) tl[ch] = [];
+  return tl;
+}
+
+export function emptySlotTimeline(slot) {
+  const tl = { slot };
+  for (const ch of SLOT_CHANNELS) tl[ch] = [];
+  return tl;
+}
+
 export class Animation {
   constructor(name = '', duration = 0) {
     this.name = name;
     this.duration = duration;
-    /** @type {{bone:number, rotate:any[], translate:any[], scale:any[]}[]} */
+    /** Bone timelines: { bone, rotate, translate, scale, shear, translateX, ..., inherit }. */
     this.bones = [];
-    /** @type {{slot:number, attachment:any[], color:any[]}[]} */
+    /** Slot timelines: { slot, attachment, color, rgb, alpha, rgba2, rgb2 }. */
     this.slots = [];
+    /**
+     * Mesh deformation: { skin (name or null for the default skin), slot, attachment, keys }.
+     * Key values are { offset, vertices }: deltas added to the setup vertices from `offset` on.
+     */
+    this.deform = [];
+    /** Draw order keys; values are [{ slot, offset }] relative to setup order, or null for setup order. */
+    this.drawOrder = [];
+    /** Event keys: { time, name, int?, float?, string?, volume?, balance? }. */
+    this.events = [];
+    /** IK constraint timelines: { constraint, keys } with values { mix, softness, bendPositive, compress, stretch }. */
+    this.ik = [];
+    /** Timelines Rigby2D keeps but does not evaluate yet (transform/path/physics constraints, sequences). */
+    this.extra = {};
   }
 
   boneTimeline(bone) {
@@ -95,7 +131,7 @@ export class Animation {
   boneTimelineMut(bone) {
     let tl = this.boneTimeline(bone);
     if (!tl) {
-      tl = { bone, rotate: [], translate: [], scale: [] };
+      tl = emptyBoneTimeline(bone);
       this.bones.push(tl);
     }
     return tl;
@@ -108,7 +144,7 @@ export class Animation {
   slotTimelineMut(slot) {
     let tl = this.slotTimeline(slot);
     if (!tl) {
-      tl = { slot, attachment: [], color: [] };
+      tl = emptySlotTimeline(slot);
       this.slots.push(tl);
     }
     return tl;
@@ -116,15 +152,24 @@ export class Animation {
 
   /** Drops empty timelines. */
   prune() {
-    this.bones = this.bones.filter((t) => t.rotate.length || t.translate.length || t.scale.length);
-    this.slots = this.slots.filter((t) => t.attachment.length || t.color.length);
+    this.bones = this.bones.filter((t) => BONE_CHANNELS.some((ch) => t[ch].length));
+    this.slots = this.slots.filter((t) => SLOT_CHANNELS.some((ch) => t[ch].length));
+    this.deform = this.deform.filter((t) => t.keys.length);
+    this.ik = this.ik.filter((t) => t.keys.length);
   }
 
   /** Time of the last key, useful to suggest a duration. */
   lastKeyTime() {
     let max = 0;
-    for (const t of this.bones) for (const ch of CHANNELS) for (const k of t[ch]) max = Math.max(max, k.time);
-    for (const t of this.slots) for (const k of [...t.attachment, ...t.color]) max = Math.max(max, k.time);
+    const scan = (keys) => {
+      for (const k of keys) max = Math.max(max, k.time);
+    };
+    for (const t of this.bones) for (const ch of BONE_CHANNELS) scan(t[ch]);
+    for (const t of this.slots) for (const ch of SLOT_CHANNELS) scan(t[ch]);
+    for (const t of this.deform) scan(t.keys);
+    for (const t of this.ik) scan(t.keys);
+    scan(this.drawOrder);
+    scan(this.events);
     return max;
   }
 }

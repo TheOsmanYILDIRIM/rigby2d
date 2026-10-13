@@ -160,20 +160,81 @@ export class Viewport {
       const att = q.attachment;
       const img = app.images.tinted(att.image, q.color);
       const pts = q.positions.map((p) => this.toScreen(p));
-      if (img && img.width > 0 && img.height > 0) {
+      const hasImage = img && img.width > 0 && img.height > 0;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, Math.max(0, q.color[3]));
+      ctx.globalCompositeOperation = BLEND_OPS[q.blend] ?? 'source-over';
+      ctx.imageSmoothingEnabled = true;
+      if (q.kind === 'mesh') {
+        if (hasImage) this.drawMesh(img, pts, q.uvs, q.triangles, dpr);
+      } else if (hasImage) {
         // Image pixel (px, py) -> attachment-local point, then world, then screen.
         const toLocal = new Affine(att.width / img.width, 0, 0, -att.height / img.height, -att.width / 2, att.height / 2);
         const m = screen.mul(pose.attachmentWorld(app.doc, q.slot, att)).mul(toLocal);
-        ctx.save();
         ctx.setTransform(dpr * m.a, dpr * m.b, dpr * m.c, dpr * m.d, dpr * m.tx, dpr * m.ty);
-        ctx.globalAlpha = Math.min(1, Math.max(0, q.color[3]));
-        ctx.imageSmoothingEnabled = true;
         ctx.drawImage(img, 0, 0);
-        ctx.restore();
-      } else {
-        this.polygon(pts, null, 'rgb(255,0,200)', 1.5);
       }
-      if (selSlot(app.sel) === q.slot) this.polygon(pts, null, SELECTED, 1.5);
+      ctx.restore();
+      if (!hasImage) this.outline(q, pts, 'rgb(255,0,200)');
+      if (selSlot(app.sel) === q.slot) this.outline(q, pts, SELECTED);
+    }
+  }
+
+  /** Outline of a drawable: the quad, or the mesh hull. */
+  outline(q, pts, color) {
+    if (q.kind === 'mesh') {
+      const hull = (this.app.doc.meshSource(q.slot, q.attachment)?.hull || pts.length) | 0;
+      this.polygon(pts.slice(0, Math.max(3, Math.min(hull, pts.length))), null, color, 1.5);
+    } else {
+      this.polygon(pts, null, color, 1.5);
+    }
+  }
+
+  /** Draws a textured triangle mesh: each triangle maps its UV triangle onto its screen triangle. */
+  drawMesh(img, pts, uvs, triangles, dpr) {
+    const ctx = this.ctx;
+    const w = img.width;
+    const h = img.height;
+    for (let i = 0; i + 2 < triangles.length; i += 3) {
+      const [i0, i1, i2] = [triangles[i], triangles[i + 1], triangles[i + 2]];
+      const p0 = pts[i0];
+      const p1 = pts[i1];
+      const p2 = pts[i2];
+      if (!p0 || !p1 || !p2) continue;
+      const s0 = [uvs[i0][0] * w, uvs[i0][1] * h];
+      const s1 = [uvs[i1][0] * w, uvs[i1][1] * h];
+      const s2 = [uvs[i2][0] * w, uvs[i2][1] * h];
+      // Affine map taking image pixels s0, s1, s2 to screen points p0, p1, p2.
+      const su = [s1[0] - s0[0], s1[1] - s0[1]];
+      const sv = [s2[0] - s0[0], s2[1] - s0[1]];
+      const det = su[0] * sv[1] - sv[0] * su[1];
+      if (Math.abs(det) < 1e-9) continue;
+      const pu = [p1[0] - p0[0], p1[1] - p0[1]];
+      const pv = [p2[0] - p0[0], p2[1] - p0[1]];
+      const a = (pu[0] * sv[1] - pv[0] * su[1]) / det;
+      const b = (pu[1] * sv[1] - pv[1] * su[1]) / det;
+      const c = (pv[0] * su[0] - pu[0] * sv[0]) / det;
+      const d = (pv[1] * su[0] - pu[1] * sv[0]) / det;
+      const tx = p0[0] - a * s0[0] - c * s0[1];
+      const ty = p0[1] - b * s0[0] - d * s0[1];
+      // Clip to the screen triangle, grown by half a pixel to hide seams between triangles.
+      const cx = (p0[0] + p1[0] + p2[0]) / 3;
+      const cy = (p0[1] + p1[1] + p2[1]) / 3;
+      const grow = (p) => {
+        const dx = p[0] - cx;
+        const dy = p[1] - cy;
+        const l = Math.hypot(dx, dy) || 1;
+        return [p[0] + (dx / l) * 0.5, p[1] + (dy / l) * 0.5];
+      };
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.beginPath();
+      for (const [k, p] of [p0, p1, p2].map(grow).entries()) (k ? ctx.lineTo : ctx.moveTo).call(ctx, p[0], p[1]);
+      ctx.closePath();
+      ctx.clip();
+      ctx.setTransform(dpr * a, dpr * b, dpr * c, dpr * d, dpr * tx, dpr * ty);
+      ctx.drawImage(img, 0, 0);
+      ctx.restore();
     }
   }
 
@@ -263,6 +324,13 @@ export class Viewport {
     const world = this.toWorld(pos);
     for (const q of pose.quads(app.doc).reverse()) {
       const att = q.attachment;
+      if (q.kind === 'mesh') {
+        const t = q.triangles;
+        for (let i = 0; i + 2 < t.length; i += 3) {
+          if (pointInTriangle(world, q.positions[t[i]], q.positions[t[i + 1]], q.positions[t[i + 2]])) return { slot: q.slot };
+        }
+        continue;
+      }
       const [lx, ly] = pose.attachmentWorld(app.doc, q.slot, att).inverse().apply(world);
       const { width: w, height: h } = att;
       if (Math.abs(lx) > w * 0.5 || Math.abs(ly) > h * 0.5) continue;
@@ -417,11 +485,13 @@ export class Viewport {
 
   dragSlot(pose, s, last, cur) {
     const app = this.app;
-    const name = pose.attachment[s];
-    if (name === null || name === undefined) return;
-    const boneWorld = pose.world[app.doc.slots[s].bone];
-    const att = app.doc.slots[s].attachments.find((a) => a.name === name);
+    const att = pose.slotAttachment(app.doc, s);
     if (!att) return;
+    if (!att.offset) {
+      app.status = 'Only region images can be moved with the transform tools; meshes follow their bones';
+      return;
+    }
+    const boneWorld = pose.world[app.doc.slots[s].bone];
     const center = boneWorld.mul(toAffine(att.offset)).apply([0, 0]);
     switch (app.tool) {
       case 'rotate':
@@ -459,6 +529,19 @@ export class Viewport {
     app.sel = { bone: i };
     app.setStatus(`Created ${name}: drag again to chain a child bone`);
   }
+}
+
+const BLEND_OPS = { normal: 'source-over', additive: 'lighter', multiply: 'multiply', screen: 'screen' };
+
+function pointInTriangle(p, a, b, c) {
+  if (!a || !b || !c) return false;
+  const sign = (p1, p2, p3) => (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1]);
+  const d1 = sign(p, a, b);
+  const d2 = sign(p, b, c);
+  const d3 = sign(p, c, a);
+  const neg = d1 < 0 || d2 < 0 || d3 < 0;
+  const pos = d1 > 0 || d2 > 0 || d3 > 0;
+  return !(neg && pos);
 }
 
 function distToSegment(p, a, b) {

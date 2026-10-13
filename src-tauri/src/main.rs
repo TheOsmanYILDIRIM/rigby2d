@@ -6,5 +6,5 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .run(tauri::generate_context!())
-        .expect("error while running Rigby");
+        .expect("error while running Rigby2D");
 }

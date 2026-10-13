@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
-// Rigby: open-source 2D skeletal animation editor.
-// Copyright (c) 2026 jaisurya-dev-art and Rigby contributors
+// Rigby2D: open-source 2D skeletal animation editor.
+// Copyright (c) 2026 jaisurya-dev-art and Rigby2D contributors
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import './style.css';
 import { App, Mode, TOOLS } from './app.js';
+import { memoryFs } from './platform.js';
 import * as edit from './edit.js';
 import * as hierarchy from './hierarchy.js';
 import * as inspector from './inspector.js';
@@ -24,14 +25,17 @@ function menus() {
     File: [
       { label: 'New', action: () => app.newDocument() },
       { label: 'New sample (robot)', action: () => app.newSample() },
-      { label: 'Open…', shortcut: 'Ctrl+O', action: () => app.openDialog() },
+      { label: 'Open… (.rigby, or import skeleton .json)', shortcut: 'Ctrl+O', action: () => app.openDialog() },
       'separator',
       { label: 'Save', shortcut: 'Ctrl+S', action: () => app.save(false) },
       { label: 'Save as…', shortcut: 'Ctrl+Shift+S', action: () => app.save(true) },
       'separator',
       { label: 'Import PSD…', action: () => app.importPsd() },
       { label: 'Import PNG images…', action: () => app.importImages() },
-      { label: 'Export for games…', shortcut: 'Ctrl+E', action: () => app.exportForGames() },
+      { label: 'Export JSON + atlas…', shortcut: 'Ctrl+E', action: () => app.exportSkeletonJson(app.saveVersion()) },
+      { label: 'Export as format 3.8…', action: () => app.exportSkeletonJson('3.8') },
+      { label: 'Export as format 4.2…', action: () => app.exportSkeletonJson('4.2') },
+      { label: 'Export as format 4.3…', action: () => app.exportSkeletonJson('4.3') },
       'separator',
       { label: 'Quit', action: () => (inTauri ? getCurrentWindow().close() : window.close()) },
     ],
@@ -61,7 +65,7 @@ function menus() {
       h(
         'div',
         { class: 'help' },
-        h('p', null, 'Rigby: open-source 2D skeletal animation (MIT).'),
+        h('p', null, 'Rigby2D: open-source 2D skeletal animation (MIT).'),
         h('hr'),
         h('p', null, 'R/G/S/B: rotate, move, scale, create bone'),
         h('p', null, 'Tab: setup ↔ animate   Space: play/pause'),
@@ -134,7 +138,7 @@ window.addEventListener('keydown', (e) => {
       y: () => app.redo(),
       s: () => app.save(e.shiftKey),
       o: () => app.openDialog(),
-      e: () => app.exportForGames(),
+      e: () => app.exportSkeletonJson(app.saveVersion()),
     };
     if (actions[key] && !(isTyping(e.target) && (key === 'z' || key === 'y'))) {
       e.preventDefault();
@@ -249,3 +253,6 @@ function frame(now) {
 }
 
 requestAnimationFrame(frame);
+
+// Development builds expose the editor for debugging from the console.
+if (import.meta.env.DEV) window.rigby = { app, memoryFs };

@@ -41,6 +41,9 @@ export function setBoneLocal(app, bone, t) {
     if (Math.abs(t.scale_x - current.scale_x) > 1e-6 || Math.abs(t.scale_y - current.scale_y) > 1e-6) {
       setKey(tl.scale, time, [ratio(t.scale_x, setup.scale_x), ratio(t.scale_y, setup.scale_y)], LINEAR);
     }
+    if (Math.abs(t.shear_x - current.shear_x) > 1e-6 || Math.abs(t.shear_y - current.shear_y) > 1e-6) {
+      setKey(tl.shear, time, [t.shear_x - setup.shear_x, t.shear_y - setup.shear_y], LINEAR);
+    }
     growDuration(anim, time);
   }
   app.changed();
@@ -77,6 +80,8 @@ export function keySelection(app) {
     setKey(tl.rotate, time, cur.rotation - setup.rotation, LINEAR);
     setKey(tl.translate, time, [cur.x - setup.x, cur.y - setup.y], LINEAR);
     setKey(tl.scale, time, [ratio(cur.scale_x, setup.scale_x), ratio(cur.scale_y, setup.scale_y)], LINEAR);
+    const shear = [cur.shear_x - setup.shear_x, cur.shear_y - setup.shear_y];
+    if (tl.shear.length || shear[0] || shear[1]) setKey(tl.shear, time, shear, LINEAR);
     growDuration(anim, time);
     app.setStatus(`Keyed ${app.doc.bones[b].name} at frame ${Math.round(time * FPS)}`);
   } else if (s !== null) {

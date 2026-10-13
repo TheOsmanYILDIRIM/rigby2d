@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Editor state, history and document commands.
 
-import { ask, open, save } from '@tauri-apps/plugin-dialog';
-
 import { Pose } from '../core/pose.js';
 import { Skeleton } from '../core/model.js';
 import { remEuclid } from '../core/state.js';
 import * as edit from './edit.js';
 import { Images } from './images.js';
 import * as io from './io.js';
+import * as platform from './platform.js';
 import * as sample from './sample.js';
 
 export const FPS = 30;
@@ -32,17 +31,26 @@ export function snap(t) {
 export const selBone = (sel) => (sel && sel.bone !== undefined ? sel.bone : null);
 export const selSlot = (sel) => (sel && sel.slot !== undefined ? sel.slot : null);
 
-// Dopesheet tracks: { bone, channel } or { slot } (attachment track). Keys: { track, index }.
-export const trackId = (t) => (t.slot !== undefined ? `s${t.slot}` : `b${t.bone}:${t.channel}`);
+// Dopesheet tracks: { bone, channel }, { slot, channel }, { deform }, { ik }, { drawOrder } or { events }.
+// Keys: { track, index }.
+export const trackId = (t) => {
+  if (t.deform !== undefined) return `d${t.deform}`;
+  if (t.ik !== undefined) return `k${t.ik}`;
+  if (t.drawOrder) return 'o';
+  if (t.events) return 'e';
+  if (t.slot !== undefined) return `s${t.slot}:${t.channel ?? 'attachment'}`;
+  return `b${t.bone}:${t.channel}`;
+};
 export const keyEquals = (a, b) => !!a && !!b && a.index === b.index && trackId(a.track) === trackId(b.track);
 
-const inTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const errorText = (e) => (e && e.message) || String(e);
 
 export class App {
   constructor() {
     this.doc = new Skeleton();
     this.path = null;
+    /** Where Ctrl+S writes without asking: { path, fs }, or null. */
+    this.saveTarget = null;
     this.images = new Images();
     this.sel = null;
     this.mode = Mode.Setup;
@@ -54,7 +62,7 @@ export class App {
     this.playing = false;
     this.looping = true;
     this.selectedKey = null;
-    this.status = 'Welcome to Rigby. File ▸ New sample to explore, or import a PSD / PNGs.';
+    this.status = 'Welcome to Rigby2D. File ▸ New sample to explore, or import a PSD / PNGs.';
     this.showBones = true;
     this.frameRequest = false;
     /** Bumped on every state change so panels know to refresh. */
@@ -161,11 +169,15 @@ export class App {
     }
   }
 
-  async openPath(path) {
+  /** Opens a .rigby work file, or imports skeleton JSON, from `path` on the file system `fs`. */
+  async openFrom(path, fs) {
     try {
-      const { doc, warnings } = await io.openProject(path, this.images);
-      this.loadDocument(doc, path);
-      this.setStatus(warnings.length ? `Opened with warnings: ${warnings.join('; ')}` : `Opened ${path}`);
+      const { doc, warnings, imported } = await io.openProject(path, fs, this.images);
+      // Imported files are not work files: the first Save asks where to put the .rigby file.
+      this.loadDocument(doc, imported ? null : path);
+      this.saveTarget = !imported && fs.reusable ? { path, fs } : null;
+      const what = imported ? 'Imported' : 'Opened';
+      this.setStatus(warnings.length ? `${what} with warnings: ${warnings.join('; ')}` : `${what} ${path}`);
     } catch (e) {
       this.setStatus(`Could not open ${path}: ${errorText(e)}`);
     }
@@ -174,14 +186,14 @@ export class App {
   async confirmDiscard() {
     this.syncJson();
     if (!this.dirty()) return true;
-    if (!inTauri()) return window.confirm('Discard unsaved changes?');
-    return ask('Discard unsaved changes?', { title: 'Unsaved changes', kind: 'warning' });
+    return platform.confirmDialog('Discard unsaved changes?', 'Unsaved changes');
   }
 
   async newDocument() {
     if (!(await this.confirmDiscard())) return;
     this.images.clear();
     this.loadDocument(new Skeleton(), null);
+    this.saveTarget = null;
     this.setStatus('New project');
   }
 
@@ -189,6 +201,7 @@ export class App {
     if (!(await this.confirmDiscard())) return;
     this.images.clear();
     this.loadDocument(sample.robot(this.images), null);
+    this.saveTarget = null;
     this.mode = Mode.Animate;
     this.playing = true;
     this.setStatus('Sample robot loaded: press Space to play/pause, Tab to switch Setup/Animate');
@@ -196,60 +209,71 @@ export class App {
 
   async openDialog() {
     if (!(await this.confirmDiscard())) return;
-    const path = await this.dialog(() => open({ filters: [{ name: 'Rigby project', extensions: ['rigby', 'json'] }] }));
-    if (path) await this.openPath(path);
+    const picked = await this.guard(() => platform.pickProject());
+    if (picked) await this.openFrom(picked.path, picked.fs);
   }
 
+  /** Export format version: the imported file's version, or 4.3 for new work. */
+  saveVersion() {
+    const v = String(this.doc.header?.version ?? '');
+    if (v.startsWith('3.')) return '3.8';
+    if (/^4.[0-2](.|$)/.test(v)) return '4.2';
+    return '4.3';
+  }
+
+  /** Saves the `.rigby` work file (the complete document and its images in one file). */
   async save(saveAs) {
-    let path = saveAs ? null : this.path;
-    if (!path) {
-      path = await this.dialog(() =>
-        save({ filters: [{ name: 'Rigby project', extensions: ['rigby'] }], defaultPath: `${this.doc.name}.rigby` }),
-      );
-      if (!path) return;
+    let target = saveAs ? null : this.saveTarget;
+    if (!target) {
+      const name = `${this.doc.name || 'untitled'}.${io.WORKFILE_EXT}`;
+      target = await this.guard(() => platform.pickSaveTarget(name, 'Rigby2D work file', io.WORKFILE_EXT, { single: true }));
+      if (!target) return;
     }
     try {
-      await io.saveProject(path, this.doc, this.images);
-      this.path = path;
+      const { warnings } = await io.saveWorkfile(target.path, target.fs, this.doc, this.images);
+      await target.fs.finish();
+      this.path = target.path;
+      this.saveTarget = target.fs.reusable ? target : null;
       this.syncJson();
       this.baseline = this.saved = this.docJson;
-      this.setStatus(`Saved ${path}`);
+      const note = warnings.length ? ` (warnings: ${warnings.join('; ')})` : '';
+      this.setStatus(`Saved ${target.path}${note}`);
     } catch (e) {
       this.setStatus(`Save failed: ${errorText(e)}`);
     }
   }
 
-  async exportForGames() {
-    const path = await this.dialog(() =>
-      save({ filters: [{ name: 'Rigby skeleton', extensions: ['json'] }], defaultPath: `${this.doc.name}.json` }),
-    );
-    if (!path) return;
+  /** Writes skeleton JSON (.json + .atlas + .png). `version` is "3.8" or "4.2". */
+  async exportSkeletonJson(version) {
+    const target = await this.guard(() => platform.pickSaveTarget(`${this.doc.name || 'skeleton'}.json`, 'Skeleton JSON', 'json'));
+    if (!target) return;
     try {
-      const atlas = await io.exportForGames(path, this.doc, this.images);
-      this.setStatus(`Exported ${path} and ${atlas}`);
+      const { atlasPath, warnings } = await io.exportSkeletonJson(target.path, target.fs, this.doc, this.images, version);
+      await target.fs.finish();
+      const note = warnings.length ? ` (warnings: ${warnings.join('; ')})` : '';
+      this.setStatus(`Exported skeleton JSON ${version}: ${target.path} and ${atlasPath}${note}`);
     } catch (e) {
-      this.setStatus(`Export failed: ${errorText(e)}`);
+      this.setStatus(`Skeleton JSON export failed: ${errorText(e)}`);
     }
   }
 
   async importPsd() {
-    const path = await this.dialog(() => open({ filters: [{ name: 'Photoshop', extensions: ['psd'] }] }));
-    if (!path) return;
+    const [file] = (await this.guard(() => platform.pickImportFiles('Photoshop', ['psd'], false))) ?? [];
+    if (!file) return;
     try {
-      const n = await io.importPsd(path, this.doc, this.images);
+      const n = await io.importPsd(file, this.doc, this.images);
       this.frameRequest = true;
-      this.setStatus(`Imported ${n} layers from ${path}`);
+      this.setStatus(`Imported ${n} layers from ${file.name}`);
     } catch (e) {
       this.setStatus(`PSD import failed: ${errorText(e)}`);
     }
   }
 
   async importImages() {
-    const picked = await this.dialog(() => open({ multiple: true, filters: [{ name: 'Images', extensions: ['png'] }] }));
-    const paths = Array.isArray(picked) ? picked : picked ? [picked] : [];
-    if (!paths.length) return;
+    const files = (await this.guard(() => platform.pickImportFiles('Images', ['png'], true))) ?? [];
+    if (!files.length) return;
     try {
-      const n = await io.importPngs(paths, selBone(this.sel) ?? 0, this.doc, this.images);
+      const n = await io.importPngs(files, selBone(this.sel) ?? 0, this.doc, this.images);
       this.frameRequest = true;
       this.setStatus(`Imported ${n} images`);
     } catch (e) {
@@ -257,12 +281,8 @@ export class App {
     }
   }
 
-  /** Runs a native dialog, reporting when the app is not running inside the desktop shell. */
-  async dialog(fn) {
-    if (!inTauri()) {
-      this.setStatus('File dialogs need the desktop app: run `npm run dev`');
-      return null;
-    }
+  /** Runs a dialog/picker, reporting failures in the status bar. */
+  async guard(fn) {
     try {
       return await fn();
     } catch (e) {
@@ -317,6 +337,6 @@ export class App {
 
   title() {
     const name = this.path ? io.basename(this.path) : 'untitled';
-    return `Rigby — ${name}${this.dirty() ? ' *' : ''}`;
+    return `Rigby2D — ${name}${this.dirty() ? ' *' : ''}`;
   }
 }

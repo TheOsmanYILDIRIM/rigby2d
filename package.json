@@ -1,16 +1,16 @@
 {
-  "name": "rigby",
+  "name": "rigby2d",
   "version": "0.1.0",
-  "description": "Rigby: open-source 2D skeletal animation editor.",
+  "description": "Rigby2D: open-source 2D skeletal animation editor.",
   "license": "MIT",
   "private": true,
   "type": "module",
   "author": "jaisurya-dev-art (https://github.com/jaisurya-dev-art)",
-  "homepage": "https://github.com/jaisurya-dev-art/rigby#readme",
-  "bugs": "https://github.com/jaisurya-dev-art/rigby/issues",
+  "homepage": "https://github.com/jaisurya-dev-art/rigby2d#readme",
+  "bugs": "https://github.com/jaisurya-dev-art/rigby2d/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jaisurya-dev-art/rigby.git"
+    "url": "git+https://github.com/jaisurya-dev-art/rigby2d.git"
   },
   "keywords": ["animation", "skeletal-animation", "2d", "rigging", "gamedev", "tauri", "editor"],
   "scripts": {

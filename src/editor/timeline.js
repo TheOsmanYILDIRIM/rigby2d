@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Bottom panel: animation list, transport controls and the dopesheet.
 
-import { Animation, CHANNELS, resort } from '../core/animation.js';
+import { Animation, BONE_CHANNELS, SLOT_CHANNELS, resort } from '../core/animation.js';
 import { EASE_IN, EASE_IN_OUT, EASE_OUT, LINEAR, STEPPED, cloneCurve, isBezier } from '../core/curve.js';
 import { uniqueName } from '../core/model.js';
 import { FPS, Mode, keyEquals, selBone, selSlot, snap } from './app.js';
@@ -115,20 +115,34 @@ export function renderControls(app, el) {
 /** Rows of the dopesheet for the current animation: [{ track, label }]. */
 function tracks(app, anim) {
   const out = [];
+  const label = (ch) => ch.replace(/([A-Z])/g, ' $1').toLowerCase();
   for (const tl of anim.bones) {
     const name = app.doc.bones[tl.bone]?.name ?? `#${tl.bone}`;
-    for (const channel of CHANNELS) {
-      if (tl[channel].length) out.push({ track: { bone: tl.bone, channel }, label: `${name} · ${channel}` });
+    for (const channel of BONE_CHANNELS) {
+      if (tl[channel].length) out.push({ track: { bone: tl.bone, channel }, label: `${name} · ${label(channel)}` });
     }
   }
   for (const tl of anim.slots) {
-    if (tl.attachment.length) out.push({ track: { slot: tl.slot }, label: `${app.doc.slots[tl.slot]?.name ?? `#${tl.slot}`} · image` });
+    const name = app.doc.slots[tl.slot]?.name ?? `#${tl.slot}`;
+    for (const channel of SLOT_CHANNELS) {
+      if (tl[channel].length) out.push({ track: { slot: tl.slot, channel }, label: `${name} · ${channel === 'attachment' ? 'image' : channel}` });
+    }
   }
+  anim.deform.forEach((d, i) => {
+    out.push({ track: { deform: i, slot: d.slot }, label: `${app.doc.slots[d.slot]?.name ?? '?'} · deform ${d.attachment}` });
+  });
+  anim.ik.forEach((k, i) => out.push({ track: { ik: i }, label: `IK ${app.doc.ik[k.constraint]?.name ?? '?'}` }));
+  if (anim.drawOrder.length) out.push({ track: { drawOrder: true }, label: 'draw order' });
+  if (anim.events.length) out.push({ track: { events: true }, label: 'events' });
   return out;
 }
 
 function trackKeys(anim, track) {
-  if (track.slot !== undefined) return anim.slotTimeline(track.slot)?.attachment;
+  if (track.deform !== undefined) return anim.deform[track.deform]?.keys;
+  if (track.ik !== undefined) return anim.ik[track.ik]?.keys;
+  if (track.drawOrder) return anim.drawOrder;
+  if (track.events) return anim.events;
+  if (track.slot !== undefined) return anim.slotTimeline(track.slot)?.[track.channel ?? 'attachment'];
   return anim.boneTimeline(track.bone)?.[track.channel];
 }
 

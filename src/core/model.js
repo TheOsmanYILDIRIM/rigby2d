@@ -1,12 +1,21 @@
 // SPDX-License-Identifier: MIT
-// The skeleton data model and its JSON file format.
+// The skeleton data model. Files are read and written as skeleton JSON (see interop.js);
+// toObject/fromObject are an internal snapshot used for undo history and cloning, not a file format.
+//
+// The model is a superset of the common skeleton JSON format, so those files load natively
+// (see interop.js). Bones, slots and constraints reference each other by array index.
 
-import { Animation, makeKey } from './animation.js';
+import { Animation, BONE_CHANNELS, SLOT_CHANNELS, emptyBoneTimeline, emptySlotTimeline, makeKey } from './animation.js';
 import { LINEAR, cloneCurve } from './curve.js';
 import { identityTransform } from './math.js';
 
-/** Current file format identifier written to every file. */
-export const FORMAT = 'rigby/1';
+/** Version tag of the internal snapshot format. */
+export const FORMAT = 'rigby-snapshot/1';
+
+/** How a bone inherits its parent's transform. */
+export const INHERIT_MODES = ['normal', 'onlyTranslation', 'noRotationOrReflection', 'noScale', 'noScaleOrReflection'];
+export const BLEND_MODES = ['normal', 'additive', 'multiply', 'screen'];
+export const ATTACHMENT_TYPES = ['region', 'mesh', 'linkedmesh', 'boundingbox', 'path', 'point', 'clipping'];
 
 export class LoadError extends Error {
   constructor(kind, message) {
@@ -16,40 +25,65 @@ export class LoadError extends Error {
   }
 }
 
-/** @returns {{name:string, parent:number|null, length:number, setup:object}} */
 export function makeBone(name, parent, setup, length) {
-  return { name, parent, length, setup };
+  return { name, parent, length, setup, inherit: 'normal', skinRequired: false, color: null };
 }
 
-/** A draw-order entry attached to a bone, holding one or more swappable attachments. */
+/** A draw-order entry attached to a bone, holding the default skin's attachments. */
 export function makeSlot(name, bone, attachment) {
-  return { name, bone, attachments: [attachment], attachment: attachment.name, color: [1, 1, 1, 1] };
+  return {
+    name,
+    bone,
+    attachments: attachment ? [attachment] : [],
+    attachment: attachment ? attachment.name : null,
+    color: [1, 1, 1, 1],
+    dark: null,
+    blend: 'normal',
+  };
 }
 
 /** A textured quad positioned relative to its slot's bone. */
 export function makeAttachment(name, image, offset, width, height) {
-  return { name, image, offset, width, height };
+  return { name, type: 'region', image, offset, width, height, color: [1, 1, 1, 1] };
 }
 
+/** Finds an attachment of the default skin by name. */
 export function findAttachment(slot, name) {
   return slot.attachments.find((a) => a.name === name);
 }
 
-/** A complete rig: bones, slots with their image attachments, and animations. */
+/** Number of vertices of a mesh-like attachment. */
+export function vertexCount(att) {
+  if (att.weights) return att.weights.length;
+  if (att.type === 'mesh') return att.uvs.length / 2;
+  return att.vertexCount ?? (att.vertices?.length ?? 0) / 2;
+}
+
+/** A complete rig: bones, slots with their attachments, skins, constraints, events and animations. */
 export class Skeleton {
   constructor() {
     this.format = FORMAT;
     this.name = 'untitled';
     /** Bones ordered so that every parent comes before its children. Bone 0 is the root. */
     this.bones = [makeBone('root', null, identityTransform(), 0)];
-    /** Slots in draw order (first is drawn at the back). */
+    /** Slots in draw order (first is drawn at the back). Their `attachments` are the default skin. */
     this.slots = [];
+    /** Additional skins: { name, slots: [{ slot, attachments }], bones, ik, color, extra }. */
+    this.skins = [];
+    /** Active skin name (null = default skin only). */
+    this.skin = null;
+    /** IK constraints: { name, order, skinRequired, bones, target, mix, softness, bendPositive, compress, stretch, uniform }. */
+    this.ik = [];
+    /** Event definitions: { name, int, float, string, audio, volume, balance }. */
+    this.events = [];
     /** @type {Animation[]} */
     this.animations = [];
     /** Source images used by attachments (editor projects): { name, path, width, height }. */
     this.images = [];
-    /** Packed texture atlas (exported files): { image, width, height, regions }. */
-    this.atlas = null;
+    /** Skeleton header (hash, version, bounds, fps, folders) when imported from skeleton JSON. */
+    this.header = null;
+    /** Data Rigby2D keeps but does not evaluate yet: transform/path/physics constraints and unknown fields. */
+    this.extra = {};
   }
 
   static fromJson(json) {
@@ -89,21 +123,41 @@ export class Skeleton {
 
   /** Checks structural invariants (parent ordering and index ranges). Returns an error or null. */
   validate() {
-    if (this.bones.length === 0) return 'skeleton has no bones';
-    for (let i = 0; i < this.bones.length; i++) {
+    const nb = this.bones.length;
+    const ns = this.slots.length;
+    if (nb === 0) return 'skeleton has no bones';
+    for (let i = 0; i < nb; i++) {
       const p = this.bones[i].parent;
       if (p !== null && p >= i) return `bone '${this.bones[i].name}' must come after its parent`;
     }
+    const checkWeights = (att, where) => {
+      for (const v of att.weights ?? []) for (const w of v) if (w.bone >= nb) return `${where} references missing bone ${w.bone}`;
+      return null;
+    };
     for (const s of this.slots) {
-      if (s.bone >= this.bones.length) return `slot '${s.name}' references missing bone ${s.bone}`;
+      if (s.bone >= nb) return `slot '${s.name}' references missing bone ${s.bone}`;
+      for (const a of s.attachments) {
+        const e = checkWeights(a, `attachment '${a.name}'`);
+        if (e) return e;
+      }
+    }
+    for (const skin of this.skins) {
+      for (const e of skin.slots) {
+        if (e.slot >= ns) return `skin '${skin.name}' references missing slot ${e.slot}`;
+        for (const a of e.attachments) {
+          const err = checkWeights(a, `attachment '${a.name}'`);
+          if (err) return err;
+        }
+      }
+    }
+    for (const c of this.ik) {
+      if (c.target >= nb || c.bones.some((b) => b >= nb)) return `IK constraint '${c.name}' references a missing bone`;
     }
     for (const a of this.animations) {
-      for (const t of a.bones) {
-        if (t.bone >= this.bones.length) return `animation '${a.name}' references missing bone ${t.bone}`;
-      }
-      for (const t of a.slots) {
-        if (t.slot >= this.slots.length) return `animation '${a.name}' references missing slot ${t.slot}`;
-      }
+      for (const t of a.bones) if (t.bone >= nb) return `animation '${a.name}' references missing bone ${t.bone}`;
+      for (const t of a.slots) if (t.slot >= ns) return `animation '${a.name}' references missing slot ${t.slot}`;
+      for (const t of a.deform) if (t.slot >= ns) return `animation '${a.name}' references missing slot ${t.slot}`;
+      for (const t of a.ik) if (t.constraint >= this.ik.length) return `animation '${a.name}' references missing IK constraint`;
     }
     return null;
   }
@@ -120,6 +174,33 @@ export class Skeleton {
 
   animation(name) {
     return this.animations.find((a) => a.name === name);
+  }
+
+  findSkin(name) {
+    return this.skins.find((s) => s.name === name);
+  }
+
+  /** Attachments a skin defines for a slot (the default skin when `skinName` is null). */
+  skinAttachments(slot, skinName) {
+    if (skinName === null || skinName === undefined || skinName === 'default') return this.slots[slot]?.attachments ?? [];
+    return this.findSkin(skinName)?.slots.find((e) => e.slot === slot)?.attachments ?? [];
+  }
+
+  /** Resolves an attachment by slot and name: active skin first, then the default skin. */
+  attachment(slot, name, skinName = this.skin) {
+    if (name === null || name === undefined) return undefined;
+    if (skinName) {
+      const found = this.skinAttachments(slot, skinName).find((a) => a.name === name);
+      if (found) return found;
+    }
+    return this.slots[slot]?.attachments.find((a) => a.name === name);
+  }
+
+  /** The mesh that holds geometry for `att` (itself, or the parent of a linked mesh). */
+  meshSource(slot, att) {
+    if (att.type !== 'linkedmesh') return att;
+    const parent = this.skinAttachments(slot, att.skin).find((a) => a.name === att.parent) ?? this.attachment(slot, att.parent);
+    return parent && parent.type === 'mesh' ? parent : null;
   }
 
   children(bone) {
@@ -154,6 +235,9 @@ export class Skeleton {
    * Returns the new bone's index.
    */
   addBone(bone) {
+    bone.inherit ??= 'normal';
+    bone.skinRequired ??= false;
+    bone.color ??= null;
     let index;
     if (bone.parent === null) {
       index = this.bones.length;
@@ -171,7 +255,7 @@ export class Skeleton {
     return index;
   }
 
-  /** Removes a bone and its descendants, together with their slots and timelines. */
+  /** Removes a bone and its descendants, together with their slots, constraints and timelines. */
   removeBone(bone) {
     if (bone === 0) return;
     const removed = this.bones.map((_, i) => this.isDescendant(i, bone));
@@ -205,10 +289,7 @@ export class Skeleton {
 
   removeSlot(slot) {
     this.slots.splice(slot, 1);
-    for (const a of this.animations) {
-      a.slots = a.slots.filter((t) => t.slot !== slot);
-      for (const t of a.slots) if (t.slot > slot) t.slot--;
-    }
+    this.remapSlotRefs((i) => (i === slot ? null : i > slot ? i - 1 : i));
   }
 
   /** Moves a slot in draw order from `from` to `to`. */
@@ -216,21 +297,70 @@ export class Skeleton {
     if (from === to || from >= this.slots.length || to >= this.slots.length) return;
     const [s] = this.slots.splice(from, 1);
     this.slots.splice(to, 0, s);
-    const map = (i) => {
+    this.remapSlotRefs((i) => {
       if (i === from) return to;
       if (from < to && i > from && i <= to) return i - 1;
       if (to < from && i >= to && i < from) return i + 1;
       return i;
+    });
+  }
+
+  /** `map` returns the new index of a slot, or null if it was removed. */
+  remapSlotRefs(map) {
+    const keep = (i) => map(i) !== null && map(i) !== undefined;
+    for (const skin of this.skins) {
+      skin.slots = skin.slots.filter((e) => keep(e.slot));
+      for (const e of skin.slots) e.slot = map(e.slot);
+    }
+    for (const a of this.animations) {
+      a.slots = a.slots.filter((t) => keep(t.slot));
+      for (const t of a.slots) t.slot = map(t.slot);
+      a.deform = a.deform.filter((t) => keep(t.slot));
+      for (const t of a.deform) t.slot = map(t.slot);
+      for (const k of a.drawOrder) {
+        if (!k.value) continue;
+        k.value = k.value.filter((o) => keep(o.slot));
+        for (const o of k.value) o.slot = map(o.slot);
+      }
+    }
+    const clipEnd = (att) => {
+      if (att.type === 'clipping' && att.end !== null && att.end !== undefined) att.end = keep(att.end) ? map(att.end) : null;
     };
-    for (const a of this.animations) for (const t of a.slots) t.slot = map(t.slot);
+    for (const s of this.slots) s.attachments.forEach(clipEnd);
+    for (const skin of this.skins) for (const e of skin.slots) e.attachments.forEach(clipEnd);
   }
 
   /** `map` returns the new index of a bone, or null if it was removed. */
   remapBoneRefs(map) {
-    for (const s of this.slots) s.bone = map(s.bone) ?? 0;
+    const keep = (i) => map(i) !== null && map(i) !== undefined;
+    const remapWeights = (att) => {
+      for (const v of att.weights ?? []) for (const w of v) w.bone = map(w.bone) ?? 0;
+    };
+    for (const s of this.slots) {
+      s.bone = map(s.bone) ?? 0;
+      s.attachments.forEach(remapWeights);
+    }
+    for (const skin of this.skins) {
+      skin.bones = skin.bones.filter(keep).map(map);
+      for (const e of skin.slots) e.attachments.forEach(remapWeights);
+    }
+    const removedIk = [];
+    this.ik = this.ik.filter((c, i) => {
+      const ok = keep(c.target) && c.bones.every(keep);
+      if (!ok) removedIk.push(i);
+      return ok;
+    });
+    for (const c of this.ik) {
+      c.target = map(c.target);
+      c.bones = c.bones.map(map);
+    }
     for (const a of this.animations) {
-      a.bones = a.bones.filter((t) => map(t.bone) !== null && map(t.bone) !== undefined);
+      a.bones = a.bones.filter((t) => keep(t.bone));
       for (const t of a.bones) t.bone = map(t.bone);
+      if (removedIk.length) {
+        a.ik = a.ik.filter((t) => !removedIk.includes(t.constraint));
+        for (const t of a.ik) t.constraint -= removedIk.filter((r) => r < t.constraint).length;
+      }
     }
   }
 }
@@ -276,9 +406,19 @@ function arr(v, what) {
 }
 
 function vec(v, n, what) {
-  if (!Array.isArray(v) || v.length !== n) throw new LoadError('json', `\`${what}\` must have ${n} numbers`);
+  if (!Array.isArray(v) || (n !== null && v.length !== n)) throw new LoadError('json', `\`${what}\` must have ${n} numbers`);
   return v.map((x) => num(x, undefined, what));
 }
+
+const optVec = (v, n, what) => (v === undefined || v === null ? null : vec(v, n, what));
+const bool = (v, def) => (typeof v === 'boolean' ? v : def);
+const oneOf = (v, list, def) => (list.includes(v) ? v : def);
+const raw = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+/** Unknown data kept for round trips (e.g. nonessential fields from imported files) lives in `extra`. */
+const extraOf = (o) => (o.extra && typeof o.extra === 'object' && Object.keys(o.extra).length ? { extra: raw(o.extra) } : {});
+const writeExtra = (out, o) => {
+  if (o.extra && Object.keys(o.extra).length) out.extra = raw(o.extra);
+};
 
 function readTransform(o) {
   return {
@@ -287,11 +427,16 @@ function readTransform(o) {
     rotation: num(o.rotation, 0, 'rotation'),
     scale_x: num(o.scale_x, 1, 'scale_x'),
     scale_y: num(o.scale_y, 1, 'scale_y'),
+    shear_x: num(o.shear_x, 0, 'shear_x'),
+    shear_y: num(o.shear_y, 0, 'shear_y'),
   };
 }
 
 function writeTransform(t) {
-  return { x: t.x, y: t.y, rotation: t.rotation, scale_x: t.scale_x, scale_y: t.scale_y };
+  const o = { x: t.x, y: t.y, rotation: t.rotation, scale_x: t.scale_x, scale_y: t.scale_y };
+  if (t.shear_x) o.shear_x = t.shear_x;
+  if (t.shear_y) o.shear_y = t.shear_y;
+  return o;
 }
 
 function readKeys(list, what, readValue) {
@@ -306,7 +451,90 @@ function writeKeys(keys, writeValue) {
   });
 }
 
-const readAttachmentName = (v) => (v === null || v === undefined ? null : str(v, undefined, 'value'));
+const optName = (v) => (v === null || v === undefined ? null : str(v, undefined, 'value'));
+const copy = (v) => (Array.isArray(v) ? v.slice() : v && typeof v === 'object' ? raw(v) : v);
+
+const BONE_VALUE = {
+  rotate: (v) => num(v, undefined, 'value'),
+  translate: (v) => vec(v, 2, 'value'),
+  scale: (v) => vec(v, 2, 'value'),
+  shear: (v) => vec(v, 2, 'value'),
+  translateX: (v) => num(v, undefined, 'value'),
+  translateY: (v) => num(v, undefined, 'value'),
+  scaleX: (v) => num(v, undefined, 'value'),
+  scaleY: (v) => num(v, undefined, 'value'),
+  shearX: (v) => num(v, undefined, 'value'),
+  shearY: (v) => num(v, undefined, 'value'),
+  inherit: (v) => oneOf(v, INHERIT_MODES, 'normal'),
+};
+
+const SLOT_VALUE = {
+  attachment: optName,
+  color: (v) => vec(v, 4, 'value'),
+  rgb: (v) => vec(v, 3, 'value'),
+  alpha: (v) => num(v, undefined, 'value'),
+  rgba2: (v) => vec(v, 7, 'value'),
+  rgb2: (v) => vec(v, 6, 'value'),
+};
+
+function readAttachment(a) {
+  const type = oneOf(a.type, ATTACHMENT_TYPES, 'region');
+  const out = {
+    name: str(a.name, undefined, 'name'),
+    type,
+    image: str(a.image, a.name, 'image'),
+    color: a.color === undefined ? [1, 1, 1, 1] : vec(a.color, 4, 'color'),
+  };
+  if (type === 'region' || type === 'point') out.offset = readTransform(a);
+  if (type === 'region' || a.width !== undefined) out.width = num(a.width, undefined, 'width');
+  if (type === 'region' || a.height !== undefined) out.height = num(a.height, undefined, 'height');
+  if (type === 'mesh') {
+    out.uvs = vec(a.uvs, null, 'uvs');
+    out.triangles = arr(a.triangles, 'triangles').map((i) => index(i, 'triangles'));
+    out.hull = num(a.hull, 0, 'hull');
+    out.edges = a.edges ? arr(a.edges, 'edges').map((i) => index(i, 'edges')) : null;
+  }
+  if (type === 'linkedmesh') {
+    out.parent = str(a.parent, undefined, 'parent');
+    out.skin = a.skin === undefined || a.skin === null ? null : str(a.skin, undefined, 'skin');
+    out.deform = bool(a.deform, true);
+  }
+  if (['mesh', 'boundingbox', 'path', 'clipping'].includes(type)) {
+    out.vertices = a.vertices ? vec(a.vertices, null, 'vertices') : null;
+    out.weights = a.weights
+      ? arr(a.weights, 'weights').map((v) =>
+          arr(v, 'weights').map((w) => ({ bone: index(w.bone, 'bone'), x: num(w.x, 0, 'x'), y: num(w.y, 0, 'y'), weight: num(w.weight, 0, 'weight') })),
+        )
+      : null;
+    if (type !== 'mesh') out.vertexCount = index(a.vertexCount ?? 0, 'vertexCount');
+  }
+  if (type === 'path') {
+    out.closed = bool(a.closed, false);
+    out.constantSpeed = bool(a.constantSpeed, true);
+    out.lengths = a.lengths ? vec(a.lengths, null, 'lengths') : [];
+  }
+  if (type === 'clipping') out.end = index(a.end, 'end', true);
+  if (a.sequence !== undefined) out.sequence = raw(a.sequence);
+  Object.assign(out, extraOf(a));
+  return out;
+}
+
+function writeAttachment(a) {
+  const o = { name: a.name };
+  if (a.type !== 'region') o.type = a.type;
+  if (a.image !== a.name) o.image = a.image;
+  if (a.offset) Object.assign(o, writeTransform(a.offset));
+  if (a.width !== undefined) o.width = a.width;
+  if (a.height !== undefined) o.height = a.height;
+  if (a.color && a.color.some((c) => c !== 1)) o.color = a.color.slice();
+  for (const k of ['uvs', 'triangles', 'hull', 'edges', 'vertices', 'vertexCount', 'parent', 'skin', 'deform', 'closed', 'constantSpeed', 'lengths', 'end']) {
+    if (a[k] !== undefined && a[k] !== null) o[k] = copy(a[k]);
+  }
+  if (a.weights) o.weights = a.weights.map((v) => v.map((w) => ({ ...w })));
+  if (a.sequence !== undefined) o.sequence = raw(a.sequence);
+  writeExtra(o, a);
+  return o;
+}
 
 function readSkeleton(o) {
   if (o === null || typeof o !== 'object') throw new LoadError('json', 'expected an object');
@@ -314,37 +542,80 @@ function readSkeleton(o) {
   sk.format = str(o.format, FORMAT, 'format');
   sk.name = str(o.name, '', 'name');
   if (!Array.isArray(o.bones)) throw new LoadError('json', 'missing field `bones`');
-  sk.bones = o.bones.map((b) =>
-    makeBone(str(b.name, undefined, 'name'), index(b.parent, 'parent', true), readTransform(b), num(b.length, 0, 'length')),
-  );
+  sk.bones = o.bones.map((b) => ({
+    ...makeBone(str(b.name, undefined, 'name'), index(b.parent, 'parent', true), readTransform(b), num(b.length, 0, 'length')),
+    inherit: oneOf(b.inherit, INHERIT_MODES, 'normal'),
+    skinRequired: bool(b.skinRequired, false),
+    color: b.color === undefined || b.color === null ? null : str(b.color, undefined, 'color'),
+    ...extraOf(b),
+  }));
   sk.slots = arr(o.slots, 'slots').map((s) => ({
     name: str(s.name, undefined, 'name'),
     bone: index(s.bone, 'bone'),
-    attachments: arr(s.attachments, 'attachments').map((a) =>
-      makeAttachment(
-        str(a.name, undefined, 'name'),
-        str(a.image, undefined, 'image'),
-        readTransform(a),
-        num(a.width, undefined, 'width'),
-        num(a.height, undefined, 'height'),
-      ),
-    ),
+    attachments: arr(s.attachments, 'attachments').map(readAttachment),
     attachment: s.attachment === undefined || s.attachment === null ? null : str(s.attachment, undefined, 'attachment'),
     color: s.color === undefined ? [1, 1, 1, 1] : vec(s.color, 4, 'color'),
+    dark: optVec(s.dark, 3, 'dark'),
+    blend: oneOf(s.blend, BLEND_MODES, 'normal'),
+    ...extraOf(s),
+  }));
+  sk.skins = arr(o.skins, 'skins').map((skin) => ({
+    name: str(skin.name, undefined, 'name'),
+    slots: arr(skin.slots, 'slots').map((e) => ({ slot: index(e.slot, 'slot'), attachments: arr(e.attachments, 'attachments').map(readAttachment) })),
+    bones: arr(skin.bones, 'bones').map((b) => index(b, 'bones')),
+    ik: arr(skin.ik, 'ik').map((i) => index(i, 'ik')),
+    color: skin.color ?? null,
+    extra: raw(skin.extra) ?? {},
+  }));
+  sk.skin = o.skin === undefined || o.skin === null ? null : str(o.skin, undefined, 'skin');
+  sk.ik = arr(o.ik, 'ik').map((c) => ({
+    name: str(c.name, undefined, 'name'),
+    order: num(c.order, 0, 'order'),
+    skinRequired: bool(c.skinRequired, false),
+    bones: arr(c.bones, 'bones').map((b) => index(b, 'bones')),
+    target: index(c.target, 'target'),
+    mix: num(c.mix, 1, 'mix'),
+    softness: num(c.softness, 0, 'softness'),
+    bendPositive: bool(c.bendPositive, true),
+    compress: bool(c.compress, false),
+    stretch: bool(c.stretch, false),
+    uniform: bool(c.uniform, false),
+    ...extraOf(c),
+  }));
+  sk.events = arr(o.events, 'events').map((e) => ({
+    name: str(e.name, undefined, 'name'),
+    int: num(e.int, 0, 'int'),
+    float: num(e.float, 0, 'float'),
+    string: e.string === undefined || e.string === null ? null : str(e.string, undefined, 'string'),
+    audio: e.audio === undefined || e.audio === null ? null : str(e.audio, undefined, 'audio'),
+    volume: num(e.volume, 1, 'volume'),
+    balance: num(e.balance, 0, 'balance'),
+    ...extraOf(e),
   }));
   sk.animations = arr(o.animations, 'animations').map((a) => {
     const anim = new Animation(str(a.name, undefined, 'name'), num(a.duration, undefined, 'duration'));
-    anim.bones = arr(a.bones, 'bones').map((t) => ({
-      bone: index(t.bone, 'bone'),
-      rotate: readKeys(t.rotate, 'rotate', (v) => num(v, undefined, 'value')),
-      translate: readKeys(t.translate, 'translate', (v) => vec(v, 2, 'value')),
-      scale: readKeys(t.scale, 'scale', (v) => vec(v, 2, 'value')),
-    }));
-    anim.slots = arr(a.slots, 'slots').map((t) => ({
+    anim.bones = arr(a.bones, 'bones').map((t) => {
+      const tl = emptyBoneTimeline(index(t.bone, 'bone'));
+      for (const ch of BONE_CHANNELS) tl[ch] = readKeys(t[ch], ch, BONE_VALUE[ch]);
+      return tl;
+    });
+    anim.slots = arr(a.slots, 'slots').map((t) => {
+      const tl = emptySlotTimeline(index(t.slot, 'slot'));
+      for (const ch of SLOT_CHANNELS) tl[ch] = readKeys(t[ch], ch, SLOT_VALUE[ch]);
+      return tl;
+    });
+    anim.deform = arr(a.deform, 'deform').map((t) => ({
+      skin: t.skin ?? null,
       slot: index(t.slot, 'slot'),
-      attachment: readKeys(t.attachment, 'attachment', readAttachmentName),
-      color: readKeys(t.color, 'color', (v) => vec(v, 4, 'value')),
+      attachment: str(t.attachment, undefined, 'attachment'),
+      keys: readKeys(t.keys, 'keys', (v) => ({ offset: index(v?.offset ?? 0, 'offset'), vertices: vec(v?.vertices ?? [], null, 'vertices') })),
     }));
+    anim.drawOrder = readKeys(a.drawOrder, 'drawOrder', (v) =>
+      v === null || v === undefined ? null : arr(v, 'value').map((e) => ({ slot: index(e.slot, 'slot'), offset: num(e.offset, 0, 'offset') })),
+    );
+    anim.events = arr(a.events, 'events').map((e) => ({ ...raw(e), time: num(e.time, 0, 'time'), name: str(e.name, undefined, 'name') }));
+    anim.ik = arr(a.ik, 'ik').map((t) => ({ constraint: index(t.constraint, 'constraint'), keys: readKeys(t.keys, 'keys', (v) => ({ ...raw(v) })) }));
+    anim.extra = raw(a.extra) ?? {};
     return anim;
   });
   sk.images = arr(o.images, 'images').map((i) => ({
@@ -353,21 +624,8 @@ function readSkeleton(o) {
     width: index(i.width, 'width'),
     height: index(i.height, 'height'),
   }));
-  if (o.atlas !== undefined && o.atlas !== null) {
-    const a = o.atlas;
-    sk.atlas = {
-      image: str(a.image, undefined, 'image'),
-      width: index(a.width, 'width'),
-      height: index(a.height, 'height'),
-      regions: arr(a.regions, 'regions').map((r) => ({
-        name: str(r.name, undefined, 'name'),
-        x: index(r.x, 'x'),
-        y: index(r.y, 'y'),
-        width: index(r.width, 'width'),
-        height: index(r.height, 'height'),
-      })),
-    };
-  }
+  sk.header = raw(o.header) ?? null;
+  sk.extra = raw(o.extra) ?? {};
   return sk;
 }
 
@@ -379,46 +637,66 @@ function writeSkeleton(sk) {
       const o = { name: b.name };
       if (b.parent !== null) o.parent = b.parent;
       o.length = b.length;
-      return Object.assign(o, writeTransform(b.setup));
-    }),
-    slots: sk.slots.map((s) => {
-      const o = {
-        name: s.name,
-        bone: s.bone,
-        attachments: s.attachments.map((a) => ({
-          name: a.name,
-          image: a.image,
-          ...writeTransform(a.offset),
-          width: a.width,
-          height: a.height,
-        })),
-      };
-      if (s.attachment !== null) o.attachment = s.attachment;
-      o.color = s.color.slice();
+      Object.assign(o, writeTransform(b.setup));
+      if (b.inherit && b.inherit !== 'normal') o.inherit = b.inherit;
+      if (b.skinRequired) o.skinRequired = true;
+      if (b.color) o.color = b.color;
+      writeExtra(o, b);
       return o;
     }),
-    animations: sk.animations.map((a) => {
-      const o = { name: a.name, duration: a.duration };
-      if (a.bones.length) {
-        o.bones = a.bones.map((t) => {
-          const tl = { bone: t.bone };
-          if (t.rotate.length) tl.rotate = writeKeys(t.rotate, (v) => v);
-          if (t.translate.length) tl.translate = writeKeys(t.translate, (v) => v.slice());
-          if (t.scale.length) tl.scale = writeKeys(t.scale, (v) => v.slice());
-          return tl;
-        });
-      }
-      if (a.slots.length) {
-        o.slots = a.slots.map((t) => {
-          const tl = { slot: t.slot };
-          if (t.attachment.length) tl.attachment = writeKeys(t.attachment, (v) => v);
-          if (t.color.length) tl.color = writeKeys(t.color, (v) => v.slice());
-          return tl;
-        });
-      }
+    slots: sk.slots.map((s) => {
+      const o = { name: s.name, bone: s.bone, attachments: s.attachments.map(writeAttachment) };
+      if (s.attachment !== null) o.attachment = s.attachment;
+      o.color = s.color.slice();
+      if (s.dark) o.dark = s.dark.slice();
+      if (s.blend && s.blend !== 'normal') o.blend = s.blend;
+      writeExtra(o, s);
       return o;
     }),
   };
+  if (sk.skins.length) {
+    out.skins = sk.skins.map((skin) => {
+      const o = { name: skin.name, slots: skin.slots.map((e) => ({ slot: e.slot, attachments: e.attachments.map(writeAttachment) })) };
+      if (skin.bones.length) o.bones = skin.bones.slice();
+      if (skin.ik.length) o.ik = skin.ik.slice();
+      if (skin.color) o.color = skin.color;
+      if (Object.keys(skin.extra ?? {}).length) o.extra = raw(skin.extra);
+      return o;
+    });
+  }
+  if (sk.skin) out.skin = sk.skin;
+  if (sk.ik.length) out.ik = sk.ik.map((c) => ({ ...c, bones: c.bones.slice() }));
+  if (sk.events.length) out.events = sk.events.map((e) => ({ ...e }));
+  out.animations = sk.animations.map((a) => {
+    const o = { name: a.name, duration: a.duration };
+    if (a.bones.length) {
+      o.bones = a.bones.map((t) => {
+        const tl = { bone: t.bone };
+        for (const ch of BONE_CHANNELS) if (t[ch].length) tl[ch] = writeKeys(t[ch], copy);
+        return tl;
+      });
+    }
+    if (a.slots.length) {
+      o.slots = a.slots.map((t) => {
+        const tl = { slot: t.slot };
+        for (const ch of SLOT_CHANNELS) if (t[ch].length) tl[ch] = writeKeys(t[ch], copy);
+        return tl;
+      });
+    }
+    if (a.deform.length) {
+      o.deform = a.deform.map((t) => ({
+        skin: t.skin,
+        slot: t.slot,
+        attachment: t.attachment,
+        keys: writeKeys(t.keys, (v) => ({ offset: v.offset, vertices: v.vertices.slice() })),
+      }));
+    }
+    if (a.drawOrder.length) o.drawOrder = writeKeys(a.drawOrder, (v) => (v ? v.map((e) => ({ ...e })) : null));
+    if (a.events.length) o.events = a.events.map((e) => ({ ...e }));
+    if (a.ik.length) o.ik = a.ik.map((t) => ({ constraint: t.constraint, keys: writeKeys(t.keys, (v) => ({ ...v })) }));
+    if (Object.keys(a.extra).length) o.extra = raw(a.extra);
+    return o;
+  });
   if (sk.images.length) {
     out.images = sk.images.map((i) => {
       const o = { name: i.name };
@@ -428,8 +706,7 @@ function writeSkeleton(sk) {
       return o;
     });
   }
-  if (sk.atlas) {
-    out.atlas = { ...sk.atlas, regions: sk.atlas.regions.map((r) => ({ ...r })) };
-  }
+  if (sk.header) out.header = raw(sk.header);
+  if (Object.keys(sk.extra).length) out.extra = raw(sk.extra);
   return out;
 }

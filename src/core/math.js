@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Minimal 2D math: local transforms and affine matrices.
 //
-// Rigby uses a Y-up coordinate system with rotations in degrees, counter-clockwise.
-// A transform is a plain object { x, y, rotation, scale_x, scale_y }.
+// Rigby2D uses a Y-up coordinate system with rotations in degrees, counter-clockwise.
+// A transform is a plain object { x, y, rotation, scale_x, scale_y, shear_x, shear_y }; shear is
+// in degrees and tilts the X and Y axes independently (0 = no shear).
 
 const DEG = Math.PI / 180;
 
@@ -10,9 +11,9 @@ export function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
-/** A transform with translation and rotation (scale 1). */
+/** A transform with translation and rotation (scale 1, no shear). */
 export function transform(x = 0, y = 0, rotation = 0) {
-  return { x, y, rotation, scale_x: 1, scale_y: 1 };
+  return { x, y, rotation, scale_x: 1, scale_y: 1, shear_x: 0, shear_y: 0 };
 }
 
 export function identityTransform() {
@@ -20,17 +21,41 @@ export function identityTransform() {
 }
 
 export function cloneTransform(t) {
-  return { x: t.x, y: t.y, rotation: t.rotation, scale_x: t.scale_x, scale_y: t.scale_y };
+  return {
+    x: t.x,
+    y: t.y,
+    rotation: t.rotation,
+    scale_x: t.scale_x,
+    scale_y: t.scale_y,
+    shear_x: t.shear_x ?? 0,
+    shear_y: t.shear_y ?? 0,
+  };
 }
 
 export function transformEquals(a, b) {
-  return a.x === b.x && a.y === b.y && a.rotation === b.rotation && a.scale_x === b.scale_x && a.scale_y === b.scale_y;
+  return (
+    a.x === b.x &&
+    a.y === b.y &&
+    a.rotation === b.rotation &&
+    a.scale_x === b.scale_x &&
+    a.scale_y === b.scale_y &&
+    (a.shear_x ?? 0) === (b.shear_x ?? 0) &&
+    (a.shear_y ?? 0) === (b.shear_y ?? 0)
+  );
 }
 
+/** The X axis points along rotation + shear_x; the Y axis along rotation + 90 + shear_y. */
 export function toAffine(t) {
-  const s = Math.sin(t.rotation * DEG);
-  const c = Math.cos(t.rotation * DEG);
-  return new Affine(c * t.scale_x, s * t.scale_x, -s * t.scale_y, c * t.scale_y, t.x, t.y);
+  const rx = (t.rotation + (t.shear_x ?? 0)) * DEG;
+  const ry = (t.rotation + 90 + (t.shear_y ?? 0)) * DEG;
+  return new Affine(
+    Math.cos(rx) * t.scale_x,
+    Math.sin(rx) * t.scale_x,
+    Math.cos(ry) * t.scale_y,
+    Math.sin(ry) * t.scale_y,
+    t.x,
+    t.y,
+  );
 }
 
 /** Linear interpolation between two transforms (rotation is not wrapped). */
@@ -41,7 +66,15 @@ export function lerpTransform(a, b, t) {
     rotation: lerp(a.rotation, b.rotation, t),
     scale_x: lerp(a.scale_x, b.scale_x, t),
     scale_y: lerp(a.scale_y, b.scale_y, t),
+    shear_x: lerp(a.shear_x ?? 0, b.shear_x ?? 0, t),
+    shear_y: lerp(a.shear_y ?? 0, b.shear_y ?? 0, t),
   };
+}
+
+/** Wraps an angle in degrees to (-180, 180]. */
+export function wrapDegrees(d) {
+  d = ((((d + 180) % 360) + 360) % 360) - 180;
+  return d === -180 ? 180 : d;
 }
 
 /** 2D affine matrix mapping (x, y) to (a*x + c*y + tx, b*x + d*y + ty). */
@@ -100,10 +133,18 @@ export class Affine {
     return Math.atan2(this.b, this.a) / DEG;
   }
 
-  /** Decomposes into translation, rotation and (possibly negative Y) scale. */
+  /**
+   * Decomposes into translation, rotation, scale and Y shear (shear_x is always 0). Reflection is
+   * expressed as a negative Y scale.
+   */
   decompose() {
-    const scale_x = Math.sqrt(this.a * this.a + this.b * this.b);
-    const scale_y = scale_x > 1e-12 ? this.determinant() / scale_x : 0;
-    return { x: this.tx, y: this.ty, rotation: this.rotation(), scale_x, scale_y };
+    const scale_x = Math.hypot(this.a, this.b);
+    if (scale_x < 1e-12) return { x: this.tx, y: this.ty, rotation: 0, scale_x: 0, scale_y: 0, shear_x: 0, shear_y: 0 };
+    const rotation = this.rotation();
+    const det = this.determinant();
+    const scale_y = Math.hypot(this.c, this.d) * (det < 0 ? -1 : 1);
+    const yAngle = scale_y === 0 ? rotation + 90 : Math.atan2(this.d / scale_y, this.c / scale_y) / DEG;
+    const shear_y = wrapDegrees(yAngle - rotation - 90);
+    return { x: this.tx, y: this.ty, rotation, scale_x, scale_y, shear_x: 0, shear_y: Math.abs(shear_y) < 1e-9 ? 0 : shear_y };
   }
 }

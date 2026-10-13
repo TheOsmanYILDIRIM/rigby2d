@@ -1,13 +1,13 @@
-# Contributing to Rigby
+# Contributing to Rigby2D
 
-Thanks for your interest in improving Rigby! Bug reports, feature ideas, documentation fixes and
+Thanks for your interest in improving Rigby2D! Bug reports, feature ideas, documentation fixes and
 code are all welcome.
 
 ## Ways to contribute
 
-- **Report a bug** — open an [issue](https://github.com/jaisurya-dev-art/rigby/issues) with steps
-  to reproduce, what you expected, what happened, and your OS / Rigby version. Attach a small
-  `.rigby` project if it helps.
+- **Report a bug** — open an [issue](https://github.com/jaisurya-dev-art/rigby2d/issues) with steps
+  to reproduce, what you expected, what happened, and your OS / Rigby2D version. Attach a small
+  skeleton `.json` (with its images or atlas) if it helps.
 - **Suggest a feature** — open an issue describing the problem you want solved before starting
   on a large change, so we can agree on the approach.
 - **Send a pull request** — fixes, features, tests and docs.
@@ -40,8 +40,8 @@ quick UI work. File dialogs and disk access only work in the desktop app (`npm r
 
 - Match the surrounding style: ES modules, 2-space indentation, single quotes, semicolons.
 - Every source file starts with `// SPDX-License-Identifier: MIT`.
-- Keep `src/core` backwards compatible with existing `rigby/1` files. If the file format must
-  change, discuss it in an issue first.
+- Keep skeleton JSON import/export lossless: anything read must be written back. If the format
+  handling must change, discuss it in an issue first.
 - Add or update tests in `test/` for changes to `src/core` or the pure editor helpers
   (`pack.js`, `sample.js`). Run `npm test` before pushing.
 - For UI changes, include a screenshot or short clip in the pull request.
