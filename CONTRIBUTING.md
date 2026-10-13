@@ -5,12 +5,12 @@ code are all welcome.
 
 ## Ways to contribute
 
-- **Report a bug** — open an [issue](https://github.com/jaisurya-dev-art/rigby2d/issues) with steps
+- **Report a bug**: open an [issue](https://github.com/jaisurya-dev-art/rigby2d/issues) with steps
   to reproduce, what you expected, what happened, and your OS / Rigby2D version. Attach a small
   skeleton `.json` (with its images or atlas) if it helps.
-- **Suggest a feature** — open an issue describing the problem you want solved before starting
+- **Suggest a feature**: open an issue describing the problem you want solved before starting
   on a large change, so we can agree on the approach.
-- **Send a pull request** — fixes, features, tests and docs.
+- **Send a pull request**: fixes, features, tests and docs.
 
 ## Development setup
 
@@ -31,7 +31,7 @@ quick UI work. File dialogs and disk access only work in the desktop app (`npm r
 
 | Path | Notes |
 | --- | --- |
-| `src/core/` | Runtime used by games. **No dependencies and no DOM access** — it must run in any JS engine. |
+| `src/core/` | Runtime used by games. **No dependencies and no DOM access**: it must run in any JS engine. |
 | `src/editor/` | Editor UI. Plain JavaScript modules, DOM and Canvas 2D; no UI framework. |
 | `src-tauri/` | Native shell only. Keep app logic out of Rust; add permissions in `capabilities/default.json` only when needed. |
 | `test/` | `node:test` suites (`*.test.js`). |

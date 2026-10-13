@@ -23,22 +23,22 @@
 
 ## Features
 
-- **Art import** — PSD files (every pixel layer becomes a part, layout preserved) or individual PNGs.
-- **Rigging** — draw bone chains directly in the viewport, reparent, attach images to bones, reorder draw order.
-- **Animation** — Setup and Animate modes; posing a bone in Animate mode sets keys automatically.
-- **Dopesheet** — drag keys in time, linear / ease-in / ease-out / ease-in-out / stepped curves, image-swap keys.
+- **Art import**: PSD files (every pixel layer becomes a part, layout preserved) or individual PNGs.
+- **Rigging**: draw bone chains directly in the viewport, reparent, attach images to bones, reorder draw order.
+- **Animation**: Setup and Animate modes, pose / rotate / translate / scale / shear tools, key buttons and optional auto key, switchable shortcut presets.
+- **Dopesheet and graph editor**: multi-key selection, moving and retiming keys, curve presets, bezier handle editing, image-swap keys.
 - **Undo / redo** for every edit, with unsaved-change tracking.
-- **`.rigby` work file** — one self-contained file with the whole project and its images (like a `.blend`).
-- **Skeleton import/export** — opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, IK, events, deform and draw-order keys round-trip losslessly.
-- **Runtime included** — a small dependency-free JavaScript runtime (`src/core`) to play exported animations in your game.
-- **Sample character** — *File ▸ New sample (robot)* gives you a rigged, animated character to explore.
+- **`.rigby` work file**: one self-contained file with the whole project and its images (like a `.blend`).
+- **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, IK, events, deform and draw-order keys round-trip losslessly.
+- **Runtime included**: a small dependency-free JavaScript runtime (`src/core`) to play exported animations in your game.
+- **Sample character**: *File ▸ New sample (robot)* gives you a rigged, animated character to explore.
 
 ## Getting started
 
 ### Prerequisites
 
 - [Node.js](https://nodejs.org) 20 or newer
-- Tauri's system prerequisites for your OS — see <https://tauri.app/start/prerequisites/>
+- Tauri's system prerequisites for your OS, see <https://tauri.app/start/prerequisites/>
   - **Windows:** Microsoft C++ Build Tools ("Desktop development with C++") and WebView2 (preinstalled on Windows 10/11)
   - **macOS:** Xcode Command Line Tools
   - **Linux:** WebKitGTK and build essentials
@@ -117,9 +117,9 @@ function frame(dt) {
 
 ### File formats
 
-- **`.rigby`** — Rigby2D's work file: a ZIP holding `project.json` (the complete document) and
+- **`.rigby`**: Rigby2D's work file: a ZIP holding `project.json` (the complete document) and
   `images/*.png`. Use it for saving work in progress.
-- **Skeleton `.json` / `.skel`** — the interchange formats game runtimes load. Bones are listed so
+- **Skeleton `.json` / `.skel`**: the interchange formats game runtimes load. Bones are listed so
   parents come first, slots are in draw order, attachments live in skins, and animations hold bone,
   slot, deform, draw-order, IK and event timelines with keys relative to the setup pose. Images
   come from a `.atlas` texture atlas or loose files in the skeleton's `images` folder.

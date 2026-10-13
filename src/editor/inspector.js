@@ -52,7 +52,7 @@ function boneUi(app, b) {
     ),
   ];
   if (b === 0) {
-    props.push(...row('Parent', '—'));
+    props.push(...row('Parent', '(none)'));
   } else {
     const options = app.doc.bones.map((x, i) => [i, x.name]).filter(([i]) => !app.doc.isDescendant(i, b));
     props.push(

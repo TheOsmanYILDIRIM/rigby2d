@@ -461,6 +461,6 @@ export class App {
 
   title() {
     const name = this.path ? io.basename(this.path) : 'untitled';
-    return `Rigby2D — ${name}${this.dirty() ? ' *' : ''}`;
+    return `Rigby2D - ${name}${this.dirty() ? ' *' : ''}`;
   }
 }
