@@ -307,6 +307,15 @@ export class Viewport {
     ctx.fillStyle = 'rgb(200,200,200)';
     ctx.textBaseline = 'top';
     ctx.fillText(text, 10, 8);
+    // Events fired during playback fade out over a moment.
+    const now = performance.now();
+    let row = 0;
+    for (const f of app.firedEvents) {
+      const age = (now - f.at) / 1200;
+      if (age >= 1) continue;
+      ctx.fillStyle = `rgba(255,200,90,${1 - age})`;
+      ctx.fillText(`⚑ ${f.name}`, 10, 30 + row++ * 18);
+    }
     if (app.mode === Mode.Animate) {
       ctx.strokeStyle = 'rgba(255,110,80,0.7)';
       ctx.lineWidth = 2;

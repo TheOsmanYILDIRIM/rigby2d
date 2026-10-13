@@ -48,6 +48,8 @@ export class App {
     this.saveTarget = null;
     this.images = new Images();
     this.sel = null;
+    /** Events recently crossed during playback: [{ name, at }] (performance.now() times). */
+    this.firedEvents = [];
     /** Bottom panel view: 'dopesheet' or 'graph'. */
     this.timelineView = 'dopesheet';
     /** Selected dopesheet keys (the key objects themselves). */
@@ -449,14 +451,24 @@ export class App {
       this.playing = false;
       return;
     }
+    const before = this.time;
     this.time += Math.min(dt, 0.1) * this.playDirection;
+    let wrapped = false;
     if (this.time > anim.duration || this.time < 0) {
       if (this.looping && anim.duration > 0) {
         this.time = remEuclid(this.time, anim.duration);
+        wrapped = true;
       } else {
         this.time = Math.min(Math.max(this.time, 0), anim.duration);
         this.playing = false;
       }
+    }
+    // Events crossed while playing forward are shown briefly in the viewport.
+    if (this.playDirection > 0) {
+      const crossed = (e) => (wrapped ? e.time > before || e.time <= this.time : e.time > before && e.time <= this.time);
+      const now = performance.now();
+      for (const e of anim.events) if (crossed(e)) this.firedEvents.push({ name: e.name, at: now });
+      this.firedEvents = this.firedEvents.filter((f) => now - f.at < 1200).slice(-6);
     }
     this.changed();
   }

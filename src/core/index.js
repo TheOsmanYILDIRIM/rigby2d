@@ -5,10 +5,12 @@
 //   const skeleton = Skeleton.fromJson(json);
 //   const pose = new Pose(skeleton);
 //   const state = new AnimationState();
-//   state.play(skeleton, 'walk', true, 0.2);
+//   state.play(skeleton, 'walk', true, 0.2);              // track 0
+//   state.setAnimation(skeleton, 1, 'shoot', false);      // layered on top
+//   state.addListener({ event: (entry, e) => console.log(e.name) });
 //
 //   // every frame:
-//   state.update(1 / 60);
+//   state.update(skeleton, 1 / 60);
 //   state.apply(skeleton, pose);
 //   for (const quad of pose.quads(skeleton)) {
 //     // draw quad.positions with quad.uvs from the atlas region named quad.attachment.image
