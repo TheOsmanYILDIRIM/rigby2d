@@ -92,6 +92,10 @@ export class Affine {
     return new Affine();
   }
 
+  clone() {
+    return new Affine(this.a, this.b, this.c, this.d, this.tx, this.ty);
+  }
+
   /** `this * rhs`: applies `rhs` first, then `this`. */
   mul(r) {
     return new Affine(

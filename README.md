@@ -127,12 +127,14 @@ function frame(dt) {
   region, mesh, linked mesh, bounding box, path and clipping attachments, and bone, slot, IK,
   transform, deform, draw-order and event keys. Rigs using other features (physics constraints,
   point attachments, image sequences, …) export to `.json` instead.
+- The runtime evaluates IK, transform and path constraints. Physics constraints are kept in the
+  file but not simulated yet.
 
 ## Project structure
 
 ```
-src/core/       Runtime: data model, skeleton JSON + atlas I/O, pose evaluation, IK, playback
-src/editor/     Editor UI: viewport, hierarchy, inspector, timeline, import/export
+src/core/       Runtime: data model, skeleton JSON/.skel + atlas I/O, pose evaluation, constraints, playback
+src/editor/     Editor UI: viewport, tree, properties, dopesheet, graph editor, import/export
 src-tauri/      Native desktop shell (window + file dialog/fs plugins only)
 test/           node:test suites
 docs/           Logo and screenshots

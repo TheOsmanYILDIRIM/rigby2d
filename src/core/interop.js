@@ -8,7 +8,8 @@
 // The exact 4.x spellings are not publicly specified and must be verified with real exports.
 //
 // Writing: `writeSkeletonJson(sk, { version })` emits "3.8" (documented) or "4.2" (best effort).
-// Transform, path and physics constraints and sequences are carried through unchanged.
+// Transform, path and physics constraints and sequences are carried through unchanged (transform
+// and path constraints are evaluated by the runtime from that data).
 
 import { Animation, emptyBoneTimeline, emptySlotTimeline, makeKey } from './animation.js';
 import { LINEAR, STEPPED, bezierFor } from './curve.js';
@@ -169,10 +170,9 @@ export function readSkeletonJson(obj, name = 'skeleton') {
   const ikSource = unified ? unified.map((c, i) => ({ ...c, order: c.order ?? i })).filter((c) => c.type === 'ik') : (obj.ik ?? []);
   if (unified) {
     const others = unified.map((data, index) => ({ index, data: clone(data) })).filter((e) => e.data.type !== 'ik');
-    if (others.length) {
-      sk.extra.constraints = others;
-      warnings.push(`${others.length} non-IK constraint(s) are kept but not evaluated yet`);
-    }
+    if (others.length) sk.extra.constraints = others;
+    const skipped = others.filter((e) => !['transform', 'path'].includes(e.data.type)).length;
+    if (skipped) warnings.push(`${skipped} physics/slider constraint(s) are kept but not evaluated yet`);
   }
   sk.ik = ikSource.map((c, i) => {
     const ik = {
@@ -196,7 +196,7 @@ export function readSkeletonJson(obj, name = 'skeleton') {
   for (const key of ['transform', 'path', 'physics']) {
     if (obj[key]?.length) {
       sk.extra[key] = clone(obj[key]);
-      warnings.push(`${obj[key].length} ${key} constraint(s) are kept but not evaluated yet`);
+      if (key === 'physics') warnings.push(`${obj[key].length} physics constraint(s) are kept but not evaluated yet`);
     }
   }
 

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Evaluated skeleton state: local and world transforms of every bone, slot state, mesh
-// deformation, draw order and IK constraints.
+// deformation, draw order and constraints (IK, transform and path).
 
 import { keyIndexAt, sample } from './animation.js';
+import { applyConstraintTimelines, compileConstraints, constraintActive, constraintSetupState, solvePath, solveTransform } from './constraints.js';
 import { Affine, cloneTransform, lerp, lerpTransform, toAffine, wrapDegrees } from './math.js';
 import { vertexCount } from './model.js';
 
@@ -15,7 +16,7 @@ const len = (v) => Math.hypot(v[0], v[1]);
  * A mutable pose for a skeleton. Create it with `new Pose(skeleton)`, apply animations, then
  * call `updateWorld` before reading world transforms or vertices.
  *
- * `local` holds the animated local transforms; `applied` holds them after constraints (IK) and is
+ * `local` holds the animated local transforms; `applied` holds them after constraints and is
  * what `world` is computed from.
  */
 export class Pose {
@@ -40,9 +41,21 @@ export class Pose {
       compress: c.compress,
       stretch: c.stretch,
     }));
+    this.constraintList = null;
+    this.ensureConstraints(sk);
     this.applied = [];
     this.world = [];
     this.updateWorld(sk);
+  }
+
+  /** Transform and path constraints of `sk`, with their animated state reset when they change. */
+  ensureConstraints(sk) {
+    const list = compileConstraints(sk);
+    if (list !== this.constraintList) {
+      this.constraintList = list;
+      this.constraintState = constraintSetupState(list);
+    }
+    return list;
   }
 
   /** Applies `anim` at `time` on top of the current pose, blended by `alpha` (1 = fully). */
@@ -107,6 +120,7 @@ export class Pose {
       const i = keyIndexAt(anim.drawOrder, time);
       if (i >= 0) this.drawOrder = applyDrawOrder(sk.slots.length, anim.drawOrder[i].value);
     }
+    applyConstraintTimelines(this.ensureConstraints(sk), this.constraintState, anim, time, alpha);
     for (const t of anim.ik) {
       const state = this.ik[t.constraint];
       if (!state) continue;
@@ -130,16 +144,47 @@ export class Pose {
     }
   }
 
-  /** Recomputes world transforms from local transforms, then applies constraints. */
+  /** Recomputes world transforms from local transforms, then applies constraints in order. */
   updateWorld(sk) {
     this.applied = this.local.map(cloneTransform);
     this.computeWorld(sk);
-    const order = sk.ik.map((c, i) => i).sort((x, y) => sk.ik[x].order - sk.ik[y].order);
-    for (const i of order) {
-      const c = sk.ik[i];
-      if (c.skinRequired && !this.skinActive(sk, (skin) => skin.ik.includes(i))) continue;
-      this.solveIk(sk, c, this.ik[i]);
+    const list = this.ensureConstraints(sk);
+    const steps = [...sk.ik.map((c, i) => ({ order: c.order, ik: i })), ...list.map((c, i) => ({ order: c.order, other: i }))];
+    steps.sort((x, y) => x.order - y.order);
+    for (const step of steps) {
+      if (step.ik !== undefined) {
+        const c = sk.ik[step.ik];
+        if (c.skinRequired && !this.skinActive(sk, (skin) => skin.ik.includes(step.ik))) continue;
+        this.solveIk(sk, c, this.ik[step.ik]);
+        continue;
+      }
+      const c = list[step.other];
+      if (!constraintActive(sk, c)) continue;
+      const state = this.constraintState[step.other];
+      const result = c.type === 'transform' ? solveTransform(this, c, state) : solvePath(sk, this, c, state);
+      if (result?.world) this.setWorlds(sk, result.world);
+      else if (result?.local) this.computeWorld(sk);
     }
+  }
+
+  /**
+   * Sets the world transforms of some bones (a map of bone -> Affine), updating their applied
+   * local transforms to match and moving their descendants along.
+   */
+  setWorlds(sk, desired) {
+    const dirty = new Uint8Array(sk.bones.length);
+    sk.bones.forEach((b, i) => {
+      const parent = b.parent === null ? null : this.world[b.parent];
+      const want = desired.get(i);
+      if (want) {
+        this.applied[i] = localFromWorld(parent, want, this.inherit[i]);
+        this.world[i] = want;
+        dirty[i] = 1;
+      } else if (parent && dirty[b.parent]) {
+        this.world[i] = inheritWorld(parent, toAffine(this.applied[i]), this.inherit[i]);
+        dirty[i] = 1;
+      }
+    });
   }
 
   skinActive(sk, has) {
@@ -316,6 +361,21 @@ export class Pose {
 function deformLength(att) {
   if (att.weights) return att.weights.reduce((n, v) => n + v.length * 2, 0);
   return (att.vertices?.length ?? vertexCount(att) * 2) | 0;
+}
+
+/** The local transform that gives world transform `world` under `parent` and inherit `mode`. */
+function localFromWorld(parent, world, mode) {
+  if (!parent) return world.decompose();
+  // Translation always goes through the full parent transform; the linear part through the part
+  // of the parent the inherit mode keeps.
+  const [x, y] = parent.inverse().apply([world.tx, world.ty]);
+  const keep = inheritWorld(parent, new Affine(), mode);
+  keep.tx = 0;
+  keep.ty = 0;
+  const linear = keep.inverse().mul(new Affine(world.a, world.b, world.c, world.d, 0, 0));
+  linear.tx = x;
+  linear.ty = y;
+  return linear.decompose();
 }
 
 /** Child world transform for the given inherit mode. */
