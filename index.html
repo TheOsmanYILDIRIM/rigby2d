@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rigby</title>
+  </head>
+  <body>
+    <div id="app">
+      <nav id="menubar"></nav>
+      <aside id="hierarchy" class="panel">
+        <div class="header"><h2>Skeleton</h2><button class="add-bone" title="Add a child bone to the selected bone">＋ Bone</button></div>
+        <div class="tree scroll"></div>
+        <h2>Draw order</h2>
+        <div class="small weak">Top of the list is drawn in front</div>
+        <div class="order scroll"></div>
+      </aside>
+      <div id="split-left" class="split-v"></div>
+      <main id="center"><canvas id="viewport"></canvas></main>
+      <div id="split-right" class="split-v"></div>
+      <aside id="inspector" class="panel"><div class="content scroll"></div></aside>
+      <div id="split-bottom" class="split-h"></div>
+      <section id="timeline">
+        <div id="controls"></div>
+        <div class="dopesheet-wrap">
+          <div class="empty">No animation. Press ＋ New or Tab to start animating.</div>
+          <div id="dopesheet"><canvas></canvas></div>
+        </div>
+      </section>
+      <footer id="status"><span id="status-text"></span><span id="status-info"></span></footer>
+    </div>
+    <script type="module" src="/src/editor/main.js"></script>
+  </body>
+</html>

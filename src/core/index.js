@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: MIT
+// rigby-core: runtime for Rigby 2D skeletal animations.
+// Load an exported skeleton, play animations and get textured quads to draw with any renderer.
+//
+//   const skeleton = Skeleton.fromJson(json);
+//   const pose = new Pose(skeleton);
+//   const state = new AnimationState();
+//   state.play(skeleton, 'walk', true, 0.2);
+//
+//   // every frame:
+//   state.update(1 / 60);
+//   state.apply(skeleton, pose);
+//   for (const quad of pose.quads(skeleton)) {
+//     // draw quad.positions with quad.uvs from the atlas region named quad.attachment.image
+//   }
+//
+// Licensed under MIT so it can be embedded in any game.
+
+export * from './animation.js';
+export * as curve from './curve.js';
+export { Affine, transform, identityTransform, cloneTransform, toAffine, lerpTransform, lerp } from './math.js';
+export * from './model.js';
+export { Pose } from './pose.js';
+export { AnimationState } from './state.js';
