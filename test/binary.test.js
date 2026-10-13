@@ -168,10 +168,29 @@ test('unsupported features stop with a clear error', () => {
   const withPoint = structuredClone(FIXTURE);
   withPoint.skins[0].attachments.body.marker = { type: 'point', x: 1, y: 2 };
   assert.throws(() => writeSkeletonBinary(withPoint), /not supported in \.skel/);
-  const withSlider = structuredClone(FIXTURE);
-  withSlider.constraints.push({ type: 'slider', name: 's', bone: 'hip' });
-  assert.throws(() => writeSkeletonBinary(withSlider), /not supported in \.skel/);
+  const withRgb = structuredClone(FIXTURE);
+  withRgb.animations.run.slots.body.rgb = [{ color: 'ff0000' }];
+  assert.throws(() => writeSkeletonBinary(withRgb), /not supported in \.skel/);
+  const pingPong = structuredClone(FIXTURE);
+  pingPong.skins[0].attachments.body.body.sequence = { count: 3 };
+  pingPong.animations.run.attachments = { default: { body: { body: { sequence: [{ mode: 'pingpong', delay: 0.1 }] } } } };
+  assert.throws(() => writeSkeletonBinary(pingPong), /not supported in \.skel/);
   assert.ok(!isSkeletonBinary(new TextEncoder().encode('{"skeleton":{}}')));
+});
+
+test('sequences, sliders, path keys, weighted clipping and stepped IK round-trip through .skel', () => {
+  const json = structuredClone(FIXTURE);
+  const body = json.skins[0].attachments.body.body;
+  body.sequence = { count: 4, start: 0, digits: 2 };
+  json.constraints.push({ type: 'slider', name: 'spin', animation: 'run', bone: 'hip', property: 'rotate', scale: 0.01, local: true, loop: true, time: 0.5 });
+  const run = json.animations.run;
+  run.attachments = { default: { body: { body: { sequence: [{ mode: 'loop', delay: 0.1 }, { time: 0.4 }, { time: 0.5, mode: 'onceReverse', index: 2, delay: 0.05 }] } } } };
+  run.slider = { spin: { mix: [{}, { time: 0.5, value: 0 }] } };
+  const back = readSkeletonBinary(writeSkeletonBinary(structuredClone(json)));
+  assert.deepEqual(back.skins[0].attachments.body.body.sequence, body.sequence);
+  assert.deepEqual(back.constraints.find((c) => c.type === 'slider'), json.constraints.at(-1));
+  assert.deepEqual(back.animations.run.attachments.default.body.body.sequence, run.attachments.default.body.body.sequence);
+  assert.deepEqual(back.animations.run.slider, run.slider);
 });
 
 test('physics constraints and wind keys round-trip through .skel', () => {

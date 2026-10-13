@@ -55,6 +55,28 @@ function compile(sk) {
   }
   const out = [];
   for (const { data, type, order } of entries) {
+    if (type === 'slider') {
+      const animation = sk.animations.findIndex((a) => a.name === data.animation);
+      const bone = data.bone === undefined ? null : boneIndex.get(data.bone);
+      if (animation < 0 || bone === undefined) continue;
+      out.push({
+        name: data.name,
+        order,
+        skinRequired: !!data.skin,
+        bones: bone === null ? [] : [bone],
+        type,
+        animation,
+        bone,
+        property: data.property ?? 'rotate',
+        scale: data.scale ?? 1,
+        offset: data.offset ?? 0,
+        local: !!data.local,
+        loop: !!data.loop,
+        additive: !!data.additive,
+        setup: { time: data.time ?? 0, mix: data.mix ?? 1 },
+      });
+      continue;
+    }
     if (type === 'physics') {
       const bone = boneIndex.get(data.bone);
       if (bone === undefined) continue;
@@ -187,7 +209,7 @@ export function constraintActive(sk, c) {
 /** Applies the constraint timelines of `anim` at `time` to `states`, blended by `alpha`. */
 export function applyConstraintTimelines(list, states, anim, time, alpha) {
   const extra = anim.extra ?? {};
-  if (!extra.transform && !extra.path && !extra.physics) return;
+  if (!extra.transform && !extra.path && !extra.physics && !extra.slider) return;
   list.forEach((c, i) => {
     const state = states[i];
     if (c.type === 'transform') {
@@ -206,6 +228,14 @@ export function applyConstraintTimelines(list, states, anim, time, alpha) {
             return [k.mixRotate ?? 1, x, k.mixY ?? x, sx, k.mixScaleY ?? sx, k.mixShearY ?? 1];
           });
       PROPS.forEach((p, j) => (state.mix[p] += (values[j] - state.mix[p]) * alpha));
+    } else if (c.type === 'slider') {
+      const t = extra.slider?.[c.name];
+      if (!t) return;
+      for (const key of ['time', 'mix']) {
+        if (!Array.isArray(t[key]) || !t[key].length) continue;
+        const [v] = sampleRaw(t[key], time, (k) => [k.value ?? (key === 'mix' ? 1 : 0)]);
+        state[key] += (v - state[key]) * alpha;
+      }
     } else if (c.type === 'physics') {
       // Keys of this constraint, then skeleton-wide keys ("") for values flagged global.
       for (const [source, global] of [
@@ -652,4 +682,66 @@ export function solvePhysics(sk, pose, c, state, sim, delta) {
     }
   }
   return { world: new Map([[c.bone, out]]) };
+}
+
+// ---- slider --------------------------------------------------------------------------------------
+
+/**
+ * Slider constraint: poses the skeleton with an animation whose time comes from a bone property
+ * (value x scale + offset; the bone's local value when `local`) or, without a bone, from the
+ * constraint's own time. The animation is applied over the current pose with the constraint's mix.
+ */
+export function solveSlider(sk, pose, c, state) {
+  const anim = sk.animations[c.animation];
+  if (!anim || state.mix <= 0) return null;
+  let time = state.time;
+  if (c.bone !== null) {
+    const value = c.local ? localProperty(pose.applied[c.bone], c.property) : worldProperty(pose.world[c.bone], c.property);
+    time = value * c.scale + c.offset;
+  }
+  const d = anim.duration;
+  if (d > 0) time = c.loop ? ((time % d) + d) % d : Math.min(d, Math.max(0, time));
+  // Apply onto the constrained (applied) transforms, then recompute world transforms.
+  const local = pose.local;
+  pose.local = pose.applied;
+  try {
+    pose.apply(sk, anim, time, Math.min(1, state.mix));
+  } finally {
+    pose.local = local;
+  }
+  return { all: true };
+}
+
+function localProperty(t, property) {
+  switch (property) {
+    case 'x':
+      return t.x;
+    case 'y':
+      return t.y;
+    case 'scaleX':
+      return t.scale_x;
+    case 'scaleY':
+      return t.scale_y;
+    case 'shearY':
+      return t.shear_y ?? 0;
+    default:
+      return t.rotation;
+  }
+}
+
+function worldProperty(m, property) {
+  switch (property) {
+    case 'x':
+      return m.tx;
+    case 'y':
+      return m.ty;
+    case 'scaleX':
+      return Math.hypot(m.a, m.b);
+    case 'scaleY':
+      return Math.hypot(m.c, m.d);
+    case 'shearY':
+      return wrapDegrees(axisAngle(m.c, m.d) - axisAngle(m.a, m.b) - 90);
+    default:
+      return axisAngle(m.a, m.b);
+  }
 }

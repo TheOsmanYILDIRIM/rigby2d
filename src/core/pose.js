@@ -11,9 +11,11 @@ import {
   resetConstraintState,
   solvePath,
   solvePhysics,
+  solveSlider,
   solveTransform,
 } from './constraints.js';
 import { Affine, cloneTransform, copyTransform, lerp, toAffine, wrapDegrees } from './math.js';
+import { sequenceFrameName, sequenceIndexAt, sequenceSetupIndex } from './sequence.js';
 import { vertexCount } from './model.js';
 
 const DEG = Math.PI / 180;
@@ -72,10 +74,12 @@ export class Pose {
       this.color = slots.map((s) => s.color.slice());
       this.dark = slots.map((s) => (s.dark ? s.dark.slice() : null));
       this.drawOrder = slots.map((_, i) => i);
+      this.sequence = slots.map(() => -1);
     } else {
       for (let i = 0; i < slots.length; i++) {
         const s = slots[i];
         this.attachment[i] = s.attachment;
+        this.sequence[i] = -1;
         const color = this.color[i];
         for (let k = 0; k < 4; k++) color[k] = s.color[k];
         if (s.dark) {
@@ -197,6 +201,22 @@ export class Pose {
       const prev = this.deform.get(key);
       this.deform.set(key, prev && alpha < 1 ? prev.map((p, j) => lerp(p, deltas[j], alpha)) : deltas);
     }
+    // Sequence keys: the frame of the image sequence a slot's attachment shows.
+    if (hold && anim.extra?.attachments) {
+      for (const [skin, slots] of Object.entries(anim.extra.attachments)) {
+        for (const [slotName, atts] of Object.entries(slots)) {
+          const slot = sk.slots.findIndex((s) => s.name === slotName);
+          if (slot < 0) continue;
+          for (const [name, timelines] of Object.entries(atts)) {
+            if (!Array.isArray(timelines.sequence) || this.attachment[slot] !== name) continue;
+            const att = sk.attachment(slot, name, skin === 'default' ? null : skin) ?? sk.attachment(slot, name);
+            if (!att?.sequence) continue;
+            const index = sequenceIndexAt(timelines.sequence, time, att.sequence.count ?? 1);
+            if (index !== null) this.sequence[slot] = index;
+          }
+        }
+      }
+    }
     if (hold && anim.drawOrder.length) {
       const i = keyIndexAt(anim.drawOrder, time);
       if (i >= 0) this.drawOrder = applyDrawOrder(sk.slots.length, anim.drawOrder[i].value);
@@ -249,12 +269,14 @@ export class Pose {
       let result;
       if (c.type === 'transform') result = solveTransform(this, c, state);
       else if (c.type === 'path') result = solvePath(sk, this, c, state);
+      else if (c.type === 'slider') result = solveSlider(sk, this, c, state);
       else {
         let sim = this.physics.get(c.name);
         if (!sim) this.physics.set(c.name, (sim = {}));
         result = solvePhysics(sk, this, c, state, sim, delta);
       }
-      if (result?.world) this.setWorlds(sk, result.world);
+      if (result?.all) this.computeWorld(sk);
+      else if (result?.world) this.setWorlds(sk, result.world);
       else if (result?.local) for (const b of result.local) this.updateBranch(sk, b);
     }
   }
@@ -399,6 +421,13 @@ export class Pose {
     this.updateBranch(sk, ch);
   }
 
+  /** Image an attachment shows in a slot: its image, or the current frame of its sequence. */
+  imageOf(slot, att) {
+    if (!att.sequence) return att.image ?? att.name;
+    const index = this.sequence?.[slot] ?? -1;
+    return sequenceFrameName(att, index >= 0 ? index : sequenceSetupIndex(att));
+  }
+
   /** World transform of a region or point attachment. */
   attachmentWorld(sk, slot, att) {
     return this.world[sk.slots[slot].bone].mul(toAffine(att.offset));
@@ -464,6 +493,7 @@ export class Pose {
         const hh = att.height * 0.5;
         out.push({
           kind: 'region',
+          image: this.imageOf(i, att),
           slot: i,
           attachment: att,
           positions: [[-hw, hh], [hw, hh], [hw, -hh], [-hw, -hh]].map((p) => m.apply(p)),
@@ -477,7 +507,7 @@ export class Pose {
         const flat = this.worldVertices(sk, i, att);
         const positions = [];
         for (let k = 0; k + 1 < flat.length; k += 2) positions.push([flat[k], flat[k + 1]]);
-        out.push({ kind: 'mesh', slot: i, attachment: att, positions, uvs: uvPairs(source), triangles: source.triangles, color, blend });
+        out.push({ kind: 'mesh', slot: i, attachment: att, image: this.imageOf(i, att.type === 'linkedmesh' ? att : source), positions, uvs: uvPairs(source), triangles: source.triangles, color, blend });
       }
     }
     return out;

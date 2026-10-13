@@ -12,6 +12,7 @@
 // constraints are evaluated by the runtime from that data).
 
 import { Animation, emptyBoneTimeline, emptySlotTimeline, makeKey } from './animation.js';
+import { Clipper } from './clipping.js';
 import { LINEAR, STEPPED, bezierFor } from './curve.js';
 import { Pose } from './pose.js';
 import { INHERIT_MODES, Skeleton, makeBone } from './model.js';
@@ -171,8 +172,8 @@ export function readSkeletonJson(obj, name = 'skeleton') {
   if (unified) {
     const others = unified.map((data, index) => ({ index, data: clone(data) })).filter((e) => e.data.type !== 'ik');
     if (others.length) sk.extra.constraints = others;
-    const skipped = others.filter((e) => !['transform', 'path', 'physics'].includes(e.data.type)).length;
-    if (skipped) warnings.push(`${skipped} slider constraint(s) are kept but not evaluated yet`);
+    const skipped = others.filter((e) => !['transform', 'path', 'physics', 'slider'].includes(e.data.type)).length;
+    if (skipped) warnings.push(`${skipped} constraint(s) of unknown types are kept but not evaluated`);
   }
   sk.ik = ikSource.map((c, i) => {
     const ik = {
@@ -546,13 +547,31 @@ const asArray = (v) => (Array.isArray(v) ? v : [v]);
 function setupBounds(sk) {
   const pose = new Pose(sk);
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const q of pose.quads(sk)) {
-    for (const [x, y] of q.positions) {
-      x0 = Math.min(x0, x);
-      y0 = Math.min(y0, y);
-      x1 = Math.max(x1, x);
-      y1 = Math.max(y1, y);
+  const add = (positions) => {
+    for (let i = 0; i + 1 < positions.length; i += 2) {
+      x0 = Math.min(x0, positions[i]);
+      y0 = Math.min(y0, positions[i + 1]);
+      x1 = Math.max(x1, positions[i]);
+      y1 = Math.max(y1, positions[i + 1]);
     }
+  };
+  // What is visible: drawables, masked by clipping attachments.
+  let clipper = null;
+  let clipEnd = null;
+  const quads = new Map(pose.quads(sk).map((q) => [q.slot, q]));
+  for (const i of pose.drawOrder) {
+    const att = pose.slotAttachment(sk, i);
+    if (att?.type === 'clipping') {
+      clipper = new Clipper(pose.worldVertices(sk, i, att));
+      clipEnd = att.end === i ? null : (att.end ?? null); // ending at its own slot means: to the end
+    } else if (quads.has(i)) {
+      const q = quads.get(i);
+      const positions = q.positions.flat();
+      const triangles = q.kind === 'mesh' ? q.triangles : [0, 1, 2, 0, 2, 3];
+      if (clipper) clipper.clip(positions, new Array(positions.length).fill(0), triangles, (p) => add(p));
+      else add(positions);
+    }
+    if (clipper && clipEnd === i) clipper = null;
   }
   return Number.isFinite(x0) ? { x: round(x0), y: round(y0), width: round(x1 - x0), height: round(y1 - y0) } : { x: 0, y: 0, width: 0, height: 0 };
 }
@@ -601,7 +620,15 @@ function writeJson(sk, version) {
   const bounds = setupBounds(sk);
   const hasStored = ['x', 'y', 'width', 'height'].every((k) => typeof header[k] === 'number');
   const empty = bounds.width === 0 && bounds.height === 0;
-  const stored = hasStored && (empty || ['x', 'y', 'width', 'height'].every((k) => Math.abs(header[k] - bounds[k]) < 0.01));
+  // Stored bounds may cover every skin or differ by rounding; keep them while the setup pose fits.
+  const tolerance = Math.max(2, 0.01 * Math.max(bounds.width, bounds.height));
+  const fits =
+    hasStored &&
+    bounds.x >= header.x - tolerance &&
+    bounds.y >= header.y - tolerance &&
+    bounds.x + bounds.width <= header.x + header.width + tolerance &&
+    bounds.y + bounds.height <= header.y + header.height + tolerance;
+  const stored = hasStored && (empty || fits);
   const json = { skeleton: { hash: '', ...header, [VERSION_FIELD]: keptVersion, ...(stored ? {} : bounds) } };
 
   json.bones = sk.bones.map((b) => {
@@ -741,7 +768,7 @@ function writeAttachment(a, slotName, v43) {
   if (a.type === 'linkedmesh') {
     if (a.skin) o.skin = a.skin;
     o[v43 ? 'source' : 'parent'] = a.parent;
-    if (a.deform === false) o.deform = false;
+    if (a.deform === false) o[v43 ? 'timelines' : 'deform'] = false;
   }
   if (a.type === 'boundingbox' || a.type === 'path' || a.type === 'clipping') {
     o.vertexCount = a.vertexCount;

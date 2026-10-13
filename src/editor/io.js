@@ -9,6 +9,7 @@ import { isSkeletonJson, readSkeletonJson, writeSkeletonJson } from '../core/int
 
 import { transform } from '../core/math.js';
 import { Pose } from '../core/pose.js';
+import { sequenceFrameName } from '../core/sequence.js';
 import { Skeleton, makeAttachment, makeSlot, uniqueName } from '../core/model.js';
 import { pack } from './pack.js';
 import { unzip, zip } from './zip.js';
@@ -141,7 +142,10 @@ async function openWorkfile(path, fs, images) {
 export function usedImages(doc) {
   const names = new Set();
   const visit = (a) => {
-    if (a.type === 'region' || a.type === 'mesh' || a.type === 'linkedmesh' || a.type === undefined) names.add(a.image);
+    if (a.type === 'region' || a.type === 'mesh' || a.type === 'linkedmesh' || a.type === undefined) {
+      if (a.sequence) for (let i = 0; i < (a.sequence.count ?? 1); i++) names.add(sequenceFrameName(a, i));
+      else names.add(a.image);
+    }
   };
   for (const s of doc.slots) s.attachments.forEach(visit);
   for (const skin of doc.skins) for (const e of skin.slots) e.attachments.forEach(visit);

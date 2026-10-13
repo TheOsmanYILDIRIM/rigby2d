@@ -161,3 +161,31 @@ test('physics: wind and gravity push the tip; mix 0 turns it off', () => {
   const off = physicsRig({ wind: 20, mix: 0 });
   assert.ok(close(simulate(off, new Pose(off), 2), 90));
 });
+
+test('sequence frames: hold, loop, once reverse and inherited delays', async () => {
+  const { sequenceFrameName, sequenceIndexAt } = await import('../src/core/sequence.js');
+  assert.equal(sequenceFrameName({ image: 'wing', sequence: { count: 9, digits: 2 } }, 0), 'wing01');
+  assert.equal(sequenceFrameName({ image: 'top-', sequence: { count: 7, start: 0 } }, 6), 'top-6');
+  const keys = [{ mode: 'loop', delay: 0.1 }, { time: 1, mode: 'onceReverse' }, { time: 2, index: 3 }];
+  assert.equal(sequenceIndexAt(keys, 0.25, 4), 2);
+  assert.equal(sequenceIndexAt(keys, 0.45, 4), 0); // looped around
+  assert.equal(sequenceIndexAt(keys, 1.15, 4), 2); // reverse from the last frame, delay kept from the first key
+  assert.equal(sequenceIndexAt(keys, 1.9, 4), 0); // stops at the first frame
+  assert.equal(sequenceIndexAt(keys, 5, 4), 3); // hold
+  assert.equal(sequenceIndexAt([{ time: 1 }], 0.5, 4), null);
+});
+
+test('slider constraint drives an animation from a bone rotation', () => {
+  const { skeleton: sk } = readSkeletonJson({
+    skeleton: { [V]: '4.3.0' },
+    bones: [{ name: 'root' }, { name: 'dial', parent: 'root', rotation: 90 }, { name: 'arm', parent: 'root' }],
+    slots: [],
+    constraints: [{ type: 'slider', name: 's', animation: 'raise', bone: 'dial', property: 'rotate', scale: 1 / 180, local: true }],
+    skins: [{ name: 'default', attachments: {} }],
+    animations: { raise: { bones: { arm: { rotate: [{ value: 0 }, { time: 1, value: 100 }] } } } },
+  });
+  // A 90 degree dial is half a second into the one-second animation.
+  assert.ok(close(rot(new Pose(sk), sk, 'arm'), 50));
+  sk.bones[1].setup.rotation = 180;
+  assert.ok(close(rot(new Pose(sk), sk, 'arm'), 100));
+});

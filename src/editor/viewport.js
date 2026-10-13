@@ -178,7 +178,7 @@ export class Viewport {
     const screen = this.screenAffine();
     for (const q of pose.quads(app.doc)) {
       const att = q.attachment;
-      const img = app.images.tinted(att.image, q.color);
+      const img = app.images.tinted(q.image, q.color);
       const pts = q.positions.map((p) => this.toScreen(p));
       const hasImage = img && img.width > 0 && img.height > 0;
       ctx.save();
@@ -205,7 +205,7 @@ export class Viewport {
     const app = this.app;
     const selected = selSlot(app.sel);
     for (const q of pose.quads(app.doc)) {
-      const img = app.images.get(q.attachment.image);
+      const img = app.images.get(q.image);
       const missing = !img || !img.width || !img.height;
       if (!missing && selected !== q.slot) continue;
       const pts = q.positions.map((p) => this.toScreen(p));
@@ -378,12 +378,12 @@ export class Viewport {
       const [lx, ly] = pose.attachmentWorld(app.doc, q.slot, att).inverse().apply(world);
       const { width: w, height: h } = att;
       if (Math.abs(lx) > w * 0.5 || Math.abs(ly) > h * 0.5) continue;
-      const img = app.images.get(att.image);
+      const img = app.images.get(q.image);
       let opaque = true;
       if (img) {
         const px = Math.min(Math.floor((lx / w + 0.5) * img.width), img.width - 1);
         const py = Math.min(Math.floor((0.5 - ly / h) * img.height), img.height - 1);
-        opaque = app.images.alphaAt(att.image, px, py) > 16;
+        opaque = app.images.alphaAt(q.image, px, py) > 16;
       }
       if (opaque) return { slot: q.slot };
     }

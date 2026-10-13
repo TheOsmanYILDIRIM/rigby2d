@@ -178,7 +178,7 @@ export class WebGLRenderer {
       const type = att ? (att.type ?? 'region') : null;
       if (att && type === 'clipping' && !skip?.(i, att)) {
         clipper = new Clipper(pose.worldVertices(sk, i, att));
-        clipEnd = att.end ?? null;
+        clipEnd = att.end === i ? null : (att.end ?? null); // ending at its own slot means: to the end
       } else if (att && (type === 'region' || type === 'mesh' || type === 'linkedmesh') && !skip?.(i, att)) {
         this.drawAttachment(sk, pose, i, att, type, lookup, tint, clipper, uv);
       }
@@ -189,7 +189,7 @@ export class WebGLRenderer {
   drawAttachment(sk, pose, i, att, type, lookup, tint, clipper, uv) {
     const source = type === 'region' ? att : sk.meshSource(i, att);
     if (!source) return;
-    const entry = lookup(imageName(type === 'mesh' ? source : att));
+    const entry = lookup(pose.imageOf(i, type === 'mesh' ? source : att));
     if (!entry) return;
     const c = pose.color[i];
     const ac = att.color ?? [1, 1, 1, 1];
@@ -357,11 +357,6 @@ export class WebGLRenderer {
     gl.deleteProgram(this.program);
     if (this.whiteTexture) gl.deleteTexture(this.whiteTexture.texture);
   }
-}
-
-/** The image an attachment draws (its path, or name), including a sequence's first frame. */
-function imageName(att) {
-  return att.image ?? att.name;
 }
 
 /**

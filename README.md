@@ -30,7 +30,7 @@
 - **Undo / redo** for every edit, with unsaved-change tracking.
 - **`.rigby` work file**: one self-contained file with the whole project and its images (like a `.blend`).
 - **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, constraints, events, deform and draw-order keys round-trip losslessly.
-- **Runtime included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, IK, transform, path and physics constraints, plus a reference WebGL renderer (`src/webgl`).
+- **Runtime included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, image sequences, IK, transform, path, physics and slider constraints, plus a reference WebGL renderer (`src/webgl`).
 - **Sample character**: *File ▸ New sample (robot)* gives you a rigged, animated character to explore.
 
 ## Getting started
@@ -116,11 +116,13 @@ blend mode for every visible region and mesh. `examples/webgl.html` is a small p
   parents come first, slots are in draw order, attachments live in skins, and animations hold bone,
   slot, deform, draw-order, IK and event timelines with keys relative to the setup pose. Images
   come from a `.atlas` texture atlas or loose files in the skeleton's `images` folder.
-- Binary `.skel` support covers format 4.3 skeletons with IK, transform, path and physics
-  constraints, skins, region, mesh, linked mesh, bounding box, path and clipping attachments, and
-  bone, slot, IK, transform, physics wind, deform, draw-order and event keys. Rigs using other
-  features (slider constraints, point attachments, image sequences, …) export to `.json` instead.
-- The runtime evaluates IK, transform, path and physics constraints. Physics uses Rigby2D's own
+- Binary `.skel` support covers format 4.3 skeletons with IK, transform, path, physics and
+  slider constraints, skins, region and mesh attachments with image sequences, linked mesh,
+  bounding box, path and clipping attachments, and bone, slot, IK, transform, path, physics,
+  slider, deform, sequence, draw-order and event keys. Rigs using other features (point
+  attachments, separate RGB/alpha color keys, …) export to `.json` instead.
+- The runtime evaluates IK, transform, path, physics and slider constraints and plays image
+  sequences (hold, once, loop, ping-pong and reverse modes). Physics uses Rigby2D's own
   spring model driven by the stored settings (inertia, strength, damping, mass, wind, gravity,
   limit, mix), so motion can differ slightly from other tools. It simulates while animations play
   (`AnimationState` passes the elapsed time); `pose.resetPhysics()` starts it over.

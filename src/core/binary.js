@@ -5,12 +5,14 @@
 // The layout was determined clean-room by comparing paired JSON and binary exports of the same
 // skeleton (black-box observation of exported data). Only encodings that were observed are
 // supported; anything else stops with a clear error instead of producing a guessed encoding.
-// Supported: header, bones, slots (including dark tint), IK, transform and path constraints,
-// skins (with skin bones and constraints), region, mesh, linked mesh, bounding box, path and
-// clipping attachments, events, and animations with bone, slot attachment/rgba/rgba2, IK,
-// transform, deform, draw order and event timelines.
-// Not yet supported: slider constraints, point attachments, sequences, rgb/alpha/rgb2 slot keys,
-// path constraint keys, physics keys other than wind, and stepped IK keys.
+// Supported: header, bones, slots (including dark tint), IK, transform, path, physics and slider
+// constraints, skins (with skin bones and constraints), region and mesh attachments with image
+// sequences, linked mesh, bounding box, path and clipping attachments (weighted or not, open or
+// closed paths), events, and animations with bone, slot attachment/rgba/rgba2, IK (including
+// stepped keys), transform, path position, physics wind, slider mix, deform, sequence, draw order
+// and event timelines.
+// Not yet supported: point attachments, rgb/alpha/rgb2 slot keys, other path/physics/slider key
+// types, ping-pong and loop-reverse sequence modes, and slider skin/additive/mix settings.
 //
 // Encoding: big-endian floats/ints; varints (7 bits per byte, low bits first; signed values are
 // zig-zag encoded); strings are a varint byte length + 1 (0 = null) then UTF-8; "ref" strings are
@@ -37,6 +39,16 @@ const CONSTRAINT_IK = 0;
 const CONSTRAINT_PATH = 1;
 const CONSTRAINT_TRANSFORM = 2;
 const CONSTRAINT_PHYSICS = 3;
+const CONSTRAINT_SLIDER = 4;
+/** Slider constraint flags (mix flags as for IK constraints). */
+const SLIDER_SKIN = 0x01;
+const SLIDER_LOOP = 0x02;
+const SLIDER_ADDITIVE = 0x04;
+const SLIDER_TIME = 0x08;
+const SLIDER_MIX_NOT_0 = 0x10;
+const SLIDER_MIX_NOT_1 = 0x20;
+const SLIDER_BONE = 0x40;
+const SLIDER_LOCAL = 0x80;
 /** Physics constraint flags: which bone properties are simulated, the velocity limit and mass. */
 const PHYSICS_PROPERTIES = [
   [0x02, 'x'],
@@ -86,14 +98,19 @@ const LINKED_TIMELINES = 0x80;
 const ATTACHMENT_PATH = 4;
 const ATTACHMENT_CLIPPING = 6;
 /** Path attachments: constant speed, weighted vertices. */
+const PATH_CLOSED = 0x10;
 const PATH_CONSTANT_SPEED = 0x20;
 const PATH_WEIGHTED = 0x40;
+/** Bounding box and clipping attachments: the vertices are weighted. */
+const VERTICES_WEIGHTED = 0x10;
 /** Colors exporters leave out of JSON when unchanged. */
 const DEFAULT_COLORS = { boundingbox: '60f000ff', path: 'ff7f00ff' };
 /** Region/mesh: the attachment has a name different from its key. */
 const FLAG_NAME = 0x08;
 const FLAG_PATH = 0x10;
 const FLAG_COLOR = 0x20;
+/** Regions and meshes: an image sequence follows the path and color. */
+const FLAG_SEQUENCE = 0x40;
 /** Regions: rotation is present. Meshes: vertices are weighted. */
 const FLAG_ROTATION = 0x80;
 const FLAG_WEIGHTED = 0x80;
@@ -101,11 +118,21 @@ const CURVE_LINEAR = 0;
 const CURVE_STEPPED = 1;
 const CURVE_BEZIER = 2;
 const DEFAULT_BONE_COLOR = '9b9b9bff';
-/** Animation sections between transform and deform keys: path keys (unknown encoding, must be
- * empty), physics keys, and one more unknown section (must be empty). */
+/** Animation sections between transform and deform keys: path, physics and slider keys. */
+const ANIMATION_SECTION_PATH = 0;
 const ANIMATION_SECTION_PHYSICS = 1;
+const ANIMATION_SECTION_SLIDER = 2;
+/** Slider key types by code (only mix keys have been observed so far), with their default value. */
+const SLIDER_KEY_TYPES = { 1: ['mix', 1] };
+const SLIDER_KEY_CODES = { mix: 1 };
+/** Path constraint key types by code (only position keys have been observed so far). */
+const PATH_KEY_TYPES = { 0: 'position' };
+const PATH_KEY_CODES = { position: 0 };
 const UNKNOWN_ANIMATION_SECTIONS = 3;
 const ATTACHMENT_DEFORM = 0;
+const ATTACHMENT_SEQUENCE = 1;
+/** Sequence key modes, by code. */
+const SEQUENCE_MODES = ['hold', 'once', 'loop', undefined, 'onceReverse'];
 const TRANSFORM_KEY_MIXES = TRANSFORM_MIXES.map(([key]) => key);
 
 class Unsupported extends Error {
@@ -319,6 +346,10 @@ export function readSkeletonBinary(bytes) {
       out.constraints.push(readPhysics(r, name, out));
       continue;
     }
+    if (type === CONSTRAINT_SLIDER) {
+      out.constraints.push(readSlider(r, name, out));
+      continue;
+    }
     const bones = [];
     const n = r.varint();
     for (let k = 0; k < n; k++) bones.push(out.bones[r.varint()].name);
@@ -395,6 +426,13 @@ export function readSkeletonBinary(bytes) {
     const name = r.string();
     out.animations[name] = readAnimation(r, out, eventNames);
   }
+  // Slider constraints name their animation after the animations: one index per slider.
+  const animationNames = Object.keys(out.animations);
+  for (const c of out.constraints ?? []) {
+    if (c.type !== 'slider') continue;
+    c.animation = animationNames[r.varint()];
+    if (c.animation === undefined) throw new Error('invalid animation index in .skel data');
+  }
   if (r.p !== bytes.length) throw new Error(`unexpected data after the animations (${bytes.length - r.p} bytes)`);
   return out;
 }
@@ -446,6 +484,51 @@ function readPath(r, name, bones, out) {
   return c;
 }
 
+/** Slider keys: per constraint, per type, curve keys. */
+function readSliderKeys(r, out, anim) {
+  const n = r.varint();
+  for (let i = 0; i < n; i++) {
+    const name = out.constraints[r.varint()]?.name;
+    if (name === undefined) throw new Error('invalid constraint index in .skel data');
+    const nTypes = r.varint();
+    for (let t = 0; t < nTypes; t++) {
+      const code = r.byte();
+      const type = SLIDER_KEY_TYPES[code];
+      if (!type) throw new Unsupported(`Slider key type ${code}`);
+      const [kind, def] = type;
+      const frames = r.varint();
+      r.varint(); // bezier count
+      ((anim.slider ??= {})[name] ??= {})[kind] = readCurveKeys(r, frames, (rr, key) => {
+        const v = rr.float();
+        if (v !== def) key.value = v;
+        return 1;
+      });
+    }
+  }
+}
+
+/** Path constraint keys: per constraint, per type, curve keys. */
+function readPathKeys(r, out, anim) {
+  const n = r.varint();
+  for (let i = 0; i < n; i++) {
+    const name = out.constraints[r.varint()]?.name;
+    if (name === undefined) throw new Error('invalid constraint index in .skel data');
+    const nTypes = r.varint();
+    for (let t = 0; t < nTypes; t++) {
+      const code = r.byte();
+      const kind = PATH_KEY_TYPES[code];
+      if (!kind) throw new Unsupported(`Path constraint key type ${code}`);
+      const frames = r.varint();
+      r.varint(); // bezier count
+      ((anim.path ??= {})[name] ??= {})[kind] = readCurveKeys(r, frames, (rr, key) => {
+        const v = rr.float();
+        if (v !== 0) key.value = v;
+        return 1;
+      });
+    }
+  }
+}
+
 /** Physics keys: per constraint (index + 1; 0 = every constraint), per type, curve keys. */
 function readPhysicsKeys(r, out, anim) {
   const n = r.varint();
@@ -467,6 +550,33 @@ function readPhysicsKeys(r, out, anim) {
       });
     }
   }
+}
+
+/** Slider constraint: flags, time and mix, then the driving bone and property. */
+function readSlider(r, name, out) {
+  const c = { type: 'slider', name };
+  const flags = r.byte();
+  if (flags & (SLIDER_SKIN | SLIDER_ADDITIVE | SLIDER_MIX_NOT_1) || !(flags & SLIDER_MIX_NOT_0)) {
+    throw new Unsupported(`Slider constraint options (flags 0x${flags.toString(16)}) on '${name}'`);
+  }
+  if (flags & SLIDER_SKIN) c.skin = true;
+  if (flags & SLIDER_LOOP) c.loop = true;
+  if (flags & SLIDER_ADDITIVE) c.additive = true;
+  c.animation = null; // set once the animations are read
+  if (flags & SLIDER_TIME) c.time = r.float();
+  if (!(flags & SLIDER_MIX_NOT_0)) c.mix = 0;
+  else if (flags & SLIDER_MIX_NOT_1) c.mix = r.float();
+  if (flags & SLIDER_BONE) {
+    c.bone = out.bones[r.varint()].name;
+    const property = TRANSFORM_PROPERTIES[r.byte()];
+    if (!property) throw new Unsupported(`Slider property on '${name}'`);
+    c.property = property;
+    // Two values not seen set yet (always 0 so far), then the scale.
+    if (r.float() !== 0 || r.float() !== 0) throw new Unsupported(`Slider property offsets on '${name}'`);
+    c.scale = r.float();
+    if (flags & SLIDER_LOCAL) c.local = true;
+  }
+  return c;
 }
 
 /** Physics constraint: bone, flags, simulated properties, then the simulation settings. */
@@ -587,19 +697,21 @@ function readSkin(r, out, nonessential) {
 function readAttachment(r, flags, key, nonessential) {
   const type = flags & 0x07;
   if (type === ATTACHMENT_BOUNDINGBOX || type === ATTACHMENT_CLIPPING) {
-    if (flags !== type) throw new Unsupported(`Attachment options (flags 0x${flags.toString(16)}) on '${key}'`);
+    if ((flags & ~VERTICES_WEIGHTED) !== type) throw new Unsupported(`Attachment options (flags 0x${flags.toString(16)}) on '${key}'`);
     const a = { type: type === ATTACHMENT_CLIPPING ? 'clipping' : 'boundingbox' };
     if (type === ATTACHMENT_CLIPPING) a.end = r.slotName(r.varint());
-    readVertices(r, a, false);
+    readVertices(r, a, !!(flags & VERTICES_WEIGHTED));
     if (nonessential) setColor(a, r.color());
     return a;
   }
   if (type === ATTACHMENT_PATH) {
-    if (flags !== (ATTACHMENT_PATH | PATH_CONSTANT_SPEED | PATH_WEIGHTED)) {
+    if (flags & ~(ATTACHMENT_PATH | PATH_CLOSED | PATH_CONSTANT_SPEED | PATH_WEIGHTED)) {
       throw new Unsupported(`Path attachment options (flags 0x${flags.toString(16)}) on '${key}'`);
     }
     const a = { type: 'path' };
-    readVertices(r, a, true);
+    if (flags & PATH_CLOSED) a.closed = true;
+    if (!(flags & PATH_CONSTANT_SPEED)) a.constantSpeed = false;
+    readVertices(r, a, !!(flags & PATH_WEIGHTED));
     a.lengths = [];
     for (let k = 0; k < a.vertexCount / 3; k++) a.lengths.push(r.float());
     if (nonessential) setColor(a, r.color());
@@ -620,13 +732,14 @@ function readAttachment(r, flags, key, nonessential) {
     }
     return a;
   }
-  const known = FLAG_NAME | FLAG_PATH | FLAG_COLOR | FLAG_WEIGHTED | 0x07;
+  const known = FLAG_NAME | FLAG_PATH | FLAG_COLOR | FLAG_SEQUENCE | FLAG_WEIGHTED | 0x07;
   if (flags & ~known) throw new Unsupported(`Attachment options (flags 0x${flags.toString(16)}) on '${key}'`);
   const a = {};
   if (flags & FLAG_NAME) a.name = r.ref();
   if (type === ATTACHMENT_REGION) {
     if (flags & FLAG_PATH) a.path = r.ref();
     if (flags & FLAG_COLOR) a.color = r.color();
+    if (flags & FLAG_SEQUENCE) a.sequence = readSequence(r);
     a.rotation = flags & FLAG_ROTATION ? r.float() : 0;
     a.x = r.float();
     a.y = r.float();
@@ -641,6 +754,7 @@ function readAttachment(r, flags, key, nonessential) {
   a.type = 'mesh';
   if (flags & FLAG_PATH) a.path = r.ref();
   if (flags & FLAG_COLOR) a.color = r.color();
+  if (flags & FLAG_SEQUENCE) a.sequence = readSequence(r);
   a.hull = r.varint();
   const count = r.varint();
   a.vertices = [];
@@ -658,8 +772,7 @@ function readAttachment(r, flags, key, nonessential) {
   for (let k = 0; k < count * 2; k++) a.uvs.push(r.float());
   a.triangles = [];
   for (let k = 0; k < 3 * (2 * count - a.hull - 2); k++) a.triangles.push(r.varint());
-  const sequence = r.byte();
-  if (sequence !== 0) throw new Unsupported(`Mesh sequences ('${key}')`);
+  if (r.byte() !== 0) throw new Unsupported(`Mesh options ('${key}')`); // always 0 so far
   if (nonessential) {
     const ne = r.varint();
     a.edges = [];
@@ -668,6 +781,58 @@ function readAttachment(r, flags, key, nonessential) {
     a.height = r.float();
   }
   return a;
+}
+
+/** Sequence keys: time, (frame index << 4 | mode) as a 32-bit integer, delay. JSON leaves out a delay equal to the previous key's. */
+function readSequenceKeys(r, frames) {
+  const keys = [];
+  let lastDelay = 0;
+  for (let f = 0; f < frames; f++) {
+    const key = {};
+    const time = r.float();
+    const modeAndIndex = r.uint();
+    const delay = r.float();
+    const mode = SEQUENCE_MODES[modeAndIndex & 0x0f];
+    if (!mode) throw new Unsupported(`Sequence mode ${modeAndIndex & 0x0f}`);
+    if (time) key.time = time;
+    if (mode !== 'hold') key.mode = mode;
+    if (modeAndIndex >> 4) key.index = modeAndIndex >> 4;
+    if (delay !== lastDelay) key.delay = delay;
+    lastDelay = delay;
+    keys.push(key);
+  }
+  return keys;
+}
+
+function writeSequenceKeys(w, keys) {
+  let delay = 0;
+  for (const k of keys) {
+    delay = k.delay ?? delay;
+    const mode = SEQUENCE_MODES.indexOf(k.mode ?? 'hold');
+    if (mode < 0) throw new Unsupported(`Sequence mode '${k.mode}'`);
+    w.float(k.time ?? 0);
+    w.uint(((k.index ?? 0) << 4) | mode);
+    w.float(delay);
+  }
+}
+
+/** Image sequence: frame count, number of the first image, digits, setup frame. */
+function readSequence(r) {
+  const seq = { count: r.varint() };
+  const start = r.varint();
+  const digits = r.varint();
+  const setup = r.varint();
+  if (start !== 1) seq.start = start;
+  if (digits !== 0) seq.digits = digits;
+  if (setup !== 0) seq.setup = setup;
+  return seq;
+}
+
+function writeSequence(w, seq) {
+  w.varint(seq.count ?? 1);
+  w.varint(seq.start ?? 1);
+  w.varint(seq.digits ?? 0);
+  w.varint(seq.setup ?? 0);
 }
 
 /** Reads keys of `n` values; the curve of a segment follows the segment's second key. */
@@ -791,7 +956,6 @@ function readAnimation(r, out, eventNames) {
     const keys = ((anim.ik ??= {})[constraint] = []);
     for (let f = 0; f < frames; f++) {
       const flags = r.byte();
-      if (flags & IK_KEY_STEPPED) throw new Unsupported('Stepped IK keys');
       const key = {};
       const time = r.float();
       if (time) key.time = time;
@@ -801,8 +965,10 @@ function readAnimation(r, out, eventNames) {
       if (!(flags & 0x08)) key.bendPositive = false;
       if (flags & 0x10) key.compress = true;
       if (flags & 0x20) key.stretch = true;
-      // The curve of the segment ending at this key: mix and softness, 4 floats each.
-      if (flags & IK_KEY_BEZIER) {
+      // The curve of the segment ending at this key: stepped, or mix and softness beziers.
+      if (flags & IK_KEY_STEPPED) {
+        if (f > 0) keys[f - 1].curve = 'stepped';
+      } else if (flags & IK_KEY_BEZIER) {
         const curve = [];
         for (let k = 0; k < 8; k++) curve.push(r.float());
         if (f > 0) keys[f - 1].curve = curve;
@@ -825,8 +991,9 @@ function readAnimation(r, out, eventNames) {
     });
   }
   for (let s = 0; s < UNKNOWN_ANIMATION_SECTIONS; s++) {
-    if (s === ANIMATION_SECTION_PHYSICS) readPhysicsKeys(r, out, anim);
-    else if (r.varint() !== 0) throw new Unsupported(s === 0 ? 'Path constraint keys' : 'An unknown animation section');
+    if (s === ANIMATION_SECTION_PATH) readPathKeys(r, out, anim);
+    else if (s === ANIMATION_SECTION_PHYSICS) readPhysicsKeys(r, out, anim);
+    else readSliderKeys(r, out, anim);
   }
   const nSkins = r.varint();
   for (let i = 0; i < nSkins; i++) {
@@ -839,10 +1006,16 @@ function readAnimation(r, out, eventNames) {
       for (let a = 0; a < nAttachments; a++) {
         const attachment = r.ref();
         const type = r.byte();
-        if (type !== ATTACHMENT_DEFORM) throw new Unsupported(`Attachment timeline type ${type}`);
         const frames = r.varint();
-        r.varint(); // bezier count
-        (((anim.attachments ??= {})[skin] ??= {})[slot] ??= {})[attachment] = { deform: readDeformKeys(r, frames) };
+        const timelines = ((((anim.attachments ??= {})[skin] ??= {})[slot] ??= {})[attachment] ??= {});
+        if (type === ATTACHMENT_DEFORM) {
+          r.varint(); // bezier count
+          timelines.deform = readDeformKeys(r, frames);
+        } else if (type === ATTACHMENT_SEQUENCE) {
+          timelines.sequence = readSequenceKeys(r, frames);
+        } else {
+          throw new Unsupported(`Attachment timeline type ${type}`);
+        }
       }
     }
   }
@@ -1056,6 +1229,7 @@ export function writeSkeletonBinary(json) {
     else if (c.type === 'path') writePath(w, c, boneIndex, slotIndex);
     else if (c.type === 'transform') writeTransform(w, c, boneIndex);
     else if (c.type === 'physics') writePhysics(w, c, boneIndex);
+    else if (c.type === 'slider') writeSlider(w, c, boneIndex);
     else throw new Unsupported(`'${c.type}' constraints`);
   });
 
@@ -1113,6 +1287,14 @@ export function writeSkeletonBinary(json) {
     w.string(name);
     writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, skinIndex, transformMapped, eventNames, events: json.events ?? {} });
   }
+  // Each slider constraint's animation, by index.
+  const animationNames = animations.map(([name]) => name);
+  for (const c of json.constraints ?? []) {
+    if (c.type !== 'slider') continue;
+    const index = animationNames.indexOf(c.animation);
+    if (index < 0) throw new Error(`unknown animation '${c.animation}' in slider '${c.name}'`);
+    w.varint(index);
+  }
 
   // Header, then the (possibly extended) string table, then the body.
   const table = new Writer([]);
@@ -1159,6 +1341,40 @@ function writePath(w, c, boneIndex, slotIndex) {
   w.float(c.mixRotate ?? 1);
   w.float(mixX);
   w.float(c.mixY ?? mixX);
+}
+
+function writeSlider(w, c, boneIndex) {
+  for (const key of Object.keys(c)) {
+    if (!['type', 'name', 'skin', 'loop', 'additive', 'animation', 'time', 'mix', 'bone', 'property', 'scale', 'local', 'order'].includes(key)) {
+      throw new Unsupported(`Slider constraint '${key}' setting ('${c.name}')`);
+    }
+  }
+  const mix = c.mix ?? 1;
+  if (c.skin || c.additive || mix !== 1) throw new Unsupported(`Slider skin, additive or mix settings ('${c.name}')`);
+  let flags = 0;
+  if (c.skin) flags |= SLIDER_SKIN;
+  if (c.loop) flags |= SLIDER_LOOP;
+  if (c.additive) flags |= SLIDER_ADDITIVE;
+  if (c.time) flags |= SLIDER_TIME;
+  if (mix !== 0) flags |= SLIDER_MIX_NOT_0;
+  if (mix !== 0 && mix !== 1) flags |= SLIDER_MIX_NOT_1;
+  if (c.bone !== undefined) flags |= SLIDER_BONE;
+  if (c.bone !== undefined && c.local) flags |= SLIDER_LOCAL;
+  w.byte(CONSTRAINT_SLIDER);
+  w.byte(flags);
+  if (flags & SLIDER_TIME) w.float(c.time);
+  if (flags & SLIDER_MIX_NOT_1) w.float(mix);
+  if (c.bone !== undefined) {
+    const bone = boneIndex.get(c.bone);
+    if (bone === undefined) throw new Error(`unknown bone '${c.bone}'`);
+    w.varint(bone);
+    const property = TRANSFORM_PROPERTIES.indexOf(c.property ?? 'rotate');
+    if (property < 0) throw new Unsupported(`Slider property '${c.property}' ('${c.name}')`);
+    w.byte(property);
+    w.float(0);
+    w.float(0);
+    w.float(c.scale ?? 1);
+  }
 }
 
 function writePhysics(w, c, boneIndex) {
@@ -1236,16 +1452,17 @@ function writeTransform(w, c, boneIndex) {
 function writeVertexAttachment(w, key, a, type, slotIndex) {
   const count = a.vertexCount ?? a.vertices.length / 2;
   const weighted = a.vertices.length > count * 2;
-  if (type === 'path') {
-    if (!weighted || a.closed || a.constantSpeed === false) throw new Unsupported(`Path attachments that are closed, not constant speed or unweighted ('${key}')`);
-  } else if (weighted) {
-    throw new Unsupported(`Weighted '${type}' attachments ('${key}')`);
-  }
   if (a.sequence !== undefined) throw new Unsupported(`Sequences ('${key}')`);
   w.ref(key);
-  if (type === 'boundingbox') w.byte(ATTACHMENT_BOUNDINGBOX);
-  else if (type === 'clipping') w.byte(ATTACHMENT_CLIPPING);
-  else w.byte(ATTACHMENT_PATH | PATH_CONSTANT_SPEED | PATH_WEIGHTED);
+  if (type === 'path') {
+    let flags = ATTACHMENT_PATH;
+    if (a.closed) flags |= PATH_CLOSED;
+    if (a.constantSpeed !== false) flags |= PATH_CONSTANT_SPEED;
+    if (weighted) flags |= PATH_WEIGHTED;
+    w.byte(flags);
+  } else {
+    w.byte((type === 'clipping' ? ATTACHMENT_CLIPPING : ATTACHMENT_BOUNDINGBOX) | (weighted ? VERTICES_WEIGHTED : 0));
+  }
   if (type === 'clipping') w.varint(slotIndex.get(a.end));
   w.varint(count);
   if (weighted) {
@@ -1293,15 +1510,15 @@ function writeAttachment(w, key, a, slotIndex, skinIndex, slot) {
   if (type === 'boundingbox' || type === 'clipping' || type === 'path') return writeVertexAttachment(w, key, a, type, slotIndex);
   if (type === 'linkedmesh') return writeLinkedMesh(w, key, a, slotIndex, skinIndex, slot);
   if (type !== 'region' && type !== 'mesh') throw new Unsupported(`'${type}' attachments ('${key}')`);
-  if (a.sequence !== undefined) throw new Unsupported(`Sequences ('${key}')`);
   const named = a.name !== undefined && a.name !== key;
   w.ref(key);
   if (type === 'region') {
     const rotation = a.rotation ?? 0;
-    w.byte((rotation ? FLAG_ROTATION : 0) | (named ? FLAG_NAME : 0) | (a.path !== undefined ? FLAG_PATH : 0) | (a.color !== undefined ? FLAG_COLOR : 0) | ATTACHMENT_REGION);
+    w.byte((rotation ? FLAG_ROTATION : 0) | (named ? FLAG_NAME : 0) | (a.path !== undefined ? FLAG_PATH : 0) | (a.color !== undefined ? FLAG_COLOR : 0) | (a.sequence ? FLAG_SEQUENCE : 0) | ATTACHMENT_REGION);
     if (named) w.ref(a.name);
     if (a.path !== undefined) w.ref(a.path);
     if (a.color !== undefined) w.color(a.color);
+    if (a.sequence) writeSequence(w, a.sequence);
     if (rotation) w.float(rotation);
     for (const [k, def] of [['x', 0], ['y', 0], ['scaleX', 1], ['scaleY', 1], ['width', 0], ['height', 0]]) w.float(a[k] ?? def);
     return;
@@ -1311,10 +1528,11 @@ function writeAttachment(w, key, a, slotIndex, skinIndex, slot) {
   if (a.triangles.length !== 3 * (2 * count - a.hull - 2)) {
     throw new Unsupported(`Meshes whose triangle count is not 2 x vertices - hull - 2 ('${key}')`);
   }
-  w.byte((weighted ? FLAG_WEIGHTED : 0) | (named ? FLAG_NAME : 0) | (a.path !== undefined ? FLAG_PATH : 0) | (a.color !== undefined ? FLAG_COLOR : 0) | ATTACHMENT_MESH);
+  w.byte((weighted ? FLAG_WEIGHTED : 0) | (named ? FLAG_NAME : 0) | (a.path !== undefined ? FLAG_PATH : 0) | (a.color !== undefined ? FLAG_COLOR : 0) | (a.sequence ? FLAG_SEQUENCE : 0) | ATTACHMENT_MESH);
   if (named) w.ref(a.name);
   if (a.path !== undefined) w.ref(a.path);
   if (a.color !== undefined) w.color(a.color);
+  if (a.sequence) writeSequence(w, a.sequence);
   w.varint(a.hull);
   w.varint(count);
   if (weighted) {
@@ -1340,7 +1558,7 @@ function writeAttachment(w, key, a, slotIndex, skinIndex, slot) {
   }
   for (const v of a.uvs) w.float(v);
   for (const t of a.triangles) w.varint(t);
-  w.byte(0); // no sequence
+  w.byte(0); // always 0 so far
   const edges = a.edges ?? [];
   w.varint(edges.length);
   for (const e of edges) w.varint(e);
@@ -1379,9 +1597,7 @@ function bezierCount(keys, n) {
 }
 
 function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, skinIndex, transformMapped, eventNames, events }) {
-  for (const key of ['deform', 'path']) {
-    if (anim[key] && Object.keys(anim[key]).length) throw new Unsupported(`'${key}' animation keys`);
-  }
+  if (anim.deform && Object.keys(anim.deform).length) throw new Unsupported(`'deform' animation keys`);
   const slots = Object.entries(anim.slots ?? {});
   const bones = Object.entries(anim.bones ?? {});
   const ik = Object.entries(anim.ik ?? {});
@@ -1390,8 +1606,10 @@ function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, skinIn
   for (const [skin, slots] of Object.entries(anim.attachments ?? {})) {
     for (const [slot, atts] of Object.entries(slots)) {
       for (const [attachment, timelines] of Object.entries(atts)) {
-        for (const kind of Object.keys(timelines)) if (kind !== 'deform') throw new Unsupported(`'${kind}' attachment keys`);
-        if (timelines.deform) deform.push({ skin, slot, attachment, keys: timelines.deform });
+        for (const [kind, keys] of Object.entries(timelines)) {
+          if (kind !== 'deform' && kind !== 'sequence') throw new Unsupported(`'${kind}' attachment keys`);
+          deform.push({ skin, slot, attachment, kind, keys });
+        }
       }
     }
   }
@@ -1468,8 +1686,8 @@ function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, skinIn
     w.varint(keys.length);
     w.varint(bezierCount(keys, 2));
     keys.forEach((k, f) => {
-      if (k.curve === 'stepped') throw new Unsupported('Stepped IK keys');
       const curve = f > 0 && Array.isArray(keys[f - 1].curve) ? keys[f - 1].curve : null;
+      const stepped = f > 0 && keys[f - 1].curve === 'stepped';
       const mix = k.mix ?? 1;
       let flags = 0;
       if (mix !== 0) flags |= 0x01;
@@ -1479,6 +1697,7 @@ function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, skinIn
       if (k.compress) flags |= 0x10;
       if (k.stretch) flags |= 0x20;
       if (curve) flags |= IK_KEY_BEZIER;
+      if (stepped) flags |= IK_KEY_STEPPED;
       w.byte(flags);
       w.float(k.time ?? 0);
       if ((flags & 0x03) === 0x03) w.float(mix);
@@ -1502,6 +1721,47 @@ function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, skinIn
     });
   }
   for (let s = 0; s < UNKNOWN_ANIMATION_SECTIONS; s++) {
+    if (s === ANIMATION_SECTION_PATH) {
+      const paths = Object.entries(anim.path ?? {});
+      w.varint(paths.length);
+      for (const [name, timelines] of paths) {
+        const index = constraintIndex.get(`path:${name}`);
+        if (index === undefined) throw new Error(`unknown path constraint '${name}'`);
+        w.varint(index);
+        const kinds = Object.entries(timelines);
+        w.varint(kinds.length);
+        for (const [kind, keys] of kinds) {
+          const code = PATH_KEY_CODES[kind];
+          if (code === undefined) throw new Unsupported(`Path constraint '${kind}' keys`);
+          w.byte(code);
+          w.varint(keys.length);
+          w.varint(bezierCount(keys, 1));
+          writeCurveKeys(w, keys, (k) => [k.value ?? 0]);
+        }
+      }
+      continue;
+    }
+    if (s === ANIMATION_SECTION_SLIDER) {
+      const sliders = Object.entries(anim.slider ?? {});
+      w.varint(sliders.length);
+      for (const [name, timelines] of sliders) {
+        const index = constraintIndex.get(`slider:${name}`);
+        if (index === undefined) throw new Error(`unknown slider constraint '${name}'`);
+        w.varint(index);
+        const kinds = Object.entries(timelines);
+        w.varint(kinds.length);
+        for (const [kind, keys] of kinds) {
+          const code = SLIDER_KEY_CODES[kind];
+          if (code === undefined) throw new Unsupported(`Slider '${kind}' keys`);
+          const def = SLIDER_KEY_TYPES[code][1];
+          w.byte(code);
+          w.varint(keys.length);
+          w.varint(bezierCount(keys, 1));
+          writeCurveKeys(w, keys, (k) => [k.value ?? def]);
+        }
+      }
+      continue;
+    }
     if (s !== ANIMATION_SECTION_PHYSICS) {
       w.varint(0);
       continue;
@@ -1524,7 +1784,7 @@ function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, skinIn
       }
     }
   }
-  // Deform keys grouped by skin, then slot.
+  // Deform and sequence keys grouped by skin, then slot.
   const bySkin = new Map();
   for (const d of deform) {
     if (!bySkin.has(d.skin)) bySkin.set(d.skin, new Map());
@@ -1543,6 +1803,12 @@ function writeAnimation(w, anim, { boneIndex, slotIndex, constraintIndex, skinIn
       w.varint(list.length);
       for (const d of list) {
         w.ref(d.attachment);
+        if (d.kind === 'sequence') {
+          w.byte(ATTACHMENT_SEQUENCE);
+          w.varint(d.keys.length);
+          writeSequenceKeys(w, d.keys);
+          continue;
+        }
         w.byte(ATTACHMENT_DEFORM);
         w.varint(d.keys.length);
         w.varint(bezierCount(d.keys, 1));
