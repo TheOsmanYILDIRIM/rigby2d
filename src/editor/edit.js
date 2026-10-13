@@ -8,6 +8,7 @@ import { toAffine, transform } from '../core/math.js';
 import { makeBone } from '../core/model.js';
 import { Pose } from '../core/pose.js';
 import { FPS, Mode, selBone, selSlot, snap } from './app.js';
+import { CHANNEL_FIELDS, TRANSFORM_CHANNELS as CHANNELS } from './channels.js';
 
 /** Makes sure an animation exists and is selected, creating one if needed. Returns its index. */
 export function ensureAnimation(app) {
@@ -24,29 +25,128 @@ function growDuration(anim, time) {
   if (time > anim.duration) anim.duration = time;
 }
 
-/** Sets a bone's local transform: the setup pose in setup mode, keys in animate mode. */
+const differs = (a, b, fields) => fields.some((f) => Math.abs((a[f] ?? 0) - (b[f] ?? 0)) > 1e-6);
+
+/** The key value of `channel` for local transform `t` (relative to the bone's setup pose). */
+function channelValue(channel, t, setup) {
+  switch (channel) {
+    case 'rotate':
+      return t.rotation - setup.rotation;
+    case 'translate':
+      return [t.x - setup.x, t.y - setup.y];
+    case 'scale':
+      return [ratio(t.scale_x, setup.scale_x), ratio(t.scale_y, setup.scale_y)];
+    default:
+      return [t.shear_x - setup.shear_x, t.shear_y - setup.shear_y];
+  }
+}
+
+/** Writes keys for `channels` of `bone` at the current time from local transform `t`. */
+function writeKeys(app, bone, t, channels) {
+  const time = snap(app.time);
+  const anim = app.doc.animations[ensureAnimation(app)];
+  const tl = anim.boneTimelineMut(bone);
+  const setup = app.doc.bones[bone].setup;
+  for (const ch of channels) setKey(tl[ch], time, channelValue(ch, t, setup), LINEAR);
+  growDuration(anim, time);
+  const pending = app.pending.get(bone);
+  if (pending) {
+    for (const ch of channels) delete pending[ch];
+    if (!Object.keys(pending).length) app.pending.delete(bone);
+  }
+}
+
+/**
+ * Sets a bone's local transform. Setup mode changes the setup pose. Animate mode writes keys when
+ * auto key is on; otherwise the change is kept as an unkeyed change until it is keyed.
+ */
 export function setBoneLocal(app, bone, t) {
   if (app.mode === Mode.Setup) {
     app.doc.bones[bone].setup = t;
   } else {
     const current = app.pose().local[bone];
-    const setup = app.doc.bones[bone].setup;
-    const time = snap(app.time);
-    const anim = app.doc.animations[ensureAnimation(app)];
-    const tl = anim.boneTimelineMut(bone);
-    if (Math.abs(t.rotation - current.rotation) > 1e-6) setKey(tl.rotate, time, t.rotation - setup.rotation, LINEAR);
-    if (Math.abs(t.x - current.x) > 1e-6 || Math.abs(t.y - current.y) > 1e-6) {
-      setKey(tl.translate, time, [t.x - setup.x, t.y - setup.y], LINEAR);
+    const changed = CHANNELS.filter((ch) => differs(t, current, CHANNEL_FIELDS[ch]));
+    if (app.autoKey) {
+      writeKeys(app, bone, t, changed);
+    } else if (changed.length) {
+      const pending = app.pending.get(bone) ?? {};
+      for (const ch of changed) pending[ch] = Object.fromEntries(CHANNEL_FIELDS[ch].map((f) => [f, t[f]]));
+      app.pending.set(bone, pending);
     }
-    if (Math.abs(t.scale_x - current.scale_x) > 1e-6 || Math.abs(t.scale_y - current.scale_y) > 1e-6) {
-      setKey(tl.scale, time, [ratio(t.scale_x, setup.scale_x), ratio(t.scale_y, setup.scale_y)], LINEAR);
-    }
-    if (Math.abs(t.shear_x - current.shear_x) > 1e-6 || Math.abs(t.shear_y - current.shear_y) > 1e-6) {
-      setKey(tl.shear, time, [t.shear_x - setup.shear_x, t.shear_y - setup.shear_y], LINEAR);
-    }
-    growDuration(anim, time);
   }
   app.changed();
+}
+
+/** Key button state of a bone channel: 'changed' (unkeyed change), 'keyed' (key at this frame) or 'none'. */
+export function channelState(app, bone, channel) {
+  if (app.pending.get(bone)?.[channel]) return 'changed';
+  return isKeyed(app, bone, channel) ? 'keyed' : 'none';
+}
+
+/** Keys `channels` of `bones` with their current values. */
+export function keyChannels(app, bones, channels) {
+  if (app.mode !== Mode.Animate) {
+    app.setStatus('Switch to Animate mode to set keys');
+    return;
+  }
+  if (!bones.length) {
+    app.setStatus('Select bones to key');
+    return;
+  }
+  const pose = app.pose();
+  for (const b of bones) writeKeys(app, b, pose.local[b], channels);
+  app.setStatus(`Keyed ${channels.join(', ')} of ${bones.length === 1 ? app.doc.bones[bones[0]].name : `${bones.length} bones`} at frame ${Math.round(snap(app.time) * FPS)}`);
+}
+
+/** Keys every unkeyed change (K). */
+export function keyChanged(app) {
+  if (!app.pending.size) {
+    app.setStatus(app.mode === Mode.Animate ? 'No unkeyed changes to key' : 'Switch to Animate mode to set keys');
+    return;
+  }
+  const pose = app.pose();
+  let count = 0;
+  for (const [bone, channels] of [...app.pending]) {
+    const list = Object.keys(channels);
+    writeKeys(app, bone, pose.local[bone], list);
+    count += list.length;
+  }
+  app.setStatus(`Keyed ${count} changed propert${count === 1 ? 'y' : 'ies'} at frame ${Math.round(snap(app.time) * FPS)}`);
+}
+
+/** Keys the property of the current tool for the selection (L). */
+export function keyTool(app) {
+  const channels = { rotate: ['rotate'], translate: ['translate'], scale: ['scale'], shear: ['shear'], pose: ['rotate', 'translate'] }[app.tool];
+  if (!channels) {
+    app.setStatus('The current tool has no keyable property');
+    return;
+  }
+  keyChannels(app, app.selectedBones(), channels);
+}
+
+/** Keys rotate, translate, scale and shear of the selection (Ctrl+L). */
+export function keyTransforms(app) {
+  keyChannels(app, app.selectedBones(), CHANNELS);
+}
+
+/** Keys every bone timeline shown in the dopesheet, plus unkeyed changes (Ctrl+Shift+L). */
+export function keyShown(app) {
+  const anim = app.currentAnimation();
+  if (app.mode !== Mode.Animate || !anim) {
+    app.setStatus('Switch to Animate mode to set keys');
+    return;
+  }
+  const pose = app.pose();
+  let count = 0;
+  for (const tl of anim.bones) {
+    const channels = CHANNELS.filter((ch) => tl[ch].length);
+    writeKeys(app, tl.bone, pose.local[tl.bone], channels);
+    count += channels.length;
+  }
+  if (app.pending.size) {
+    for (const [bone, channels] of [...app.pending]) writeKeys(app, bone, pose.local[bone], Object.keys(channels));
+  }
+  app.setStatus(`Keyed ${count} timeline${count === 1 ? '' : 's'} at frame ${Math.round(snap(app.time) * FPS)}`);
 }
 
 /** Shows an attachment (or none) in a slot: setup value or a stepped key. */
@@ -62,49 +162,33 @@ export function setSlotAttachment(app, slot, name) {
   app.changed();
 }
 
-/** Keys every channel of the selected bone (or the selected slot's attachment) at the current time. */
+/** Keys everything about the selection: all transforms of selected bones, or a slot's attachment. */
 export function keySelection(app) {
   if (app.mode !== Mode.Animate) {
     app.setStatus('Switch to Animate mode (Tab) to set keys');
     return;
   }
-  const pose = app.pose();
-  const time = snap(app.time);
-  const b = selBone(app.sel);
   const s = selSlot(app.sel);
-  if (b !== null) {
-    const cur = pose.local[b];
-    const setup = app.doc.bones[b].setup;
-    const anim = app.doc.animations[ensureAnimation(app)];
-    const tl = anim.boneTimelineMut(b);
-    setKey(tl.rotate, time, cur.rotation - setup.rotation, LINEAR);
-    setKey(tl.translate, time, [cur.x - setup.x, cur.y - setup.y], LINEAR);
-    setKey(tl.scale, time, [ratio(cur.scale_x, setup.scale_x), ratio(cur.scale_y, setup.scale_y)], LINEAR);
-    const shear = [cur.shear_x - setup.shear_x, cur.shear_y - setup.shear_y];
-    if (tl.shear.length || shear[0] || shear[1]) setKey(tl.shear, time, shear, LINEAR);
-    growDuration(anim, time);
-    app.setStatus(`Keyed ${app.doc.bones[b].name} at frame ${Math.round(time * FPS)}`);
-  } else if (s !== null) {
-    setSlotAttachment(app, s, pose.attachment[s]);
-  } else {
-    app.setStatus('Select a bone or slot to key');
-  }
+  if (s !== null) setSlotAttachment(app, s, app.pose().attachment[s]);
+  else keyTransforms(app);
 }
 
 export function deleteSelection(app) {
-  const b = selBone(app.sel);
+  const bones = app.selectedBones();
   const s = selSlot(app.sel);
-  if (b === 0) {
-    app.setStatus('The root bone cannot be deleted');
-  } else if (b !== null) {
-    app.doc.removeBone(b);
-    app.sel = null;
+  if (bones.length) {
+    // Delete by name: removing a bone also removes its descendants and shifts indices.
+    const names = bones.filter((b) => b !== 0).map((b) => app.doc.bones[b].name);
+    for (const name of names) {
+      const i = app.doc.boneIndex(name);
+      if (i !== null) app.doc.removeBone(i);
+    }
+    app.pending.clear();
+    if (bones.includes(0)) app.setStatus('The root bone cannot be deleted');
   } else if (s !== null) {
     app.doc.removeSlot(s);
-    app.sel = null;
   }
-  app.selectedKey = null;
-  app.changed();
+  app.deselect();
 }
 
 /** Adds a child bone under `parent` pointing along the parent's direction. */
@@ -113,8 +197,7 @@ export function addChildBone(app, parent) {
   const name = app.doc.uniqueBoneName('bone');
   const setup = transform(app.doc.bones[parent].length, 0, 0);
   const i = app.doc.addBone(makeBone(name, parent, setup, len * 0.8));
-  app.sel = { bone: i };
-  app.changed();
+  app.select({ bone: i });
   return i;
 }
 
@@ -129,7 +212,7 @@ export function reparentBoneKeepWorld(app, bone, newParent) {
   const name = app.doc.bones[bone].name;
   app.doc.reparentBone(bone, newParent);
   const i = app.doc.boneIndex(name);
-  if (i !== null) app.sel = { bone: i };
+  if (i !== null) app.select({ bone: i });
   app.changed();
 }
 

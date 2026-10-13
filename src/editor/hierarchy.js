@@ -13,15 +13,13 @@ export function render(app, el) {
   addBtn.onclick = () => edit.addChildBone(app, selBone(app.sel) ?? 0);
 
   const rows = [];
-  const select = (sel) => () => {
-    app.sel = sel;
-    app.changed();
-  };
+  const selected = new Set(app.selectedBones());
+  const select = (sel) => (e) => app.select(sel, e.ctrlKey || e.metaKey);
   const tree = (bone, depth) => {
     rows.push(
       h(
         'div',
-        { class: `row${selBone(app.sel) === bone ? ' selected' : ''}`, style: { paddingLeft: `${depth * 14 + 4}px` }, onclick: select({ bone }) },
+        { class: `row${selected.has(bone) ? ' selected' : ''}`, style: { paddingLeft: `${depth * 14 + 4}px` }, onclick: select({ bone }) },
         `🦴 ${app.doc.bones[bone].name}`,
       ),
     );

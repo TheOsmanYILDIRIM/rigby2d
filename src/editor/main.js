@@ -6,6 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import './style.css';
 import { App, Mode, TOOLS } from './app.js';
+import { ACTIONS, PRESETS, REPEATING, actionFor, actionsFor, comboOf, shortcutLabel } from './keymap.js';
 import { memoryFs } from './platform.js';
 import * as edit from './edit.js';
 import * as hierarchy from './hierarchy.js';
@@ -19,6 +20,15 @@ const inTauri = '__TAURI_INTERNALS__' in window;
 const $ = (sel) => document.querySelector(sel);
 
 // ---- menu bar ---------------------------------------------------------------------------------
+
+const sc = (action) => shortcutLabel(app.keymap, action);
+
+function zoomActual() {
+  app.view.panX *= 1 / app.view.zoom;
+  app.view.panY *= 1 / app.view.zoom;
+  app.view.zoom = 1;
+  app.changed();
+}
 
 function menus() {
   return {
@@ -41,10 +51,16 @@ function menus() {
       { label: 'Quit', action: () => (inTauri ? getCurrentWindow().close() : window.close()) },
     ],
     Edit: [
-      { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !app.history.undo.length, action: () => app.undo() },
-      { label: 'Redo', shortcut: 'Ctrl+Y', disabled: !app.history.redo.length, action: () => app.redo() },
+      { label: 'Undo', shortcut: sc('edit.undo'), disabled: !app.history.undo.length, action: () => app.undo() },
+      { label: 'Redo', shortcut: sc('edit.redo'), disabled: !app.history.redo.length, action: () => app.redo() },
       'separator',
-      { label: 'Delete selection', shortcut: 'Del', action: () => edit.deleteSelection(app) },
+      { label: 'Key changed properties', shortcut: sc('key.changed'), action: () => edit.keyChanged(app) },
+      { label: "Key the current tool's property", shortcut: sc('key.tool'), action: () => edit.keyTool(app) },
+      { label: 'Key all transforms of the selection', shortcut: sc('key.transforms'), action: () => edit.keyTransforms(app) },
+      { label: 'Key everything shown', shortcut: sc('key.shown'), action: () => edit.keyShown(app) },
+      'separator',
+      { label: 'Deselect', shortcut: sc('select.none'), action: () => app.deselect() },
+      { label: 'Delete selection', shortcut: sc('edit.delete'), action: () => edit.deleteSelection(app) },
     ],
     View: [
       h(
@@ -60,18 +76,32 @@ function menus() {
         }),
         ' Show bones',
       ),
-      { label: 'Frame all', shortcut: 'F', action: () => (app.frameRequest = true) },
+      { label: 'Fit the skeleton in view', shortcut: sc('view.fit'), action: () => (app.frameRequest = true) },
+      { label: 'Zoom to 100%', shortcut: sc('view.actual'), action: () => zoomActual() },
+      'separator',
+      ...Object.entries(PRESETS).map(([id, p]) => ({
+        label: `${app.keymap === id ? '● ' : '○ '}Shortcuts: ${p.label}`,
+        action: () => {
+          app.setKeymap(id);
+          app.setStatus(`Keyboard shortcuts: ${p.label}`);
+        },
+      })),
     ],
     Help: [
       h(
         'div',
         { class: 'help' },
         h('p', null, 'Rigby2D: open-source 2D skeletal animation (MIT).'),
+        h('p', { class: 'weak' }, `Shortcuts: ${PRESETS[app.keymap].label} (change in View)`),
         h('hr'),
-        h('p', null, 'R/G/S/B: rotate, move, scale, create bone'),
-        h('p', null, 'Tab: setup ↔ animate   Space: play/pause'),
-        h('p', null, 'K: key selection   ←/→: step frame   F: frame all'),
-        h('p', null, 'Middle/right drag: pan   Wheel: zoom'),
+        h(
+          'table',
+          { class: 'keys' },
+          ACTIONS.filter(([id]) => sc(id)).map(([id, label]) => h('tr', null, h('td', null, sc(id)), h('td', null, label))),
+        ),
+        h('hr'),
+        h('p', null, 'Click: select · Ctrl+click: add/remove · drag empty space: box select'),
+        h('p', null, 'Right or middle drag: pan · Wheel: zoom'),
       ),
     ],
   };
@@ -101,8 +131,15 @@ function buildMenuBar() {
     return btn;
   });
   const tools = h('span', { class: 'tools' });
-  const mode = h('button', { class: 'mode', title: 'Toggle setup / animate mode (Tab)', onclick: () => app.toggleMode() });
-  bar.replaceChildren(...titles, h('span', { class: 'vsep' }), tools, h('span', { class: 'vsep' }), mode);
+  const mode = h('button', { class: 'mode', onclick: () => app.toggleMode() });
+  const autoKey = h('button', {
+    class: 'autokey',
+    onclick: () => {
+      app.autoKey = !app.autoKey;
+      app.changed();
+    },
+  });
+  bar.replaceChildren(...titles, h('span', { class: 'vsep' }), tools, h('span', { class: 'vsep' }), mode, autoKey);
   return () => {
     tools.replaceChildren(
       ...TOOLS.map((t) =>
@@ -110,7 +147,7 @@ function buildMenuBar() {
           'button',
           {
             class: `tool${app.tool === t.id ? ' active' : ''}`,
-            title: `Shortcut: ${t.key}`,
+            title: sc(`tool.${t.id}`) ? `Shortcut: ${sc(`tool.${t.id}`)}` : t.label,
             onclick: () => {
               app.tool = t.id;
               app.changed();
@@ -122,6 +159,11 @@ function buildMenuBar() {
     );
     mode.textContent = app.mode === Mode.Setup ? 'SETUP' : 'ANIMATE';
     mode.className = `mode ${app.mode}`;
+    mode.title = `Switch Setup / Animate${sc('mode.toggle') ? ` (${sc('mode.toggle')})` : ''}`;
+    autoKey.textContent = app.autoKey ? '● Auto key' : '○ Auto key';
+    autoKey.className = `autokey${app.autoKey ? ' on' : ''}`;
+    autoKey.hidden = app.mode !== Mode.Animate;
+    autoKey.title = 'Auto key: when on, every change in Animate mode sets keys right away';
   };
 }
 
@@ -130,46 +172,77 @@ function buildMenuBar() {
 const isTyping = (el) =>
   el && ((el.tagName === 'INPUT' && !el.readOnly && !['checkbox', 'radio', 'color'].includes(el.type)) || el.tagName === 'TEXTAREA');
 
-window.addEventListener('keydown', (e) => {
-  const cmd = e.ctrlKey || e.metaKey;
-  const key = e.key.toLowerCase();
-  if (cmd) {
-    const actions = {
-      z: () => (e.shiftKey ? app.redo() : app.undo()),
-      y: () => app.redo(),
-      s: () => app.save(e.shiftKey),
-      o: () => app.openDialog(),
-      e: () => app.exportSkeletonJson(app.saveVersion()),
-    };
-    if (actions[key] && !(isTyping(e.target) && (key === 'z' || key === 'y'))) {
-      e.preventDefault();
-      closeMenu();
-      actions[key]();
-    }
-    return;
-  }
-  if (isTyping(e.target) || e.altKey) return;
-  if (e.target.tagName === 'SELECT' && !['Tab', 'Escape'].includes(e.key)) return;
-  const tool = { r: 'rotate', g: 'move', s: 'scale', b: 'create' }[key];
-  const handlers = {
-    Tab: () => app.toggleMode(),
-    ' ': () => app.togglePlay(),
-    k: () => edit.keySelection(app),
-    f: () => (app.frameRequest = true),
-    Delete: () => (app.selectedKey ? deleteSelectedKey(app) : edit.deleteSelection(app)),
-    ArrowLeft: () => app.stepFrame(-1),
-    ArrowRight: () => app.stepFrame(1),
-    Escape: () => closeMenu(),
+/** Runs a keymap action. */
+function run(action) {
+  const setTool = (tool) => () => {
+    app.tool = tool;
+    app.changed();
   };
-  handlers.Backspace = handlers.Delete;
-  const handler = tool && !e.shiftKey ? () => ((app.tool = tool), app.changed()) : (handlers[e.key] ?? handlers[key]);
-  if (handler && !e.repeat) {
+  const handlers = {
+    'tool.pose': setTool('pose'),
+    'tool.create': setTool('create'),
+    'tool.rotate': setTool('rotate'),
+    'tool.translate': setTool('translate'),
+    'tool.scale': setTool('scale'),
+    'tool.shear': setTool('shear'),
+    'mode.toggle': () => app.toggleMode(),
+    'play.forward': () => app.togglePlay(1),
+    'play.backward': () => app.togglePlay(-1),
+    'time.start': () => app.setTime(0),
+    'time.end': () => app.jumpToEnd(),
+    'key.next': () => app.stepKey(1),
+    'key.previous': () => app.stepKey(-1),
+    'frame.next': () => app.stepFrame(1),
+    'frame.previous': () => app.stepFrame(-1),
+    'frame.next10': () => app.stepFrame(10),
+    'frame.previous10': () => app.stepFrame(-10),
+    'loop.toggle': () => {
+      app.looping = !app.looping;
+      app.setStatus(`Looping ${app.looping ? 'on' : 'off'}`);
+    },
+    'key.changed': () => edit.keyChanged(app),
+    'key.tool': () => edit.keyTool(app),
+    'key.transforms': () => edit.keySelection(app),
+    'key.shown': () => edit.keyShown(app),
+    'autokey.toggle': () => {
+      app.autoKey = !app.autoKey;
+      app.changed();
+    },
+    'select.none': () => app.deselect(),
+    'view.fit': () => (app.frameRequest = true),
+    'view.actual': () => zoomActual(),
+    'edit.delete': () => (app.selectedKey ? deleteSelectedKey(app) : edit.deleteSelection(app)),
+    'edit.undo': () => app.undo(),
+    'edit.redo': () => app.redo(),
+    'file.open': () => app.openDialog(),
+    'file.save': () => app.save(false),
+    'file.saveAs': () => app.save(true),
+    'file.export': () => app.exportSkeletonJson(app.saveVersion()),
+    'menu.close': () => closeMenu(),
+  };
+  handlers[action]?.();
+}
+
+window.addEventListener('keydown', (e) => {
+  const combo = comboOf(e);
+  if (!combo) return;
+  let action = actionFor(app.keymap, combo);
+  if (!action) return;
+  const typing = isTyping(e.target);
+  // While typing, only file shortcuts work (text fields keep their own undo, delete, etc.).
+  if (typing && !action.startsWith('file.')) return;
+  if (e.target.tagName === 'SELECT' && !['mode.toggle', 'menu.close'].includes(action) && !action.startsWith('file.')) return;
+  // A key bound to "close menus" closes an open menu; otherwise it runs its other action (deselect).
+  if (action === 'menu.close') {
     e.preventDefault();
-    handler();
-  } else if (handler && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-    e.preventDefault();
-    handler();
+    if (isMenuOpen()) return closeMenu();
+    action = actionsFor(app.keymap, combo).find((a) => a !== 'menu.close');
+    if (!action) return;
   }
+  if (e.repeat && !REPEATING.has(action)) return;
+  e.preventDefault();
+  closeMenu();
+  run(action);
 });
 
 // ---- panel splitters --------------------------------------------------------------------------
@@ -225,11 +298,19 @@ function editingIn(el) {
 let lastFrame = performance.now();
 let lastTitle = '';
 
+let lastTime = 0;
+let lastAnim = null;
+
 function frame(now) {
   const dt = (now - lastFrame) / 1000;
   lastFrame = now;
   app.advancePlayback(dt);
   app.sanitize();
+  if (app.time !== lastTime || app.anim !== lastAnim) {
+    if (!app.playing) app.discardPending(app.anim !== lastAnim ? 'animation changed' : 'time changed');
+    lastTime = app.time;
+    lastAnim = app.anim;
+  }
 
   viewport.draw();
   dopesheet.draw();

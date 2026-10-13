@@ -2,6 +2,7 @@
 // Editor state, history and document commands.
 
 import { Pose } from '../core/pose.js';
+import { loadPreset, savePreset } from './keymap.js';
 import { Skeleton } from '../core/model.js';
 import { remEuclid } from '../core/state.js';
 import * as edit from './edit.js';
@@ -16,11 +17,14 @@ export const FPS = 30;
 export const Mode = Object.freeze({ Setup: 'setup', Animate: 'animate' });
 
 export const TOOLS = [
-  { id: 'rotate', label: '⟳ Rotate', key: 'R' },
-  { id: 'move', label: '✥ Move', key: 'G' },
-  { id: 'scale', label: '⤢ Scale', key: 'S' },
-  { id: 'create', label: '🦴 Create bone', key: 'B' },
+  { id: 'pose', label: '✋ Pose' },
+  { id: 'create', label: '🦴 Create' },
+  { id: 'rotate', label: '⟳ Rotate' },
+  { id: 'translate', label: '✥ Translate' },
+  { id: 'scale', label: '⤢ Scale' },
+  { id: 'shear', label: '⧄ Shear' },
 ];
+
 
 /** Snaps a time to the frame grid. */
 export function snap(t) {
@@ -53,8 +57,18 @@ export class App {
     this.saveTarget = null;
     this.images = new Images();
     this.sel = null;
+    /** Additionally selected bones (the primary selection is `sel`). */
+    this.multi = new Set();
     this.mode = Mode.Setup;
     this.tool = 'rotate';
+    /** Keyboard shortcut preset id. */
+    this.keymap = loadPreset();
+    /** Animate mode: key every edit immediately (on), or keep edits as unkeyed changes (off). */
+    this.autoKey = false;
+    /** Unkeyed changes in animate mode: bone index -> { channel -> partial local transform }. */
+    this.pending = new Map();
+    /** Playback direction: 1 forward, -1 backward. */
+    this.playDirection = 1;
     /** Screen offset of the world origin from the viewport center, and zoom. */
     this.view = { panX: 0, panY: 200, zoom: 1 };
     this.anim = null;
@@ -90,6 +104,8 @@ export class App {
     this.doc = doc;
     this.path = path;
     this.sel = null;
+    this.multi.clear();
+    this.pending.clear();
     this.selectedKey = null;
     this.time = 0;
     this.playing = false;
@@ -113,9 +129,59 @@ export class App {
     const anim = this.currentAnimation();
     if (this.mode === Mode.Animate && anim) {
       pose.apply(this.doc, anim, this.time, 1);
+      // Unkeyed changes override the animated values until they are keyed or discarded.
+      for (const [bone, channels] of this.pending) {
+        if (!pose.local[bone]) continue;
+        for (const values of Object.values(channels)) Object.assign(pose.local[bone], values);
+      }
       pose.updateWorld(this.doc);
     }
     return pose;
+  }
+
+  /** Bones that tools and keying act on: the primary selection plus any additional ones. */
+  selectedBones() {
+    const out = [...this.multi].filter((b) => b < this.doc.bones.length);
+    const primary = selBone(this.sel);
+    if (primary !== null && !out.includes(primary)) out.unshift(primary);
+    return out;
+  }
+
+  /** Selects one item (bone or slot), or toggles a bone in the selection when `add` is true. */
+  select(item, add = false) {
+    const bone = selBone(item);
+    if (add && bone !== null) {
+      const bones = new Set(this.selectedBones());
+      if (bones.has(bone)) bones.delete(bone);
+      else bones.add(bone);
+      this.multi = bones;
+      this.sel = bones.size ? { bone: bones.has(bone) ? bone : [...bones][0] } : null;
+    } else {
+      this.sel = item;
+      this.multi.clear();
+    }
+    this.changed();
+  }
+
+  deselect() {
+    this.sel = null;
+    this.multi.clear();
+    this.selectedKey = null;
+    this.changed();
+  }
+
+  /** Drops unkeyed changes (they only live until the time, animation or mode changes). */
+  discardPending(reason = '') {
+    if (!this.pending.size) return;
+    this.pending.clear();
+    if (reason) this.status = `Unkeyed changes discarded (${reason}). Key them with K or turn on Auto key.`;
+    this.changed();
+  }
+
+  setKeymap(id) {
+    this.keymap = id;
+    savePreset(id);
+    this.changed();
   }
 
   undo() {
@@ -306,6 +372,7 @@ export class App {
   }
 
   toggleMode() {
+    this.discardPending('mode changed');
     if (this.mode === Mode.Setup) {
       edit.ensureAnimation(this);
       this.mode = Mode.Animate;
@@ -316,18 +383,64 @@ export class App {
     this.changed();
   }
 
-  togglePlay() {
-    this.playing = !this.playing && this.anim !== null;
-    if (this.playing) this.mode = Mode.Animate;
+  /** Starts playing in `direction` (1 forward, -1 backward), or stops if already playing that way. */
+  togglePlay(direction = 1) {
+    const stop = this.playing && this.playDirection === direction;
+    this.playing = !stop && this.anim !== null;
+    this.playDirection = direction;
+    if (this.playing) {
+      this.discardPending('playback started');
+      this.mode = Mode.Animate;
+    }
     this.changed();
   }
 
   stepFrame(dir) {
     this.playing = false;
+    this.discardPending('time changed');
     const dur = this.currentAnimation()?.duration ?? 0;
     this.time = Math.max(0, Math.round(this.time * FPS) + dir) / FPS;
     if (dur > 0) this.time = Math.min(this.time, dur);
     this.changed();
+  }
+
+  setTime(t) {
+    this.playing = false;
+    if (Math.abs(t - this.time) > 1e-9) this.discardPending('time changed');
+    this.time = Math.max(0, t);
+    this.changed();
+  }
+
+  /** Key times of the selected bones' timelines (all timelines when nothing is selected). */
+  keyTimes() {
+    const anim = this.currentAnimation();
+    if (!anim) return [];
+    const bones = new Set(this.selectedBones());
+    const times = new Set();
+    for (const tl of anim.bones) {
+      if (bones.size && !bones.has(tl.bone)) continue;
+      for (const [k, keys] of Object.entries(tl)) if (Array.isArray(keys)) for (const key of keys) times.add(snap(key.time));
+    }
+    if (!bones.size) {
+      for (const tl of anim.slots) for (const keys of Object.values(tl)) if (Array.isArray(keys)) for (const key of keys) times.add(snap(key.time));
+      for (const t of anim.deform) for (const key of t.keys) times.add(snap(key.time));
+      for (const t of anim.ik) for (const key of t.keys) times.add(snap(key.time));
+      for (const key of [...anim.drawOrder, ...anim.events]) times.add(snap(key.time));
+    }
+    return [...times].sort((a, b) => a - b);
+  }
+
+  /** Moves to the next (dir 1) or previous (dir -1) key. */
+  stepKey(dir) {
+    const now = snap(this.time);
+    const times = this.keyTimes();
+    const target = dir > 0 ? times.find((t) => t > now + 1e-6) : [...times].reverse().find((t) => t < now - 1e-6);
+    if (target !== undefined) this.setTime(target);
+  }
+
+  jumpToEnd() {
+    const anim = this.currentAnimation();
+    if (anim) this.setTime(anim.lastKeyTime());
   }
 
   advancePlayback(dt) {
@@ -337,12 +450,12 @@ export class App {
       this.playing = false;
       return;
     }
-    this.time += Math.min(dt, 0.1);
-    if (this.time > anim.duration) {
+    this.time += Math.min(dt, 0.1) * this.playDirection;
+    if (this.time > anim.duration || this.time < 0) {
       if (this.looping && anim.duration > 0) {
         this.time = remEuclid(this.time, anim.duration);
       } else {
-        this.time = anim.duration;
+        this.time = Math.min(Math.max(this.time, 0), anim.duration);
         this.playing = false;
       }
     }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // The canvas: draws the rig and handles pan/zoom, selection and the transform tools.
 
-import { Affine, toAffine, transform } from '../core/math.js';
+import { Affine, toAffine, transform, wrapDegrees } from '../core/math.js';
 import { makeBone } from '../core/model.js';
 import { Pose } from '../core/pose.js';
 import { FPS, Mode, TOOLS, selBone, selSlot } from './app.js';
@@ -83,6 +83,13 @@ export class Viewport {
     const pose = app.pose();
     this.drawAttachments(pose, dpr);
     if (app.showBones) this.drawBones(pose);
+    if (this.drag?.kind === 'box') {
+      const { from, to } = this.drag;
+      this.ctx.save();
+      this.ctx.setLineDash([4, 3]);
+      this.polygon([from, [to[0], from[1]], to, [from[0], to[1]]], 'rgba(255,170,40,0.08)', SELECTED, 1);
+      this.ctx.restore();
+    }
     if (this.drag?.kind === 'create') {
       this.line(this.toScreen(this.drag.start), this.toScreen(this.drag.last), SELECTED, 2);
     }
@@ -268,8 +275,9 @@ export class Viewport {
 
   drawBones(pose) {
     const app = this.app;
+    const selection = new Set(app.selectedBones());
     app.doc.bones.forEach((b, i) => {
-      const selected = selBone(app.sel) === i;
+      const selected = selection.has(i);
       const color = selected ? SELECTED : BONE;
       const o = this.toScreen(pose.world[i].apply([0, 0]));
       const t = this.toScreen(pose.world[i].apply([b.length, 0]));
@@ -369,7 +377,7 @@ export class Viewport {
     document.activeElement?.blur?.();
     const pos = this.eventPos(e);
     if (e.button === 0) {
-      this.press = { pos, started: false };
+      this.press = { pos, started: false, add: e.ctrlKey || e.metaKey };
     } else if (e.button === 1 || e.button === 2) {
       e.preventDefault();
       this.panning = pos;
@@ -398,7 +406,7 @@ export class Viewport {
     if (e.button === 1 || e.button === 2) this.panning = null;
     if (e.button === 0 && this.press) {
       if (this.press.started) this.dragStop();
-      else if (e.type === 'pointerup') this.click(this.press.pos);
+      else if (e.type === 'pointerup') this.click(this.press.pos, this.press.add);
       this.press = null;
     }
     if (e.type === 'pointercancel') {
@@ -408,9 +416,12 @@ export class Viewport {
     }
   }
 
-  click(pos) {
+  /** Click: select what is under the cursor; Ctrl adds or removes bones; empty space deselects. */
+  click(pos, add) {
     const app = this.app;
-    app.sel = this.hitTest(app.pose(), pos);
+    const hit = this.hitTest(app.pose(), pos);
+    if (hit) app.select(hit, add);
+    else if (!add) app.deselect();
     app.selectedKey = null;
     app.changed();
   }
@@ -418,54 +429,116 @@ export class Viewport {
   dragStart(press) {
     const app = this.app;
     const start = this.toWorld(press);
-    let kind = null;
-    let index = 0;
+    const add = this.press?.add;
+    let drag = null;
     if (app.tool === 'create') {
-      if (app.mode === Mode.Animate) {
-        app.setStatus('Bones can only be created in Setup mode (Tab)');
-      } else {
-        kind = 'create';
-        index = selBone(app.sel) ?? 0;
-      }
+      if (app.mode === Mode.Animate) app.setStatus('Bones can only be created in Setup mode (Tab)');
+      else drag = { kind: 'create', index: selBone(app.sel) ?? 0 };
+    } else if (add) {
+      drag = { kind: 'box', from: press, to: press };
     } else {
-      const hit = this.hitTest(app.pose(), press);
-      if (hit) app.sel = hit;
-      if (selBone(app.sel) !== null) [kind, index] = ['bone', selBone(app.sel)];
-      else if (selSlot(app.sel) !== null) [kind, index] = ['slot', selSlot(app.sel)];
+      const pose = app.pose();
+      const hit = this.hitTest(pose, press);
+      const bones = app.selectedBones();
+      if (hit && selBone(hit) !== null) {
+        if (!bones.includes(selBone(hit))) app.select(hit);
+        if (app.tool === 'pose') {
+          const b = selBone(hit);
+          const origin = this.toScreen(pose.world[b].apply([0, 0]));
+          const nearOrigin = Math.hypot(press[0] - origin[0], press[1] - origin[1]) < 10;
+          drag = { kind: nearOrigin ? 'poseTranslate' : 'poseAim', index: b };
+        } else {
+          drag = { kind: 'bones' };
+        }
+      } else if (hit) {
+        app.select(hit);
+        drag = { kind: 'slot', index: selSlot(hit) };
+      } else if (bones.length && app.tool !== 'pose') {
+        // Dragging empty space transforms the current selection.
+        drag = { kind: 'bones' };
+      } else if (selSlot(app.sel) !== null && app.tool !== 'pose') {
+        drag = { kind: 'slot', index: selSlot(app.sel) };
+      } else {
+        drag = { kind: 'box', from: press, to: press };
+      }
     }
-    this.drag = kind ? { kind, index, start, last: start } : null;
+    this.drag = drag ? { ...drag, start, last: start } : null;
     app.changed();
   }
 
   dragMove(pos) {
     const d = this.drag;
     if (!d) return;
+    const app = this.app;
     const world = this.toWorld(pos);
-    const pose = this.app.pose();
-    if (d.kind === 'bone') this.dragBone(pose, d.index, d.last, world);
-    else if (d.kind === 'slot') this.dragSlot(pose, d.index, d.last, world);
+    if (d.kind === 'box') {
+      d.to = pos;
+    } else {
+      const pose = app.pose();
+      if (d.kind === 'bones') {
+        for (const b of this.topLevel(app.selectedBones())) this.dragBone(pose, b, d.last, world, app.tool);
+      } else if (d.kind === 'poseTranslate') {
+        this.dragBone(pose, d.index, d.last, world, 'translate');
+      } else if (d.kind === 'poseAim') {
+        this.aimBone(pose, d.index, world);
+      } else if (d.kind === 'slot') {
+        this.dragSlot(pose, d.index, d.last, world);
+      }
+    }
     d.last = world;
-    this.app.changed();
+    app.changed();
   }
 
   dragStop() {
     const d = this.drag;
     this.drag = null;
     if (d?.kind === 'create') this.createBone(this.app.pose(), d.index, d.start, d.last);
+    if (d?.kind === 'box') this.boxSelect(d.from, d.to, this.press?.add);
     this.app.changed();
   }
 
-  dragBone(pose, b, last, cur) {
+  /** Selects the bones whose origin or tip lies inside the screen rectangle. */
+  boxSelect(a, b, add) {
+    const app = this.app;
+    const pose = app.pose();
+    const [x0, x1] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
+    const [y0, y1] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
+    const inside = (p) => p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1;
+    const hits = [];
+    app.doc.bones.forEach((bone, i) => {
+      const o = this.toScreen(pose.world[i].apply([0, 0]));
+      const t = this.toScreen(pose.world[i].apply([bone.length, 0]));
+      if (inside(o) || inside(t)) hits.push(i);
+    });
+    const bones = new Set(add ? app.selectedBones() : []);
+    for (const h of hits) bones.add(h);
+    app.multi = bones;
+    app.sel = bones.size ? { bone: hits[0] ?? [...bones][0] } : null;
+    app.setStatus(bones.size ? `${bones.size} bone${bones.size === 1 ? '' : 's'} selected` : 'Nothing selected');
+  }
+
+  /** Bones without a selected ancestor (their descendants move with them). */
+  topLevel(bones) {
+    const set = new Set(bones);
+    const doc = this.app.doc;
+    return bones.filter((b) => {
+      for (let p = doc.bones[b].parent; p !== null; p = doc.bones[p].parent) if (set.has(p)) return false;
+      return true;
+    });
+  }
+
+  dragBone(pose, b, last, cur, tool) {
     const app = this.app;
     const local = { ...pose.local[b] };
     const parentIdx = app.doc.bones[b].parent;
     const parent = parentIdx === null ? new Affine() : pose.world[parentIdx];
     const origin = pose.world[b].apply([0, 0]);
-    switch (app.tool) {
+    const sign = parent.determinant() < 0 ? -1 : 1;
+    switch (tool) {
       case 'rotate':
-        local.rotation += (parent.determinant() < 0 ? -1 : 1) * angleBetween(origin, last, cur);
+        local.rotation += sign * angleBetween(origin, last, cur);
         break;
-      case 'move': {
+      case 'translate': {
         const d = parent.inverse().applyVector([cur[0] - last[0], cur[1] - last[1]]);
         local.x += d[0];
         local.y += d[1];
@@ -477,9 +550,25 @@ export class Viewport {
         local.scale_y *= r;
         break;
       }
+      case 'shear':
+        local.shear_y = (local.shear_y ?? 0) + sign * angleBetween(origin, last, cur);
+        break;
       default:
         return;
     }
+    edit.setBoneLocal(app, b, local);
+  }
+
+  /** Pose tool: rotates the bone so it points at the cursor. */
+  aimBone(pose, b, cur) {
+    const app = this.app;
+    const w = pose.world[b];
+    const origin = w.apply([0, 0]);
+    const parentIdx = app.doc.bones[b].parent;
+    const sign = parentIdx !== null && pose.world[parentIdx].determinant() < 0 ? -1 : 1;
+    const desired = (Math.atan2(cur[1] - origin[1], cur[0] - origin[0]) * 180) / Math.PI;
+    const local = { ...pose.local[b] };
+    local.rotation += sign * wrapDegrees(desired - w.rotation());
     edit.setBoneLocal(app, b, local);
   }
 
@@ -497,7 +586,7 @@ export class Viewport {
       case 'rotate':
         att.offset.rotation += (boneWorld.determinant() < 0 ? -1 : 1) * angleBetween(center, last, cur);
         break;
-      case 'move': {
+      case 'translate': {
         const d = boneWorld.inverse().applyVector([cur[0] - last[0], cur[1] - last[1]]);
         att.offset.x += d[0];
         att.offset.y += d[1];

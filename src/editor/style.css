@@ -407,3 +407,39 @@ input[type='color'] {
   display: block;
   touch-action: none;
 }
+
+.keybtn {
+  padding: 0 4px;
+  font-size: 12px;
+  line-height: 18px;
+  background: transparent;
+}
+.keybtn.none {
+  color: rgb(90, 200, 110);
+}
+.keybtn.changed {
+  color: rgb(255, 160, 50);
+}
+.keybtn.keyed {
+  color: rgb(240, 70, 70);
+}
+#menubar .autokey {
+  background: transparent;
+  color: var(--weak);
+}
+#menubar .autokey.on {
+  color: rgb(240, 70, 70);
+  font-weight: 600;
+}
+.popup table.keys {
+  border-collapse: collapse;
+  margin: 4px 0;
+}
+.popup table.keys td {
+  padding: 1px 10px 1px 0;
+  white-space: nowrap;
+}
+.popup table.keys td:first-child {
+  color: var(--accent);
+  font-family: ui-monospace, Consolas, monospace;
+}

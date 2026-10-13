@@ -16,13 +16,24 @@ export function render(app, el) {
 
 const row = (label, ...content) => [h('label', null, label), h('div', { class: 'cell' }, ...content)];
 
+const KEY_STATE_TITLES = {
+  none: 'Not keyed at this frame. Click to key.',
+  changed: 'Changed but not keyed. Click to key (or press K).',
+  keyed: 'Keyed at this frame. Click to key again.',
+};
+
+/** Key button: green = no key, orange = unkeyed change, red = keyed at this frame. */
 function keyMarker(app, bone, channel) {
   if (app.mode !== Mode.Animate) return null;
-  const keyed = edit.isKeyed(app, bone, channel);
+  const state = edit.channelState(app, bone, channel);
   return h(
-    'span',
-    { class: keyed ? 'key on' : 'key', title: keyed ? 'Keyed at this frame' : 'Not keyed at this frame' },
-    keyed ? '◆' : '◇',
+    'button',
+    {
+      class: `keybtn ${state}`,
+      title: KEY_STATE_TITLES[state],
+      onclick: () => edit.keyChannels(app, app.selectedBones().length ? app.selectedBones() : [bone], [channel]),
+    },
+    '◆',
   );
 }
 
@@ -80,7 +91,7 @@ function boneUi(app, b) {
   const scl = { speed: 0.01, decimals: 3 };
 
   return [
-    h('h2', null, 'Bone'),
+    h('h2', null, app.selectedBones().length > 1 ? `Bone (${app.selectedBones().length} selected)` : 'Bone'),
     h('div', { class: 'grid' }, props),
     h('hr'),
     h('strong', null, setupMode ? 'Setup pose' : 'Pose at current frame (edits set keys)'),
