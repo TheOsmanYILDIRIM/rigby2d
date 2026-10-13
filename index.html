@@ -8,17 +8,16 @@
   <body>
     <div id="app">
       <nav id="menubar"></nav>
-      <aside id="hierarchy" class="panel">
-        <div class="header"><h2>Skeleton</h2><button class="add-bone" title="Add a child bone to the selected bone">＋ Bone</button></div>
-        <div class="tree scroll"></div>
-        <h2>Draw order</h2>
-        <div class="small weak">Top of the list is drawn in front</div>
-        <div class="order scroll"></div>
-      </aside>
-      <div id="split-left" class="split-v"></div>
-      <main id="center"><canvas id="viewport"></canvas></main>
+      <main id="center">
+        <canvas id="viewport"></canvas>
+        <div id="viewbar"></div>
+      </main>
       <div id="split-right" class="split-v"></div>
-      <aside id="inspector" class="panel"><div class="content scroll"></div></aside>
+      <aside id="side">
+        <section id="tree" class="panel"></section>
+        <div id="split-tree" class="split-h"></div>
+        <section id="properties" class="panel"><div class="content scroll"></div></section>
+      </aside>
       <div id="split-bottom" class="split-h"></div>
       <section id="timeline">
         <div id="controls"></div>

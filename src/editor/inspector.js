@@ -94,7 +94,7 @@ function boneUi(app, b) {
     h('h2', null, app.selectedBones().length > 1 ? `Bone (${app.selectedBones().length} selected)` : 'Bone'),
     h('div', { class: 'grid' }, props),
     h('hr'),
-    h('strong', null, setupMode ? 'Setup pose' : 'Pose at current frame (edits set keys)'),
+    h('strong', null, setupMode ? 'Setup pose' : app.autoKey ? 'Pose at current frame (auto key on)' : 'Pose at current frame'),
     h(
       'div',
       { class: 'grid three' },

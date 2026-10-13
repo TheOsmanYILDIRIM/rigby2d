@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 :root {
-  --left: 230px;
-  --right: 290px;
+  --right: 320px;
+  --tree: 340px;
   --bottom: 230px;
   --bg: #1b1b1b;
   --panel: #262626;
@@ -33,14 +33,14 @@ body {
 #app {
   display: grid;
   height: 100vh;
-  grid-template-columns: var(--left) 4px minmax(200px, 1fr) 4px var(--right);
+  grid-template-columns: minmax(300px, 1fr) 4px var(--right);
   grid-template-rows: auto minmax(0, 1fr) 4px var(--bottom) auto;
   grid-template-areas:
-    'menu menu menu menu menu'
-    'left sl center sr right'
-    'sb sb sb sb sb'
-    'time time time time time'
-    'status status status status status';
+    'menu menu menu'
+    'center sr side'
+    'sb sb sb'
+    'time time time'
+    'status status status';
 }
 
 #menubar {
@@ -52,12 +52,6 @@ body {
   background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
-#hierarchy {
-  grid-area: left;
-}
-#split-left {
-  grid-area: sl;
-}
 #center {
   grid-area: center;
   position: relative;
@@ -67,8 +61,108 @@ body {
 #split-right {
   grid-area: sr;
 }
-#inspector {
-  grid-area: right;
+#side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+#tree {
+  flex: 0 0 var(--tree);
+  padding: 4px 0;
+}
+#properties {
+  flex: 1 1 0;
+}
+#properties .content {
+  flex: 1;
+}
+.tree-scroll {
+  flex: 1;
+  padding: 0 6px;
+}
+.tree-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 2px;
+  margin-top: 2px;
+  font-weight: 600;
+  color: #e6e6e6;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.tree-heading .count {
+  color: var(--weak);
+  font-weight: 400;
+  font-size: 11px;
+}
+.tree-heading .actions {
+  margin-left: auto;
+}
+.twisty {
+  width: 12px;
+  color: var(--weak);
+  font-size: 10px;
+}
+.twisty.right {
+  float: right;
+  cursor: pointer;
+}
+.row.attachment {
+  color: var(--weak);
+  font-size: 12px;
+}
+.row.attachment.visible {
+  color: #e6e6e6;
+}
+.row.weak {
+  color: var(--weak);
+}
+#viewbar {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: rgba(30, 30, 30, 0.88);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  pointer-events: auto;
+}
+#viewbar .toolgroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+#viewbar .tool,
+#viewbar .axis,
+#viewbar .autokey {
+  background: transparent;
+}
+#viewbar .tool:hover,
+#viewbar .axis:hover {
+  background: var(--widget);
+}
+#viewbar .tool.active,
+#viewbar .axis.active {
+  background: var(--selected);
+  color: #fff;
+}
+#viewbar .autokey {
+  color: var(--weak);
+}
+#viewbar .autokey.on {
+  color: rgb(240, 70, 70);
+  font-weight: 600;
+}
+#viewbar .fields input.drag {
+  width: 84px;
 }
 #split-bottom {
   grid-area: sb;

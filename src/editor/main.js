@@ -5,13 +5,14 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import './style.css';
-import { App, Mode, TOOLS } from './app.js';
+import { App, Mode } from './app.js';
 import { ACTIONS, PRESETS, REPEATING, actionFor, actionsFor, comboOf, shortcutLabel } from './keymap.js';
 import { memoryFs } from './platform.js';
 import * as edit from './edit.js';
-import * as hierarchy from './hierarchy.js';
+import * as toolbar from './toolbar.js';
+import * as tree from './tree.js';
 import * as inspector from './inspector.js';
-import { Dopesheet, deleteSelectedKey, renderControls } from './timeline.js';
+import { Dopesheet, deleteSelectedKeys, renderControls } from './timeline.js';
 import { Viewport } from './viewport.js';
 import { closeMenu, h, isMenuOpen, popupMenu, widgetState } from './widgets.js';
 
@@ -130,40 +131,12 @@ function buildMenuBar() {
     });
     return btn;
   });
-  const tools = h('span', { class: 'tools' });
   const mode = h('button', { class: 'mode', onclick: () => app.toggleMode() });
-  const autoKey = h('button', {
-    class: 'autokey',
-    onclick: () => {
-      app.autoKey = !app.autoKey;
-      app.changed();
-    },
-  });
-  bar.replaceChildren(...titles, h('span', { class: 'vsep' }), tools, h('span', { class: 'vsep' }), mode, autoKey);
+  bar.replaceChildren(...titles, h('span', { class: 'vsep' }), mode);
   return () => {
-    tools.replaceChildren(
-      ...TOOLS.map((t) =>
-        h(
-          'button',
-          {
-            class: `tool${app.tool === t.id ? ' active' : ''}`,
-            title: sc(`tool.${t.id}`) ? `Shortcut: ${sc(`tool.${t.id}`)}` : t.label,
-            onclick: () => {
-              app.tool = t.id;
-              app.changed();
-            },
-          },
-          t.label,
-        ),
-      ),
-    );
     mode.textContent = app.mode === Mode.Setup ? 'SETUP' : 'ANIMATE';
     mode.className = `mode ${app.mode}`;
     mode.title = `Switch Setup / Animate${sc('mode.toggle') ? ` (${sc('mode.toggle')})` : ''}`;
-    autoKey.textContent = app.autoKey ? '● Auto key' : '○ Auto key';
-    autoKey.className = `autokey${app.autoKey ? ' on' : ''}`;
-    autoKey.hidden = app.mode !== Mode.Animate;
-    autoKey.title = 'Auto key: when on, every change in Animate mode sets keys right away';
   };
 }
 
@@ -211,7 +184,7 @@ function run(action) {
     'select.none': () => app.deselect(),
     'view.fit': () => (app.frameRequest = true),
     'view.actual': () => zoomActual(),
-    'edit.delete': () => (app.selectedKey ? deleteSelectedKey(app) : edit.deleteSelection(app)),
+    'edit.delete': () => (app.selectedKeys.size ? deleteSelectedKeys(app) : edit.deleteSelection(app)),
     'edit.undo': () => app.undo(),
     'edit.redo': () => app.redo(),
     'file.open': () => app.openDialog(),
@@ -267,8 +240,8 @@ function splitter(el, cssVar, axis, sign, min) {
   });
 }
 
-splitter($('#split-left'), '--left', 'x', 1, 140);
-splitter($('#split-right'), '--right', 'x', -1, 200);
+splitter($('#split-right'), '--right', 'x', -1, 220);
+splitter($('#split-tree'), '--tree', 'y', 1, 120);
 splitter($('#split-bottom'), '--bottom', 'y', -1, 120);
 
 // ---- main loop --------------------------------------------------------------------------------
@@ -285,8 +258,9 @@ window.addEventListener('blur', () => (pointersDown = 0));
 
 /** Panels are rebuilt when the app changes, except while the user is editing a field in them. */
 const panels = [
-  { el: $('#hierarchy'), render: hierarchy.render, built: -1 },
-  { el: $('#inspector .content'), render: inspector.render, built: -1 },
+  { el: $('#tree'), render: tree.render, built: -1 },
+  { el: $('#properties .content'), render: inspector.render, built: -1 },
+  { el: $('#viewbar'), render: toolbar.render, built: -1 },
   { el: $('#controls'), render: renderControls, built: -1 },
 ];
 
@@ -337,4 +311,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // Development builds expose the editor for debugging from the console.
-if (import.meta.env.DEV) window.rigby = { app, memoryFs };
+if (import.meta.env.DEV) window.rigby = { app, memoryFs, dopesheet };

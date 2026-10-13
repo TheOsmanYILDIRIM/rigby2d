@@ -422,7 +422,7 @@ export class Viewport {
     const hit = this.hitTest(app.pose(), pos);
     if (hit) app.select(hit, add);
     else if (!add) app.deselect();
-    app.selectedKey = null;
+    app.selectedKeys.clear();
     app.changed();
   }
 

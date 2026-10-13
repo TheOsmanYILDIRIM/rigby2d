@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Bottom panel: animation list, transport controls and the dopesheet.
 
-import { Animation, BONE_CHANNELS, SLOT_CHANNELS, resort } from '../core/animation.js';
+import { Animation, BONE_CHANNELS, SLOT_CHANNELS } from '../core/animation.js';
 import { EASE_IN, EASE_IN_OUT, EASE_OUT, LINEAR, STEPPED, cloneCurve, isBezier } from '../core/curve.js';
 import { uniqueName } from '../core/model.js';
-import { FPS, Mode, keyEquals, selBone, selSlot, snap } from './app.js';
+import { FPS, Mode, selBone, selSlot, snap } from './app.js';
 import * as edit from './edit.js';
 import { dragValue, h, popupMenu, select, textField } from './widgets.js';
 
@@ -23,7 +23,7 @@ export function renderControls(app, el) {
         ? select(names, app.anim ?? 0, (i) => {
             app.anim = i;
             app.time = 0;
-            app.selectedKey = null;
+            app.selectedKeys.clear();
             app.changed();
           })
         : h('span', { class: 'weak' }, '(no animation)'),
@@ -66,7 +66,7 @@ export function renderControls(app, el) {
                 onclick: () => {
                   app.doc.animations.splice(app.anim, 1);
                   app.anim = app.doc.animations.length ? 0 : null;
-                  app.selectedKey = null;
+                  app.selectedKeys.clear();
                   app.changed();
                 },
               },
@@ -146,24 +146,21 @@ function trackKeys(anim, track) {
   return anim.boneTimeline(track.bone)?.[track.channel];
 }
 
-/** Applies `f(key)` to one key, re-sorting afterwards. Returns the key's new index. */
-function withKey(anim, key, f) {
-  const keys = trackKeys(anim, key.track);
-  const k = keys?.[key.index];
-  if (!k) return null;
-  f(k);
-  return resort(keys, key.index);
-}
-
-export function deleteSelectedKey(app) {
-  const key = app.selectedKey;
-  app.selectedKey = null;
+/** Deletes every selected key. */
+export function deleteSelectedKeys(app) {
   const anim = app.currentAnimation();
-  if (!key || !anim) return;
-  const keys = trackKeys(anim, key.track);
-  if (keys && key.index < keys.length) keys.splice(key.index, 1);
+  if (!anim || !app.selectedKeys.size) return;
+  const drop = (keys) => {
+    for (let i = keys.length - 1; i >= 0; i--) if (app.selectedKeys.has(keys[i])) keys.splice(i, 1);
+  };
+  for (const tl of [...anim.bones, ...anim.slots]) for (const v of Object.values(tl)) if (Array.isArray(v)) drop(v);
+  for (const tl of [...anim.deform, ...anim.ik]) drop(tl.keys);
+  drop(anim.drawOrder);
+  drop(anim.events);
+  const count = app.selectedKeys.size;
+  app.selectedKeys.clear();
   anim.prune();
-  app.changed();
+  app.setStatus(`Deleted ${count} key${count === 1 ? '' : 's'}`);
 }
 
 function keyFill(selected, curve) {
@@ -258,9 +255,8 @@ export class Dopesheet {
       ctx.fillText(label, 8, y + ROW / 2, GUTTER - 14);
       (trackKeys(anim, track) ?? []).forEach((k, index) => {
         const c = [timeToX(k.time), y + ROW / 2];
-        const key = { track, index };
-        diamond(ctx, c, 5.5, keyFill(keyEquals(app.selectedKey, key), k.curve));
-        this.keyRects.push({ x0: c[0] - 6, x1: c[0] + 6, y0: c[1] - 7, y1: c[1] + 7, key, time: k.time });
+        diamond(ctx, c, 5.5, keyFill(app.selectedKeys.has(k), k.curve));
+        this.keyRects.push({ x0: c[0] - 6, x1: c[0] + 6, y0: c[1] - 7, y1: c[1] + 7, key: k, keys: trackKeys(anim, track), index, time: k.time });
       });
     });
     ctx.strokeStyle = 'rgb(60,60,60)';
@@ -268,6 +264,27 @@ export class Dopesheet {
     ctx.moveTo(trackLeft + 0.5, 0);
     ctx.lineTo(trackLeft + 0.5, height);
     ctx.stroke();
+
+    // Selection box and retiming handles.
+    if (this.press?.box) {
+      const { from, to } = this.press.box;
+      ctx.fillStyle = 'rgba(255,170,40,0.1)';
+      ctx.strokeStyle = 'rgb(255,170,40)';
+      ctx.lineWidth = 1;
+      ctx.fillRect(Math.min(from[0], to[0]), Math.min(from[1], to[1]), Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1]));
+      ctx.strokeRect(Math.min(from[0], to[0]) + 0.5, Math.min(from[1], to[1]) + 0.5, Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1]));
+    }
+    this.handles = null;
+    const span = this.selectionSpan();
+    if (span && span.max - span.min > 1e-6) {
+      const x0 = timeToX(span.min);
+      const x1 = timeToX(span.max);
+      ctx.fillStyle = 'rgba(255,190,60,0.18)';
+      ctx.fillRect(x0, RULER - 8, x1 - x0, 8);
+      ctx.fillStyle = 'rgb(255,190,60)';
+      for (const x of [x0, x1]) ctx.fillRect(x - 3, RULER - 12, 6, 12);
+      this.handles = { x0, x1, min: span.min, max: span.max };
+    }
 
     // Time cursor.
     const cx = timeToX(Math.min(app.time, duration));
@@ -293,74 +310,147 @@ export class Dopesheet {
     return Math.min(duration, Math.max(0, ((x - trackLeft) / trackW) * duration));
   }
 
+  /** Time range covered by the selected keys, or null. */
+  selectionSpan() {
+    if (this.app.selectedKeys.size < 2) return null;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const k of this.app.selectedKeys) {
+      min = Math.min(min, k.time);
+      max = Math.max(max, k.time);
+    }
+    return { min, max };
+  }
+
   onPointerDown(e) {
     if (!this.layout) return;
     const app = this.app;
     const p = this.pos(e);
+    const add = e.ctrlKey || e.metaKey;
     if (e.button === 2) {
       const hit = this.hit(p);
-      if (hit) {
-        app.selectedKey = hit.key;
-        app.time = hit.time;
+      if (hit && !app.selectedKeys.has(hit.key)) {
+        app.selectedKeys = new Set([hit.key]);
         app.changed();
       }
-      if (app.selectedKey) this.contextMenu(e.clientX, e.clientY);
+      if (app.selectedKeys.size) this.contextMenu(e.clientX, e.clientY);
       return;
     }
     if (e.button !== 0) return;
     this.canvas.setPointerCapture(e.pointerId);
-    this.press = { pos: p, started: false, onKey: false };
+    const hit = this.hit(p);
+    const handle = this.handles && p[1] <= RULER && [this.handles.x0, this.handles.x1].findIndex((x) => Math.abs(p[0] - x) <= 5);
+    this.press = { pos: p, started: false, add, hit, handle: handle >= 0 ? handle : null, inRuler: p[1] <= RULER };
   }
 
   onPointerMove(e) {
     if (!this.press || !(e.buttons & 1)) return;
     const app = this.app;
     const p = this.pos(e);
-    if (!this.press.started) {
-      if (Math.hypot(p[0] - this.press.pos[0], p[1] - this.press.pos[1]) <= 3) return;
-      // Remember whether this drag started on a key; the key moves away from the press point.
-      const hit = this.hit(this.press.pos);
-      this.press.started = true;
-      this.press.onKey = !!hit;
-      app.selectedKey = hit ? hit.key : null;
+    const press = this.press;
+    if (!press.started) {
+      if (Math.hypot(p[0] - press.pos[0], p[1] - press.pos[1]) <= 3) return;
+      press.started = true;
+      app.playing = false;
+      app.mode = Mode.Animate;
+      if (press.handle !== null && press.handle !== undefined) {
+        press.retime = this.beginEdit();
+        press.span = { ...this.handles };
+      } else if (press.hit) {
+        if (!app.selectedKeys.has(press.hit.key)) app.selectedKeys = press.add ? new Set([...app.selectedKeys, press.hit.key]) : new Set([press.hit.key]);
+        press.move = this.beginEdit();
+        press.grabTime = press.hit.time;
+      } else if (!press.inRuler) {
+        press.box = { from: press.pos, to: p };
+      }
     }
-    app.playing = false;
-    app.mode = Mode.Animate;
     const t = snap(this.xToTime(p[0]));
-    const anim = app.currentAnimation();
-    if (this.press.onKey && app.selectedKey && anim) {
-      const idx = withKey(anim, app.selectedKey, (k) => (k.time = t));
-      if (idx !== null) app.selectedKey = { track: app.selectedKey.track, index: idx };
+    if (press.move) {
+      const dt = t - press.grabTime;
+      for (const m of press.move) m.key.time = Math.max(0, snap(m.time + dt));
+      app.time = Math.max(0, snap(press.grabTime + dt));
+    } else if (press.retime) {
+      // Scale times relative to the opposite edge of the selection.
+      const { min, max } = press.span;
+      const fixed = press.handle === 0 ? max : min;
+      const moving = press.handle === 0 ? min : max;
+      const factor = Math.abs(moving - fixed) > 1e-6 ? (t - fixed) / (moving - fixed) : 1;
+      for (const m of press.retime) m.key.time = Math.max(0, snap(fixed + (m.time - fixed) * factor));
+      app.time = t;
+    } else if (press.box) {
+      press.box.to = p;
+    } else {
+      app.time = t; // scrubbing the ruler or empty space
     }
-    app.time = t;
     app.changed();
+  }
+
+  /** Remembers the selected keys' times before a move or retime. */
+  beginEdit() {
+    return [...this.app.selectedKeys].map((key) => ({ key, time: key.time }));
   }
 
   onPointerUp(e) {
     if (e.button !== 0 || !this.press) return;
     const app = this.app;
-    if (!this.press.started) {
-      const p = this.press.pos;
-      const hit = this.hit(p);
-      if (hit) {
-        app.selectedKey = hit.key;
-        app.time = hit.time;
+    const press = this.press;
+    this.press = null;
+    if (!press.started) {
+      if (press.hit) {
+        const k = press.hit.key;
+        if (press.add) {
+          const next = new Set(app.selectedKeys);
+          if (next.has(k)) next.delete(k);
+          else next.add(k);
+          app.selectedKeys = next;
+        } else {
+          app.selectedKeys = new Set([k]);
+          app.time = press.hit.time;
+        }
       } else {
-        app.selectedKey = null;
-        app.time = snap(this.xToTime(p[0]));
+        if (!press.add) app.selectedKeys = new Set();
+        app.time = snap(this.xToTime(press.pos[0]));
       }
       app.playing = false;
       app.mode = Mode.Animate;
-      app.changed();
+    } else if (press.move || press.retime) {
+      this.resortAll();
+      const n = app.selectedKeys.size;
+      app.setStatus(`${press.move ? 'Moved' : 'Retimed'} ${n} key${n === 1 ? '' : 's'}`);
+    } else if (press.box) {
+      const { from, to } = press.box;
+      const [x0, x1] = [Math.min(from[0], to[0]), Math.max(from[0], to[0])];
+      const [y0, y1] = [Math.min(from[1], to[1]), Math.max(from[1], to[1])];
+      const inside = this.keyRects.filter((r) => (r.x0 + r.x1) / 2 >= x0 && (r.x0 + r.x1) / 2 <= x1 && (r.y0 + r.y1) / 2 >= y0 && (r.y0 + r.y1) / 2 <= y1);
+      const next = new Set(press.add ? app.selectedKeys : []);
+      for (const r of inside) next.add(r.key);
+      app.selectedKeys = next;
+      app.setStatus(`${next.size} key${next.size === 1 ? '' : 's'} selected`);
     }
-    this.press = null;
+    app.changed();
+  }
+
+  /** Keeps every key list sorted by time after keys moved. */
+  resortAll() {
+    const anim = this.app.currentAnimation();
+    if (!anim) return;
+    const sort = (keys) => keys.sort((a, b) => a.time - b.time);
+    for (const tl of [...anim.bones, ...anim.slots]) for (const v of Object.values(tl)) if (Array.isArray(v)) sort(v);
+    for (const tl of [...anim.deform, ...anim.ik]) sort(tl.keys);
+    sort(anim.drawOrder);
+    sort(anim.events);
+    const last = anim.lastKeyTime();
+    if (last > anim.duration) anim.duration = last;
   }
 
   contextMenu(x, y) {
     const app = this.app;
     const setCurve = (curve) => () => {
       const anim = app.currentAnimation();
-      if (anim && app.selectedKey) withKey(anim, app.selectedKey, (k) => (k.curve = cloneCurve(curve)));
+      if (!anim) return;
+      // Attachment, draw order and event keys have no curve.
+      const skip = new Set([...anim.events, ...anim.drawOrder, ...anim.slots.flatMap((s) => s.attachment ?? [])]);
+      for (const k of app.selectedKeys) if (!skip.has(k)) k.curve = cloneCurve(curve);
       app.changed();
     };
     popupMenu(x, y, [
@@ -370,7 +460,7 @@ export class Dopesheet {
       { label: 'Ease out', action: setCurve(EASE_OUT) },
       { label: 'Stepped', action: setCurve(STEPPED) },
       'separator',
-      { label: 'Delete key', action: () => deleteSelectedKey(app) },
+      { label: app.selectedKeys.size > 1 ? `Delete ${app.selectedKeys.size} keys` : 'Delete key', action: () => deleteSelectedKeys(app) },
     ]);
   }
 }

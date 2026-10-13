@@ -36,16 +36,6 @@ export const selBone = (sel) => (sel && sel.bone !== undefined ? sel.bone : null
 export const selSlot = (sel) => (sel && sel.slot !== undefined ? sel.slot : null);
 
 // Dopesheet tracks: { bone, channel }, { slot, channel }, { deform }, { ik }, { drawOrder } or { events }.
-// Keys: { track, index }.
-export const trackId = (t) => {
-  if (t.deform !== undefined) return `d${t.deform}`;
-  if (t.ik !== undefined) return `k${t.ik}`;
-  if (t.drawOrder) return 'o';
-  if (t.events) return 'e';
-  if (t.slot !== undefined) return `s${t.slot}:${t.channel ?? 'attachment'}`;
-  return `b${t.bone}:${t.channel}`;
-};
-export const keyEquals = (a, b) => !!a && !!b && a.index === b.index && trackId(a.track) === trackId(b.track);
 
 const errorText = (e) => (e && e.message) || String(e);
 
@@ -57,6 +47,8 @@ export class App {
     this.saveTarget = null;
     this.images = new Images();
     this.sel = null;
+    /** Selected dopesheet keys (the key objects themselves). */
+    this.selectedKeys = new Set();
     /** Additionally selected bones (the primary selection is `sel`). */
     this.multi = new Set();
     this.mode = Mode.Setup;
@@ -67,6 +59,8 @@ export class App {
     this.autoKey = false;
     /** Unkeyed changes in animate mode: bone index -> { channel -> partial local transform }. */
     this.pending = new Map();
+    /** Axes for numeric transform values: 'local', 'parent' or 'world'. */
+    this.axis = 'parent';
     /** Playback direction: 1 forward, -1 backward. */
     this.playDirection = 1;
     /** Screen offset of the world origin from the viewport center, and zoom. */
@@ -75,7 +69,7 @@ export class App {
     this.time = 0;
     this.playing = false;
     this.looping = true;
-    this.selectedKey = null;
+    this.selectedKeys.clear();
     this.status = 'Welcome to Rigby2D. File ▸ New sample to explore, or import a PSD / PNGs.';
     this.showBones = true;
     this.frameRequest = false;
@@ -106,7 +100,7 @@ export class App {
     this.sel = null;
     this.multi.clear();
     this.pending.clear();
-    this.selectedKey = null;
+    this.selectedKeys.clear();
     this.time = 0;
     this.playing = false;
     this.history = { undo: [], redo: [] };
@@ -166,7 +160,7 @@ export class App {
   deselect() {
     this.sel = null;
     this.multi.clear();
-    this.selectedKey = null;
+    this.selectedKeys.clear();
     this.changed();
   }
 
@@ -203,7 +197,7 @@ export class App {
   restore(json) {
     this.doc = Skeleton.fromObject(JSON.parse(json));
     this.docJson = this.baseline = json;
-    this.selectedKey = null;
+    this.selectedKeys.clear();
     this.sanitize();
     this.committedVersion = ++this.version;
   }
@@ -271,7 +265,7 @@ export class App {
     this.saveTarget = null;
     this.mode = Mode.Animate;
     this.playing = true;
-    this.setStatus('Sample robot loaded: press Space to play/pause, Tab to switch Setup/Animate');
+    this.setStatus('Sample robot loaded. The Help menu lists the shortcuts.');
   }
 
   async openDialog() {
