@@ -78,7 +78,7 @@ npm test
 ## Playing animations in your game
 
 Copy `src/core/` into your project (no dependencies). With WebGL, also copy `src/webgl/` for a
-ready-made renderer (one batched draw call per texture and blend mode, two-color tint):
+ready-made renderer (one batched draw call per texture and blend mode, two-color tint, clipping):
 
 ```js
 import { AnimationState, Pose, parseAtlas, readSkeletonJson } from './core/index.js';

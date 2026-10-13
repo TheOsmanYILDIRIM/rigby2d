@@ -156,3 +156,28 @@ test('atlas region UVs undo whitespace stripping and rotation', async () => {
   assert.deepEqual(at(rotated, 0.9, 0.2), [40, 50]);
   assert.deepEqual(at(rotated, 0.9, 0.8), [46, 50]);
 });
+
+test('clipping masks triangles to a concave polygon and interpolates UVs', async () => {
+  const { Clipper, triangulate } = await import('../src/core/clipping.js');
+  // An L shape (concave), clockwise on purpose: area 3.
+  const L = [0, 0, 0, 2, 1, 2, 1, 1, 2, 1, 2, 0];
+  const tris = triangulate(L);
+  assert.equal(tris.length, 4);
+  const area = (t) => Math.abs((t[2] - t[0]) * (t[5] - t[1]) - (t[3] - t[1]) * (t[4] - t[0])) / 2;
+  assert.ok(Math.abs(tris.reduce((s, t) => s + area(t), 0) - 3) < 1e-9);
+
+  // A 2x2 quad covering the L: what remains is the L itself (area 3), with UVs following x/y.
+  const clipper = new Clipper(L);
+  let out = null;
+  clipper.clip([0, 0, 2, 0, 2, 2, 0, 2], [0, 0, 1, 0, 1, 1, 0, 1], [0, 1, 2, 0, 2, 3], (p, uv, t) => (out = { p, uv, t }));
+  let total = 0;
+  for (let i = 0; i < out.t.length; i += 3) {
+    const [a, b, c] = [out.t[i], out.t[i + 1], out.t[i + 2]];
+    total += area([out.p[2 * a], out.p[2 * a + 1], out.p[2 * b], out.p[2 * b + 1], out.p[2 * c], out.p[2 * c + 1]]);
+  }
+  assert.ok(Math.abs(total - 3) < 1e-9, String(total));
+  for (let k = 0; k < out.p.length; k += 2) {
+    assert.ok(Math.abs(out.uv[k] - out.p[k] / 2) < 1e-9 && Math.abs(out.uv[k + 1] - out.p[k + 1] / 2) < 1e-9);
+    assert.ok(!(out.p[k] > 1 + 1e-9 && out.p[k + 1] > 1 + 1e-9), 'nothing in the cut-out corner');
+  }
+});
