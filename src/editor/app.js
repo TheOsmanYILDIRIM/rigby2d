@@ -83,7 +83,7 @@ export class App {
     this.version = 0;
     this.history = { undo: [], redo: [] };
     /** JSON of the last committed document state, used to coalesce edits into undo steps. */
-    this.baseline = this.doc.toJson();
+    this.baseline = this.doc.toSnapshot();
     this.saved = this.baseline;
     this.docJson = this.baseline;
     this.committedVersion = 0;
@@ -110,7 +110,7 @@ export class App {
     this.time = 0;
     this.playing = false;
     this.history = { undo: [], redo: [] };
-    this.docJson = this.baseline = this.saved = doc.toJson();
+    this.docJson = this.baseline = this.saved = doc.toSnapshot();
     this.frameRequest = true;
     this.changed();
   }
@@ -209,7 +209,7 @@ export class App {
   }
 
   syncJson() {
-    this.docJson = this.doc.toJson();
+    this.docJson = this.doc.toSnapshot();
   }
 
   /** Clamps selections that may point past the end of the document after structural edits. */
@@ -224,7 +224,8 @@ export class App {
 
   /** Records an undo step once an edit gesture has finished (`busy` while dragging or typing). */
   commitHistory(busy) {
-    if (busy || this.committedVersion === this.version) return;
+    // Playback only moves the time; it never edits the document, so skip the snapshot.
+    if (busy || this.playing || this.committedVersion === this.version) return;
     this.committedVersion = this.version;
     this.syncJson();
     if (this.docJson !== this.baseline) {

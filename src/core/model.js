@@ -113,6 +113,11 @@ export class Skeleton {
     return writeSkeleton(this);
   }
 
+  /** Compact JSON of the whole document (used for undo history and change tracking). */
+  toSnapshot() {
+    return JSON.stringify(this.toObject());
+  }
+
   toJson() {
     return JSON.stringify(this.toObject(), null, 2);
   }
