@@ -2,7 +2,6 @@
 // Project files, art import (PSD / PNG) and game export (JSON + packed atlas).
 // File access goes through a platform file system (see platform.js); PNG coding uses canvas.
 
-import { readPsd } from 'ag-psd';
 
 import { parseAtlas, regionPlacement, writeAtlas } from '../core/atlas.js';
 import { readSkeletonBinary, writeSkeletonBinary } from '../core/binary.js';
@@ -344,6 +343,8 @@ function pixelLayers(children, parentHidden = false, out = []) {
 /** `file` is { name, bytes }. */
 export async function importPsd(file, doc, images) {
   const { bytes } = file;
+  // Loaded on demand: the PSD reader is large and only needed here.
+  const { readPsd } = await import('ag-psd');
   const psd = readPsd(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), {
     skipCompositeImageData: true,
     skipThumbnail: true,
