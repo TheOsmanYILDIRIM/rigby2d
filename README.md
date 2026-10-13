@@ -139,36 +139,33 @@ blend mode for every visible region and mesh. `examples/webgl.html` is a small p
 - The runtime evaluates IK, transform and path constraints. Physics constraints are kept in the
   file but not simulated yet.
 
-## Performance
+## Performance benchmark (0.1.0)
 
 Measured on a desktop PC in Chromium and Node 20; numbers vary with hardware. Rigs are described
 by size: **M** has 67 bones and 276 mesh vertices, **L** 76 bones and 667 weighted mesh vertices
 with 9 IK constraints, **XL** 143 bones and 879 mesh vertices with 21 transform and path
 constraints.
 
-**Runtime** (`src/core`): animate one character for one frame (apply the animation, solve
+**Runtime** (`src/core`): animating one character for one frame (apply the animation, solve
 constraints, compute world transforms and vertices), median of 2000 frames:
 
-| Rig | Before optimization | Now | Characters per 16 ms frame |
-| --- | ---: | ---: | ---: |
-| M | 192 µs | 47 µs | ~330 |
-| L | 373 µs | 72 µs | ~220 |
-| XL | 476 µs | 184 µs | ~85 |
+| Rig | Time per frame | Characters per 16 ms frame |
+| --- | ---: | ---: |
+| M | 47 µs | ~330 |
+| L | 72 µs | ~220 |
+| XL | 184 µs | ~85 |
 
 **WebGL renderer** (`src/webgl`): 50 XL characters, each animated and drawn every frame, take
 21.6 ms per frame including the GPU (0.43 ms per character) in a single draw call.
 
-**Editor viewport**: drawing one animation frame, median and 95th percentile of 120 frames:
+**Editor viewport**: drawing one animation frame with WebGL, median and 95th percentile of 120
+frames:
 
-| Rig | Canvas 2D | WebGL | Speed-up |
-| --- | ---: | ---: | ---: |
-| M | 1.4 ms (p95 7.7 ms) | 0.4 ms (p95 0.5 ms) | 3.5x |
-| L | 2.6 ms (p95 8.6 ms) | 0.5 ms (p95 0.7 ms) | 5.2x |
-| XL | 3.6 ms (p95 9.7 ms) | 1.0 ms (p95 1.6 ms) | 3.6x |
-
-The attachments alone draw 5 to 7 times faster with WebGL; the rest of a frame is the bone and
-handle overlay, which stays on Canvas 2D. The editor uses WebGL when available and falls back to
-Canvas 2D (switch in **View**).
+| Rig | Median | 95th percentile |
+| --- | ---: | ---: |
+| M | 0.4 ms | 0.5 ms |
+| L | 0.5 ms | 0.7 ms |
+| XL | 1.0 ms | 1.6 ms |
 
 ## Project structure
 
