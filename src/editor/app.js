@@ -2,6 +2,7 @@
 // Editor state, history and document commands.
 
 import { Pose } from '../core/pose.js';
+import { invalidateConstraints } from '../core/constraints.js';
 import { loadPreset, savePreset } from './keymap.js';
 import { Skeleton } from '../core/model.js';
 import { remEuclid } from '../core/state.js';
@@ -86,6 +87,7 @@ export class App {
   }
 
   changed() {
+    invalidateConstraints(this.doc);
     this.version++;
   }
 

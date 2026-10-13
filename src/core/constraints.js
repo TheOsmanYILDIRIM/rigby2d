@@ -18,18 +18,31 @@ const cache = new WeakMap();
  * constraint data or bone/slot names change.
  */
 export function compileConstraints(sk) {
-  const signature = constraintSignature(sk);
   const hit = cache.get(sk);
-  if (hit && hit.signature.every((v, i) => v === signature[i])) return hit.list;
+  if (hit && sameSignature(hit.signature, sk)) return hit.list;
+  const signature = constraintSignature(sk);
   const list = compile(sk);
   cache.set(sk, { signature, list });
   return list;
 }
 
-/** Values whose change invalidates the compiled list (compared by identity). */
+/**
+ * Values whose change invalidates the compiled list (compared by identity). Renaming bones or
+ * slots is not detected: editors call `invalidateConstraints` after changing a skeleton.
+ */
 function constraintSignature(sk) {
   const e = sk.extra ?? {};
-  return [e.constraints, e.transform, e.path, sk.bones.length, sk.slots.length, ...sk.bones.map((b) => b.name), ...sk.slots.map((s) => s.name)];
+  return [e.constraints, e.transform, e.path, sk.bones.length, sk.slots.length];
+}
+
+function sameSignature(sig, sk) {
+  const e = sk.extra ?? {};
+  return sig[0] === e.constraints && sig[1] === e.transform && sig[2] === e.path && sig[3] === sk.bones.length && sig[4] === sk.slots.length;
+}
+
+/** Drops the compiled constraints of `sk` so they are rebuilt on next use. */
+export function invalidateConstraints(sk) {
+  cache.delete(sk);
 }
 
 function compile(sk) {
@@ -120,6 +133,14 @@ function pathData(d) {
 /** Animatable state of each compiled constraint, at its setup values. */
 export function constraintSetupState(list) {
   return list.map((c) => (c.type === 'transform' ? { mix: { ...c.mix } } : { ...c.setup }));
+}
+
+/** Resets animatable constraint state to the setup values in place. */
+export function resetConstraintState(list, states) {
+  list.forEach((c, i) => {
+    if (c.type === 'transform') Object.assign(states[i].mix, c.mix);
+    else Object.assign(states[i], c.setup);
+  });
 }
 
 /** Whether a skin-required constraint is active for the skeleton's current skin. */

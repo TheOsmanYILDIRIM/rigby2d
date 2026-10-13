@@ -43,6 +43,20 @@ export function sample(keys, time) {
   return interpolate(a.value, b.value, t, a.curve);
 }
 
+const componentOf = (k, c) => (Array.isArray(k.value) ? k.value[c] : k.value);
+
+/** Samples component `c` of numeric keys at `time` (keys must not be empty). */
+export function sampleComponent(keys, time, c = 0) {
+  if (time <= keys[0].time) return componentOf(keys[0], c);
+  const next = partitionPoint(keys, (k) => k.time <= time);
+  if (next >= keys.length) return componentOf(keys[keys.length - 1], c);
+  const a = keys[next - 1];
+  const b = keys[next];
+  const span = b.time - a.time;
+  const va = componentOf(a, c);
+  return va + (componentOf(b, c) - va) * ease(a.curve, span > 0 ? (time - a.time) / span : 1, c);
+}
+
 /** Index of the last key at or before `time`, or -1. */
 export function keyIndexAt(keys, time) {
   return partitionPoint(keys, (k) => k.time <= time) - 1;

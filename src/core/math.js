@@ -20,6 +20,18 @@ export function identityTransform() {
   return transform();
 }
 
+/** Copies transform `src` into `dst` and returns `dst`. */
+export function copyTransform(src, dst) {
+  dst.x = src.x;
+  dst.y = src.y;
+  dst.rotation = src.rotation;
+  dst.scale_x = src.scale_x;
+  dst.scale_y = src.scale_y;
+  dst.shear_x = src.shear_x ?? 0;
+  dst.shear_y = src.shear_y ?? 0;
+  return dst;
+}
+
 export function cloneTransform(t) {
   return {
     x: t.x,
@@ -44,11 +56,14 @@ export function transformEquals(a, b) {
   );
 }
 
-/** The X axis points along rotation + shear_x; the Y axis along rotation + 90 + shear_y. */
-export function toAffine(t) {
+/**
+ * The X axis points along rotation + shear_x; the Y axis along rotation + 90 + shear_y. Writes
+ * into `out` when given.
+ */
+export function toAffine(t, out = new Affine()) {
   const rx = (t.rotation + (t.shear_x ?? 0)) * DEG;
   const ry = (t.rotation + 90 + (t.shear_y ?? 0)) * DEG;
-  return new Affine(
+  return out.set(
     Math.cos(rx) * t.scale_x,
     Math.sin(rx) * t.scale_x,
     Math.cos(ry) * t.scale_y,
@@ -94,6 +109,28 @@ export class Affine {
 
   clone() {
     return new Affine(this.a, this.b, this.c, this.d, this.tx, this.ty);
+  }
+
+  set(a, b, c, d, tx, ty) {
+    this.a = a;
+    this.b = b;
+    this.c = c;
+    this.d = d;
+    this.tx = tx;
+    this.ty = ty;
+    return this;
+  }
+
+  /** Writes `l * r` into `out` (which may be `l` or `r`) and returns it. */
+  static multiply(l, r, out) {
+    return out.set(
+      l.a * r.a + l.c * r.b,
+      l.b * r.a + l.d * r.b,
+      l.a * r.c + l.c * r.d,
+      l.b * r.c + l.d * r.d,
+      l.a * r.tx + l.c * r.ty + l.tx,
+      l.b * r.tx + l.d * r.ty + l.ty,
+    );
   }
 
   /** `this * rhs`: applies `rhs` first, then `this`. */

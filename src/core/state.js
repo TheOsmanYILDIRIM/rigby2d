@@ -46,7 +46,7 @@ export class AnimationState {
 
   /** Resets `pose` to setup, applies the active animations and updates world transforms. */
   apply(sk, pose) {
-    pose.setToSetup(sk);
+    pose.reset(sk);
     if (this.previous) applyTrack(sk, pose, this.previous, 1);
     if (this.current) {
       const alpha =

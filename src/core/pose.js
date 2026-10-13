@@ -2,15 +2,25 @@
 // Evaluated skeleton state: local and world transforms of every bone, slot state, mesh
 // deformation, draw order and constraints (IK, transform and path).
 
-import { keyIndexAt, sample } from './animation.js';
-import { applyConstraintTimelines, compileConstraints, constraintActive, constraintSetupState, solvePath, solveTransform } from './constraints.js';
-import { Affine, cloneTransform, lerp, lerpTransform, toAffine, wrapDegrees } from './math.js';
+import { keyIndexAt, sample, sampleComponent } from './animation.js';
+import {
+  applyConstraintTimelines,
+  compileConstraints,
+  constraintActive,
+  constraintSetupState,
+  resetConstraintState,
+  solvePath,
+  solveTransform,
+} from './constraints.js';
+import { Affine, cloneTransform, copyTransform, lerp, toAffine, wrapDegrees } from './math.js';
 import { vertexCount } from './model.js';
 
 const DEG = Math.PI / 180;
 const angleOf = (v) => Math.atan2(v[1], v[0]) / DEG;
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
 const len = (v) => Math.hypot(v[0], v[1]);
+/** Scratch matrix for local transforms while computing world transforms. */
+const LOCAL = new Affine();
 
 /**
  * A mutable pose for a skeleton. Create it with `new Pose(skeleton)`, apply animations, then
@@ -21,31 +31,68 @@ const len = (v) => Math.hypot(v[0], v[1]);
  */
 export class Pose {
   constructor(sk) {
+    this.applied = [];
+    this.world = [];
+    this.constraintList = null;
     this.setToSetup(sk);
   }
 
   /** Resets everything to the setup pose and recomputes world transforms. */
   setToSetup(sk) {
-    this.local = sk.bones.map((b) => cloneTransform(b.setup));
-    this.inherit = sk.bones.map((b) => b.inherit ?? 'normal');
-    this.attachment = sk.slots.map((s) => s.attachment);
-    this.color = sk.slots.map((s) => s.color.slice());
-    this.dark = sk.slots.map((s) => (s.dark ? s.dark.slice() : null));
-    this.drawOrder = sk.slots.map((_, i) => i);
-    /** Deform deltas keyed by `${slot}/${attachment name}`. */
-    this.deform = new Map();
-    this.ik = sk.ik.map((c) => ({
-      mix: c.mix,
-      softness: c.softness,
-      bendPositive: c.bendPositive,
-      compress: c.compress,
-      stretch: c.stretch,
-    }));
-    this.constraintList = null;
-    this.ensureConstraints(sk);
-    this.applied = [];
-    this.world = [];
+    this.reset(sk);
     this.updateWorld(sk);
+  }
+
+  /**
+   * Resets local state to the setup pose without computing world transforms (call
+   * `updateWorld` after applying animations). Reuses this pose's storage.
+   */
+  reset(sk) {
+    const bones = sk.bones;
+    const slots = sk.slots;
+    if (!this.local || this.local.length !== bones.length) {
+      this.local = bones.map((b) => cloneTransform(b.setup));
+      this.inherit = bones.map((b) => b.inherit ?? 'normal');
+    } else {
+      for (let i = 0; i < bones.length; i++) {
+        copyTransform(bones[i].setup, this.local[i]);
+        this.inherit[i] = bones[i].inherit ?? 'normal';
+      }
+    }
+    if (!this.attachment || this.attachment.length !== slots.length) {
+      this.attachment = slots.map((s) => s.attachment);
+      this.color = slots.map((s) => s.color.slice());
+      this.dark = slots.map((s) => (s.dark ? s.dark.slice() : null));
+      this.drawOrder = slots.map((_, i) => i);
+    } else {
+      for (let i = 0; i < slots.length; i++) {
+        const s = slots[i];
+        this.attachment[i] = s.attachment;
+        const color = this.color[i];
+        for (let k = 0; k < 4; k++) color[k] = s.color[k];
+        if (s.dark) {
+          const dark = this.dark[i] ?? (this.dark[i] = [0, 0, 0]);
+          for (let k = 0; k < 3; k++) dark[k] = s.dark[k];
+        } else {
+          this.dark[i] = null;
+        }
+        this.drawOrder[i] = i;
+      }
+    }
+    /** Deform deltas keyed by `${slot}/${attachment name}`. */
+    if (this.deform) this.deform.clear();
+    else this.deform = new Map();
+    if (!this.ik || this.ik.length !== sk.ik.length) this.ik = sk.ik.map(() => ({}));
+    sk.ik.forEach((c, i) => {
+      const s = this.ik[i];
+      s.mix = c.mix;
+      s.softness = c.softness;
+      s.bendPositive = c.bendPositive;
+      s.compress = c.compress;
+      s.stretch = c.stretch;
+    });
+    const list = this.ensureConstraints(sk);
+    resetConstraintState(list, this.constraintState);
   }
 
   /** Transform and path constraints of `sk`, with their animated state reset when they change. */
@@ -65,21 +112,46 @@ export class Pose {
       const bone = sk.bones[t.bone];
       if (!bone) continue;
       const setup = bone.setup;
-      const target = cloneTransform(this.local[t.bone]);
-      const v = (ch) => sample(t[ch], time);
-      let s;
-      if ((s = v('rotate')) !== undefined) target.rotation = setup.rotation + s;
-      if ((s = v('translate')) !== undefined) [target.x, target.y] = [setup.x + s[0], setup.y + s[1]];
-      if ((s = v('translateX')) !== undefined) target.x = setup.x + s;
-      if ((s = v('translateY')) !== undefined) target.y = setup.y + s;
-      if ((s = v('scale')) !== undefined) [target.scale_x, target.scale_y] = [setup.scale_x * s[0], setup.scale_y * s[1]];
-      if ((s = v('scaleX')) !== undefined) target.scale_x = setup.scale_x * s;
-      if ((s = v('scaleY')) !== undefined) target.scale_y = setup.scale_y * s;
-      if ((s = v('shear')) !== undefined) [target.shear_x, target.shear_y] = [setup.shear_x + s[0], setup.shear_y + s[1]];
-      if ((s = v('shearX')) !== undefined) target.shear_x = setup.shear_x + s;
-      if ((s = v('shearY')) !== undefined) target.shear_y = setup.shear_y + s;
-      if (hold && (s = v('inherit')) !== undefined) this.inherit[t.bone] = s;
-      this.local[t.bone] = lerpTransform(this.local[t.bone], target, alpha);
+      const L = this.local[t.bone];
+      let { x, y, rotation, scale_x: sx, scale_y: sy, shear_x: hx, shear_y: hy } = L;
+      const has = (keys) => keys !== undefined && keys.length > 0;
+      if (has(t.rotate)) rotation = setup.rotation + sampleComponent(t.rotate, time, 0);
+      if (has(t.translate)) {
+        x = setup.x + sampleComponent(t.translate, time, 0);
+        y = setup.y + sampleComponent(t.translate, time, 1);
+      }
+      if (has(t.translateX)) x = setup.x + sampleComponent(t.translateX, time, 0);
+      if (has(t.translateY)) y = setup.y + sampleComponent(t.translateY, time, 0);
+      if (has(t.scale)) {
+        sx = setup.scale_x * sampleComponent(t.scale, time, 0);
+        sy = setup.scale_y * sampleComponent(t.scale, time, 1);
+      }
+      if (has(t.scaleX)) sx = setup.scale_x * sampleComponent(t.scaleX, time, 0);
+      if (has(t.scaleY)) sy = setup.scale_y * sampleComponent(t.scaleY, time, 0);
+      if (has(t.shear)) {
+        hx = (setup.shear_x ?? 0) + sampleComponent(t.shear, time, 0);
+        hy = (setup.shear_y ?? 0) + sampleComponent(t.shear, time, 1);
+      }
+      if (has(t.shearX)) hx = (setup.shear_x ?? 0) + sampleComponent(t.shearX, time, 0);
+      if (has(t.shearY)) hy = (setup.shear_y ?? 0) + sampleComponent(t.shearY, time, 0);
+      if (hold && has(t.inherit)) this.inherit[t.bone] = sample(t.inherit, time);
+      if (alpha >= 1) {
+        L.x = x;
+        L.y = y;
+        L.rotation = rotation;
+        L.scale_x = sx;
+        L.scale_y = sy;
+        L.shear_x = hx;
+        L.shear_y = hy;
+      } else {
+        L.x = lerp(L.x, x, alpha);
+        L.y = lerp(L.y, y, alpha);
+        L.rotation = lerp(L.rotation, rotation, alpha);
+        L.scale_x = lerp(L.scale_x, sx, alpha);
+        L.scale_y = lerp(L.scale_y, sy, alpha);
+        L.shear_x = lerp(L.shear_x ?? 0, hx ?? 0, alpha);
+        L.shear_y = lerp(L.shear_y ?? 0, hy ?? 0, alpha);
+      }
     }
     for (const t of anim.slots) {
       const i = t.slot;
@@ -99,7 +171,8 @@ export class Pose {
         color.splice(0, 3, ...s.slice(0, 3));
         dark = s.slice(3, 6);
       }
-      this.color[i] = this.color[i].map((c, k) => lerp(c, color[k], alpha));
+      const current = this.color[i];
+      for (let k = 0; k < 4; k++) current[k] = lerp(current[k], color[k], alpha);
       if (dark) this.dark[i] = (this.dark[i] ?? dark).map((c, k) => lerp(c, dark[k], alpha));
     }
     for (const t of anim.deform) {
@@ -146,7 +219,9 @@ export class Pose {
 
   /** Recomputes world transforms from local transforms, then applies constraints in order. */
   updateWorld(sk) {
-    this.applied = this.local.map(cloneTransform);
+    const n = this.local.length;
+    for (let i = 0; i < n; i++) this.applied[i] = this.applied[i] ? copyTransform(this.local[i], this.applied[i]) : cloneTransform(this.local[i]);
+    this.applied.length = n;
     this.computeWorld(sk);
     const list = this.ensureConstraints(sk);
     const steps = [...sk.ik.map((c, i) => ({ order: c.order, ik: i })), ...list.map((c, i) => ({ order: c.order, other: i }))];
@@ -163,7 +238,7 @@ export class Pose {
       const state = this.constraintState[step.other];
       const result = c.type === 'transform' ? solveTransform(this, c, state) : solvePath(sk, this, c, state);
       if (result?.world) this.setWorlds(sk, result.world);
-      else if (result?.local) this.computeWorld(sk);
+      else if (result?.local) for (const b of result.local) this.updateBranch(sk, b);
     }
   }
 
@@ -172,19 +247,53 @@ export class Pose {
    * local transforms to match and moving their descendants along.
    */
   setWorlds(sk, desired) {
-    const dirty = new Uint8Array(sk.bones.length);
-    sk.bones.forEach((b, i) => {
-      const parent = b.parent === null ? null : this.world[b.parent];
+    const dirty = this.dirtyFlags(sk);
+    const bones = sk.bones;
+    let first = bones.length;
+    for (const b of desired.keys()) first = Math.min(first, b);
+    for (let i = first; i < bones.length; i++) {
+      const p = bones[i].parent;
       const want = desired.get(i);
       if (want) {
-        this.applied[i] = localFromWorld(parent, want, this.inherit[i]);
+        this.applied[i] = localFromWorld(p === null ? null : this.world[p], want, this.inherit[i]);
         this.world[i] = want;
         dirty[i] = 1;
-      } else if (parent && dirty[b.parent]) {
-        this.world[i] = inheritWorld(parent, toAffine(this.applied[i]), this.inherit[i]);
+      } else if (p !== null && dirty[p]) {
+        this.updateBone(sk, i);
         dirty[i] = 1;
       }
-    });
+    }
+  }
+
+  /** Cleared per-bone flags, reused between calls. */
+  dirtyFlags(sk) {
+    const n = sk.bones.length;
+    if (!this.dirty || this.dirty.length !== n) this.dirty = new Uint8Array(n);
+    else this.dirty.fill(0);
+    return this.dirty;
+  }
+
+  /** Recomputes the world transform of `root` and its descendants (parents precede children). */
+  updateBranch(sk, root) {
+    const dirty = this.dirtyFlags(sk);
+    const bones = sk.bones;
+    dirty[root] = 1;
+    this.updateBone(sk, root);
+    for (let i = root + 1; i < bones.length; i++) {
+      const p = bones[i].parent;
+      if (p !== null && dirty[p]) {
+        dirty[i] = 1;
+        this.updateBone(sk, i);
+      }
+    }
+  }
+
+  /** Recomputes one bone's world transform from its applied local transform, in place. */
+  updateBone(sk, i) {
+    const p = sk.bones[i].parent;
+    const w = this.world[i] ?? (this.world[i] = new Affine());
+    if (p === null) toAffine(this.applied[i], w);
+    else inheritWorld(this.world[p], toAffine(this.applied[i], LOCAL), this.inherit[i], w);
   }
 
   skinActive(sk, has) {
@@ -194,10 +303,7 @@ export class Pose {
 
   computeWorld(sk) {
     this.world.length = sk.bones.length;
-    sk.bones.forEach((b, i) => {
-      const local = toAffine(this.applied[i]);
-      this.world[i] = b.parent === null ? local : inheritWorld(this.world[b.parent], local, this.inherit[i]);
-    });
+    for (let i = 0; i < sk.bones.length; i++) this.updateBone(sk, i);
   }
 
   /** Rotates (and optionally stretches) the constrained bones so the chain reaches the target. */
@@ -225,7 +331,7 @@ export class Pose {
         this.applied[b].scale_x *= s;
         if (c.uniform) this.applied[b].scale_y *= s;
       }
-      this.computeWorld(sk);
+      this.updateBranch(sk, b);
       return;
     }
     const [p, ch] = c.bones;
@@ -236,7 +342,7 @@ export class Pose {
     const bLen = len(sub(tip, C));
     if (a < 1e-4 || bLen < 1e-4) {
       aim(p, P, C.some((v, k) => v !== P[k]) ? C : this.world[p].apply([1, 0]));
-      this.computeWorld(sk);
+      this.updateBranch(sk, p);
       return;
     }
     let d = len(sub(target, P));
@@ -244,7 +350,7 @@ export class Pose {
       const s = (d / (a + bLen) - 1) * mix + 1;
       this.applied[p].scale_x *= s;
       if (c.uniform) this.applied[p].scale_y *= s;
-      this.computeWorld(sk);
+      this.updateBranch(sk, p);
       P = this.world[p].apply([0, 0]);
       C = this.world[ch].apply([0, 0]);
       return this.finishTwoBone(sk, p, ch, target, mix, state, parentSign);
@@ -259,7 +365,7 @@ export class Pose {
     const desired = angleOf(sub(target, P)) - bend * A;
     const delta = wrapDegrees(desired - angleOf(sub(C, P)));
     this.applied[p].rotation += delta * mix * parentSign(p);
-    this.computeWorld(sk);
+    this.updateBranch(sk, p);
     this.finishTwoBone(sk, p, ch, target, mix, state, parentSign);
   }
 
@@ -268,7 +374,7 @@ export class Pose {
     const tip = this.world[ch].apply([Math.max(sk.bones[ch].length, 1e-3), 0]);
     const delta = wrapDegrees(angleOf(sub(target, C)) - angleOf(sub(tip, C)));
     this.applied[ch].rotation += delta * mix * parentSign(ch);
-    this.computeWorld(sk);
+    this.updateBranch(sk, ch);
   }
 
   /** World transform of a region or point attachment. */
@@ -297,9 +403,9 @@ export class Pose {
           const bx = w.x + (deform ? deform[k] : 0);
           const by = w.y + (deform ? deform[k + 1] : 0);
           k += 2;
-          const p = this.world[w.bone].apply([bx, by]);
-          x += p[0] * w.weight;
-          y += p[1] * w.weight;
+          const m = this.world[w.bone];
+          x += (m.a * bx + m.c * by + m.tx) * w.weight;
+          y += (m.b * bx + m.d * by + m.ty) * w.weight;
         }
         out.push(x, y);
       }
@@ -307,8 +413,9 @@ export class Pose {
       const m = this.world[sk.slots[slot].bone];
       const verts = source.vertices ?? [];
       for (let i = 0; i + 1 < verts.length; i += 2) {
-        const p = m.apply([verts[i] + (deform ? deform[i] : 0), verts[i + 1] + (deform ? deform[i + 1] : 0)]);
-        out.push(p[0], p[1]);
+        const vx = verts[i] + (deform ? deform[i] : 0);
+        const vy = verts[i + 1] + (deform ? deform[i + 1] : 0);
+        out.push(m.a * vx + m.c * vy + m.tx, m.b * vx + m.d * vy + m.ty);
       }
     }
     return out;
@@ -348,9 +455,7 @@ export class Pose {
         const flat = this.worldVertices(sk, i, att);
         const positions = [];
         for (let k = 0; k + 1 < flat.length; k += 2) positions.push([flat[k], flat[k + 1]]);
-        const uvs = [];
-        for (let k = 0; k + 1 < source.uvs.length; k += 2) uvs.push([source.uvs[k], source.uvs[k + 1]]);
-        out.push({ kind: 'mesh', slot: i, attachment: att, positions, uvs, triangles: source.triangles, color, blend });
+        out.push({ kind: 'mesh', slot: i, attachment: att, positions, uvs: uvPairs(source), triangles: source.triangles, color, blend });
       }
     }
     return out;
@@ -378,37 +483,52 @@ function localFromWorld(parent, world, mode) {
   return linear.decompose();
 }
 
-/** Child world transform for the given inherit mode. */
-function inheritWorld(parent, local, mode) {
-  if (mode === 'normal' || !mode) return parent.mul(local);
-  const [tx, ty] = parent.apply([local.tx, local.ty]);
-  const linear = new Affine(local.a, local.b, local.c, local.d, 0, 0);
-  let m;
+const uvCache = new WeakMap();
+
+/** A mesh's UVs as [u, v] pairs, cached per attachment (rebuilt if the UV array is replaced). */
+function uvPairs(source) {
+  const hit = uvCache.get(source);
+  if (hit && hit.uvs === source.uvs) return hit.pairs;
+  const pairs = [];
+  for (let k = 0; k + 1 < source.uvs.length; k += 2) pairs.push([source.uvs[k], source.uvs[k + 1]]);
+  uvCache.set(source, { uvs: source.uvs, pairs });
+  return pairs;
+}
+
+/**
+ * Child world transform for the given inherit mode, written into `out` (which may be `local`).
+ * Translation always goes through the full parent transform; the linear part through the part
+ * of the parent that the mode keeps.
+ */
+function inheritWorld(parent, local, mode, out = new Affine()) {
+  if (mode === 'normal' || !mode) return Affine.multiply(parent, local, out);
+  const tx = parent.a * local.tx + parent.c * local.ty + parent.tx;
+  const ty = parent.b * local.tx + parent.d * local.ty + parent.ty;
   const sx = Math.hypot(parent.a, parent.b);
   const det = parent.determinant();
+  let pa;
+  let pb;
+  let pc;
+  let pd;
   switch (mode) {
     case 'onlyTranslation':
-      m = linear;
+      [pa, pb, pc, pd] = [1, 0, 0, 1];
       break;
-    case 'noRotationOrReflection': {
-      const sy = sx > 1e-12 ? Math.abs(det) / sx : 0;
-      m = new Affine(sx, 0, 0, sy, 0, 0).mul(linear);
+    case 'noRotationOrReflection':
+      [pa, pb, pc, pd] = [sx, 0, 0, sx > 1e-12 ? Math.abs(det) / sx : 0];
       break;
-    }
     case 'noScale':
     case 'noScaleOrReflection': {
-      const ux = sx > 1e-12 ? [parent.a / sx, parent.b / sx] : [1, 0];
+      const ux = sx > 1e-12 ? parent.a / sx : 1;
+      const uy = sx > 1e-12 ? parent.b / sx : 0;
       const flip = mode === 'noScale' && det < 0 ? -1 : 1;
-      m = new Affine(ux[0], ux[1], -ux[1] * flip, ux[0] * flip, 0, 0).mul(linear);
+      [pa, pb, pc, pd] = [ux, uy, -uy * flip, ux * flip];
       break;
     }
     default:
-      m = parent.mul(local);
-      return m;
+      return Affine.multiply(parent, local, out);
   }
-  m.tx = tx;
-  m.ty = ty;
-  return m;
+  return out.set(pa * local.a + pc * local.b, pb * local.a + pd * local.b, pa * local.c + pc * local.d, pb * local.c + pd * local.d, tx, ty);
 }
 
 /** Slot order for a draw order key: `offsets` move slots relative to their setup index. */
