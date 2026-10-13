@@ -75,22 +75,6 @@ npm test
 5. **Save:** *File ▸ Save* writes your work file `name.rigby`. Reopen it any time with *File ▸ Open*.
 6. **Export:** *File ▸ Export JSON + atlas…* or *Export .skel + atlas* writes the skeleton plus `name.atlas` and `name.png` for game runtimes. *File ▸ Open* also imports existing `.json` / `.skel` exports.
 
-### Keyboard shortcuts
-
-| Key | Action |
-| --- | --- |
-| <kbd>R</kbd> / <kbd>G</kbd> / <kbd>S</kbd> / <kbd>B</kbd> | Rotate / move / scale / create bone tool |
-| <kbd>Tab</kbd> | Toggle Setup ↔ Animate mode |
-| <kbd>Space</kbd> | Play / pause |
-| <kbd>K</kbd> | Key the selection at the current frame |
-| <kbd>←</kbd> / <kbd>→</kbd> | Previous / next frame |
-| <kbd>F</kbd> | Frame everything |
-| <kbd>Del</kbd> | Delete selected key, bone or slot |
-| Middle / right drag, wheel | Pan, zoom |
-| <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Undo / redo |
-| <kbd>Ctrl</kbd>+<kbd>S</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Save / save as |
-| <kbd>Ctrl</kbd>+<kbd>O</kbd> / <kbd>Ctrl</kbd>+<kbd>E</kbd> | Open / export |
-
 ## Playing animations in your game
 
 Copy `src/core/` into your project (no dependencies). With WebGL, also copy `src/webgl/` for a
