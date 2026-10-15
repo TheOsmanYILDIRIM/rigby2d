@@ -5,13 +5,16 @@ import { identityTransform, transformEquals } from '../core/math.js';
 import { BLEND_MODES, INHERIT_MODES, findAttachment, makeAttachment, uniqueName, vertexCount } from '../core/model.js';
 import { Mode, selBone, selSlot } from './app.js';
 import * as edit from './edit.js';
+import { renameBoneRefs, renameSlotRefs } from '../core/constraintdata.js';
+import { constraintUi } from './constraintui.js';
 import { bindMesh, regionToMesh, unbindMesh } from './meshtool.js';
 import { dragValue, h, select, textField } from './widgets.js';
 
 export function render(app, el) {
   const b = selBone(app.sel);
   const s = selSlot(app.sel);
-  const content = b !== null ? boneUi(app, b) : s !== null ? slotUi(app, s) : projectUi(app);
+  const k = app.sel?.constraint;
+  const content = k !== undefined ? constraintUi(app, k) : b !== null ? boneUi(app, b) : s !== null ? slotUi(app, s) : projectUi(app);
   // The mesh being edited stays on top while bones are selected for binding or painting.
   const mesh = meshUi(app);
   el.replaceChildren(...[mesh, content].flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false));
@@ -48,6 +51,7 @@ function boneUi(app, b) {
       'Name',
       textField(bone.name, (name) => {
         if (name && app.doc.boneIndex(name) === null) {
+          renameBoneRefs(app.doc, bone.name, name);
           bone.name = name;
           app.changed();
         }
@@ -154,6 +158,7 @@ function slotUi(app, s) {
         'Name',
         textField(slot.name, (name) => {
           if (name && app.doc.slotIndex(name) === null) {
+            renameSlotRefs(app.doc, slot.name, name);
             slot.name = name;
             app.changed();
           }

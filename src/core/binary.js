@@ -1486,7 +1486,8 @@ function writeVertexAttachment(w, key, a, type, slotIndex) {
   } else {
     for (const v of a.vertices) w.float(v);
   }
-  if (type === 'path') for (const l of a.lengths ?? []) w.float(l);
+  // One length per path point (the reader relies on that count).
+  if (type === 'path') for (let k = 0; k < count / 3; k++) w.float(a.lengths?.[k] ?? a.lengths?.at(-1) ?? 0);
   w.color(a.color ?? DEFAULT_COLORS[type] ?? 'ce3a3aff');
 }
 

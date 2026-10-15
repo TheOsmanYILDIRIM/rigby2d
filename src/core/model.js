@@ -5,6 +5,7 @@
 // The model is a superset of the common skeleton JSON format, so those files load natively
 // (see interop.js). Bones, slots and constraints reference each other by array index.
 
+import { pruneConstraints } from './constraintdata.js';
 import { Animation, BONE_CHANNELS, SLOT_CHANNELS, emptyBoneTimeline, emptySlotTimeline, makeKey } from './animation.js';
 import { LINEAR, cloneCurve } from './curve.js';
 import { identityTransform } from './math.js';
@@ -273,6 +274,7 @@ export class Skeleton {
       if (removed[this.slots[s].bone]) this.removeSlot(s);
     }
     this.remapBoneRefs((i) => newIndex[i]);
+    pruneConstraints(this);
   }
 
   /** Moves a bone (and its subtree) under a new parent, preserving bone ordering. */
@@ -295,6 +297,7 @@ export class Skeleton {
   removeSlot(slot) {
     this.slots.splice(slot, 1);
     this.remapSlotRefs((i) => (i === slot ? null : i > slot ? i - 1 : i));
+    pruneConstraints(this);
   }
 
   /** Moves a slot in draw order from `from` to `to`. */

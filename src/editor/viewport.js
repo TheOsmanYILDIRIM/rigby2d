@@ -98,6 +98,7 @@ export class Viewport {
       this.drawAttachments(pose, dpr);
     }
     this.attachmentTime = performance.now() - t0;
+    this.drawShapes(pose);
     if (app.showBones) this.drawBones(pose);
     this.meshTool.draw(this.ctx);
     if (this.drag?.kind === 'box') {
@@ -202,6 +203,72 @@ export class Viewport {
       if (!hasImage) this.outline(q, pts, 'rgb(255,0,200)');
       if (selSlot(app.sel) === q.slot) this.outline(q, pts, SELECTED);
     }
+  }
+
+  /** Bounding boxes, clipping polygons, paths and points: shapes without an image. */
+  drawShapes(pose) {
+    const doc = this.app.doc;
+    const ctx = this.ctx;
+    const selected = selSlot(this.app.sel);
+    const colors = { boundingbox: 'rgb(96,240,0)', clipping: 'rgb(206,58,58)', path: 'rgb(255,127,0)', point: 'rgb(241,241,0)' };
+    ctx.save();
+    for (let i = 0; i < doc.slots.length; i++) {
+      const att = pose.slotAttachment(doc, i);
+      if (!att || !(att.type in colors)) continue;
+      const color = att.color ? `rgb(${att.color.slice(0, 3).map((c) => Math.round(c * 255)).join(',')})` : colors[att.type];
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = i === selected ? 2.5 : 1.25;
+      if (att.type === 'point') {
+        const m = pose.attachmentWorld(doc, i, att);
+        const [o, tip] = [m.apply([0, 0]), m.apply([20 / this.app.view.zoom, 0])].map((p) => this.toScreen(p));
+        ctx.beginPath();
+        ctx.arc(o[0], o[1], 4, 0, Math.PI * 2);
+        ctx.moveTo(o[0], o[1]);
+        ctx.lineTo(tip[0], tip[1]);
+        ctx.stroke();
+        continue;
+      }
+      const flat = pose.worldVertices(doc, i, att);
+      const pts = [];
+      for (let k = 0; k + 1 < flat.length; k += 2) pts.push(this.toScreen([flat[k], flat[k + 1]]));
+      if (att.type === 'path') {
+        // Points are stored as [in-handle, point, out-handle].
+        const n = Math.floor(pts.length / 3);
+        const curves = att.closed ? n : n - 1;
+        ctx.beginPath();
+        for (let c = 0; c < curves; c++) {
+          const p0 = pts[3 * c + 1];
+          const c1 = pts[3 * c + 2];
+          const next = (c + 1) % n;
+          const c2 = pts[3 * next];
+          const p1 = pts[3 * next + 1];
+          if (c === 0) ctx.moveTo(p0[0], p0[1]);
+          ctx.bezierCurveTo(c1[0], c1[1], c2[0], c2[1], p1[0], p1[1]);
+        }
+        ctx.stroke();
+        if (i === selected) {
+          for (let k = 0; k < n; k++) {
+            const [hIn, p, hOut] = [pts[3 * k], pts[3 * k + 1], pts[3 * k + 2]];
+            ctx.globalAlpha = 0.6;
+            ctx.beginPath();
+            ctx.moveTo(hIn[0], hIn[1]);
+            ctx.lineTo(hOut[0], hOut[1]);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.fillRect(p[0] - 3, p[1] - 3, 6, 6);
+          }
+        }
+        continue;
+      }
+      ctx.beginPath();
+      pts.forEach((p, k) => (k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+      ctx.closePath();
+      if (att.type === 'clipping') ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
   }
 
   /** Outlines of the selected slot and of attachments whose image is missing. */

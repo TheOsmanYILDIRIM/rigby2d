@@ -2,9 +2,11 @@
 // Tree panel: the skeleton (bones, slots and their attachments) plus draw order, skins,
 // constraints, events, animations and images, in collapsible sections.
 
+import { listConstraints } from '../core/constraintdata.js';
 import { Mode, selBone, selSlot } from './app.js';
+import { CONSTRAINT_LABELS, createConstraint } from './constraintui.js';
 import * as edit from './edit.js';
-import { h } from './widgets.js';
+import { h, popupMenu } from './widgets.js';
 
 /** Collapsed sections and bones (kept for the session). */
 const collapsed = new Set(['images', 'events']);
@@ -135,14 +137,50 @@ export function render(app, el) {
     ),
   ];
 
-  // Constraints: IK (evaluated) and others kept from imported files.
-  const constraints = [
-    ...doc.ik.map((c) => row(`⊸ ${c.name}`, { title: `IK: ${c.bones.map((b) => doc.bones[b].name).join(' → ')} → ${doc.bones[c.target].name}` })),
-    ...[...(doc.extra.constraints ?? []).map((e) => [e.data.type, e.data.name]), ...['transform', 'path', 'physics'].flatMap((t) => (doc.extra[t] ?? []).map((c) => [t, c.name]))].map(([type, name]) => {
-      const evaluated = ['transform', 'path', 'physics', 'slider'].includes(type);
-      return row(`⊸ ${name}`, { cls: evaluated ? '' : 'weak', title: evaluated ? `${type} constraint` : `${type} constraint (kept, not evaluated yet)` });
-    }),
-  ];
+  // Constraints in application order; click to edit their settings.
+  const CONSTRAINT_ICONS = { ik: '⊸', transform: '⇄', path: '∿', physics: '≋', slider: '⇥' };
+  const constraints = listConstraints(doc).map((c) => {
+    const known = c.type in CONSTRAINT_LABELS;
+    return row(`${CONSTRAINT_ICONS[c.type] ?? '⊸'} ${c.name}`, {
+      cls: known ? '' : 'weak',
+      selected: app.sel?.constraint === c.name,
+      title: known ? `${CONSTRAINT_LABELS[c.type]} constraint` : `${c.type} constraint (kept, not evaluated)`,
+      onclick: () => {
+        app.sel = { constraint: c.name };
+        app.multi.clear();
+        app.changed();
+      },
+    });
+  });
+  const newConstraint = h(
+    'button',
+    {
+      class: 'small',
+      disabled: app.mode !== Mode.Setup,
+      title: 'New constraint from the selected bones',
+      onclick: (e) => {
+        const r = e.target.getBoundingClientRect();
+        popupMenu(
+          r.left,
+          r.bottom,
+          Object.entries(CONSTRAINT_LABELS).map(([type, label]) => ({
+            label: `${label} constraint`,
+            action: () => {
+              const result = createConstraint(app, type);
+              if (result.startsWith('!')) app.setStatus(result.slice(1));
+              else {
+                app.sel = { constraint: result };
+                app.multi.clear();
+                app.setStatus(`Created ${label} constraint '${result}'`);
+              }
+              app.changed();
+            },
+          })),
+        );
+      },
+    },
+    '＋ New',
+  );
 
   const animations = doc.animations.map((a, i) =>
     row(`${app.anim === i ? '▶' : '·'} ${a.name}`, {
@@ -162,7 +200,7 @@ export function render(app, el) {
       section(app, 'skeleton', doc.name || 'Skeleton', doc.bones.length, skeleton, addBone),
       section(app, 'draworder', 'Draw order', n, order),
       section(app, 'skins', 'Skins', doc.skins.length + 1, skins),
-      section(app, 'constraints', 'Constraints', constraints.length, constraints),
+      section(app, 'constraints', 'Constraints', constraints.length, constraints, newConstraint),
       section(app, 'events', 'Events', doc.events.length, doc.events.map((e) => row(`⚑ ${e.name}`))),
       section(app, 'animations', 'Animations', doc.animations.length, animations),
       section(app, 'images', 'Images', doc.images.length, doc.images.map((i) => row(`🖼 ${i.name}`, { title: `${i.width}×${i.height}` }))),

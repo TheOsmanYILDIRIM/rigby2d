@@ -543,6 +543,65 @@ function writeNumericKeys(keys, toValues, toFields, v4, toNextValues = toValues)
 
 const asArray = (v) => (Array.isArray(v) ? v : [v]);
 
+const TRANSFORM_KEYS = [
+  ['rotate', 'rotation', 'mixRotate'],
+  ['x', 'x', 'mixX'],
+  ['y', 'y', 'mixY'],
+  ['scaleX', 'scaleX', 'mixScaleX'],
+  ['scaleY', 'scaleY', 'mixScaleY'],
+  ['shearY', 'shearY', 'mixShearY'],
+];
+
+/**
+ * A constraint in the 4.3 layout converted to the 4.2 (`v42`) or 3.8 layout, or null when that
+ * version has no such constraint. `warn` reports anything the older layout cannot express.
+ */
+function legacyConstraint(data, v42, warn) {
+  const { type, ...d } = data;
+  if (type === 'slider' || (type === 'physics' && !v42)) {
+    warn(`${type} constraints need format 4.${type === 'slider' ? 3 : 2}; left out`);
+    return null;
+  }
+  if (type === 'physics') return d;
+  const mix = (key, fallback = 1) => d[key] ?? fallback;
+  if (type === 'path') {
+    const out = { name: d.name, ...(d.skin ? { skin: true } : {}), bones: d.bones, target: d.slot ?? d.target };
+    for (const key of ['positionMode', 'spacingMode', 'rotateMode', 'rotation', 'position', 'spacing']) if (d[key] !== undefined) out[key] = d[key];
+    if (v42) Object.assign(out, { mixRotate: mix('mixRotate'), mixX: mix('mixX'), mixY: mix('mixY', mix('mixX')) });
+    else {
+      out.rotateMix = mix('mixRotate');
+      out.translateMix = mix('mixX');
+      if (mix('mixY', mix('mixX')) !== out.translateMix) warn('3.8 has one translate mix; mix Y was dropped');
+    }
+    return out;
+  }
+  // Transform: each property must map onto itself unchanged.
+  const props = d.properties ?? Object.fromEntries(TRANSFORM_KEYS.map(([p]) => [p, { to: { [p]: {} } }]));
+  const mapped = new Set();
+  for (const [from, entry] of Object.entries(props)) {
+    for (const [to, t] of Object.entries(entry.to ?? {})) {
+      if (to !== from || (entry.offset ?? 0) !== 0 || (t.offset ?? 0) !== 0 || (t.scale ?? 1) !== 1) warn(`property mapping ${from} -> ${to} was simplified`);
+      mapped.add(to);
+    }
+  }
+  if ((d.localSource ?? false) !== (d.localTarget ?? false)) warn('local source and local target differ; using local target');
+  if (d.clamp) warn('clamp is not supported before 4.3; left out');
+  const out = { name: d.name, ...(d.skin ? { skin: true } : {}), bones: d.bones, target: d.source ?? d.target };
+  for (const [, offset] of TRANSFORM_KEYS) if (d[offset]) out[offset] = d[offset];
+  const mixOf = (prop, key) => (mapped.has(prop) ? mix(key) : 0);
+  if (v42) {
+    for (const [prop, , key] of TRANSFORM_KEYS) out[key] = mixOf(prop, key);
+  } else {
+    out.rotateMix = mixOf('rotate', 'mixRotate');
+    out.translateMix = mixOf('x', 'mixX');
+    out.scaleMix = mixOf('scaleX', 'mixScaleX');
+    out.shearMix = mixOf('shearY', 'mixShearY');
+  }
+  if (d.localTarget ?? d.local) out.local = true;
+  if (d.additive ?? d.relative) out.relative = true;
+  return out;
+}
+
 /** Axis-aligned bounds of the setup pose (stored in the skeleton header). */
 function setupBounds(sk) {
   const pose = new Pose(sk);
@@ -698,9 +757,8 @@ function writeJson(sk, version) {
   if (!v43) {
     for (const key of ['transform', 'path', 'physics']) if (sk.extra[key]) json[key] = clone(sk.extra[key]);
     for (const e of sk.extra.constraints ?? []) {
-      const { type, ...data } = clone(e.data);
-      (json[type] ??= []).push({ order: e.index, ...data });
-      warnings.push(`constraint '${data.name}' (${type}) was converted from the 4.3 layout and may not load in older versions`);
+      const converted = legacyConstraint(clone(e.data), v42, (msg) => warnings.push(`constraint '${e.data.name}': ${msg}`));
+      if (converted) (json[e.data.type] ??= []).push({ order: e.index, ...converted });
     }
   }
 
