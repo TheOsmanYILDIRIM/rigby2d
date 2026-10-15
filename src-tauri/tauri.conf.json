@@ -26,13 +26,14 @@
   "bundle": {
     "active": true,
     "targets": [
+      "msi",
       "nsis"
     ],
     "publisher": "jaisurya-dev-art",
-    "copyright": "Copyright (c) 2026 jaisurya-dev-art. MIT License.",
+    "copyright": "Copyright (c) 2026 jaisurya-dev-art. Code licensed MIT OR Apache-2.0. Rigby2D and Hoverlabs names and logos are trademarks of Hoverlabs.",
     "category": "GraphicsAndDesign",
     "shortDescription": "2D skeletal animation editor",
-    "longDescription": "Rigby2D: open-source 2D skeletal animation editor.",
+    "longDescription": "Rigby2D by Hoverlabs: open-source 2D skeletal animation editor.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -41,6 +42,6 @@
       "icons/icon.ico"
     ],
     "homepage": "https://github.com/jaisurya-dev-art/rigby2d",
-    "license": "MIT"
+    "license": "MIT OR Apache-2.0"
   }
 }
