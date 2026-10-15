@@ -6,6 +6,7 @@ import { listConstraints } from '../core/constraintdata.js';
 import { Mode, selBone, selSlot } from './app.js';
 import { CONSTRAINT_LABELS, createConstraint } from './constraintui.js';
 import * as edit from './edit.js';
+import { createEvent, createSkin } from './skineventui.js';
 import { h, popupMenu } from './widgets.js';
 
 /** Collapsed sections and bones (kept for the session). */
@@ -130,12 +131,30 @@ export function render(app, el) {
   }
 
   // Skins: the active one shows the dot.
+  // Clicking a skin makes it active and shows its settings.
+  const pickSkin = (name) => () => {
+    doc.skin = name === 'default' ? null : name;
+    app.sel = { skin: name };
+    app.multi.clear();
+    app.changed();
+  };
   const skins = [
-    row(`${doc.skin ? '○' : '●'} default`, { selected: !doc.skin, onclick: () => ((doc.skin = null), app.changed()) }),
-    ...doc.skins.map((s) =>
-      row(`${doc.skin === s.name ? '●' : '○'} ${s.name}`, { selected: doc.skin === s.name, onclick: () => ((doc.skin = s.name), app.changed()) }),
-    ),
+    row(`${doc.skin ? '○' : '●'} default`, { selected: app.sel?.skin === 'default', onclick: pickSkin('default') }),
+    ...doc.skins.map((s) => row(`${doc.skin === s.name ? '●' : '○'} ${s.name}`, { selected: app.sel?.skin === s.name, onclick: pickSkin(s.name) })),
   ];
+  const setupOnly = app.mode !== Mode.Setup;
+  const newSkin = h('button', { class: 'small', disabled: setupOnly, title: 'New skin (becomes active)', onclick: () => createSkin(app) }, '＋ New');
+  const events = doc.events.map((e) =>
+    row(`⚑ ${e.name}`, {
+      selected: app.sel?.event === e.name,
+      onclick: () => {
+        app.sel = { event: e.name };
+        app.multi.clear();
+        app.changed();
+      },
+    }),
+  );
+  const newEvent = h('button', { class: 'small', disabled: setupOnly, title: 'New event', onclick: () => createEvent(app) }, '＋ New');
 
   // Constraints in application order; click to edit their settings.
   const CONSTRAINT_ICONS = { ik: '⊸', transform: '⇄', path: '∿', physics: '≋', slider: '⇥' };
@@ -199,9 +218,9 @@ export function render(app, el) {
     h('div', { class: 'tree-scroll scroll' },
       section(app, 'skeleton', doc.name || 'Skeleton', doc.bones.length, skeleton, addBone),
       section(app, 'draworder', 'Draw order', n, order),
-      section(app, 'skins', 'Skins', doc.skins.length + 1, skins),
+      section(app, 'skins', 'Skins', doc.skins.length + 1, skins, newSkin),
       section(app, 'constraints', 'Constraints', constraints.length, constraints, newConstraint),
-      section(app, 'events', 'Events', doc.events.length, doc.events.map((e) => row(`⚑ ${e.name}`))),
+      section(app, 'events', 'Events', doc.events.length, events, newEvent),
       section(app, 'animations', 'Animations', doc.animations.length, animations),
       section(app, 'images', 'Images', doc.images.length, doc.images.map((i) => row(`🖼 ${i.name}`, { title: `${i.width}×${i.height}` }))),
     ),

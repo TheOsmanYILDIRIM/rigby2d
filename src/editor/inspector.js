@@ -8,13 +8,25 @@ import * as edit from './edit.js';
 import { renameBoneRefs, renameSlotRefs } from '../core/constraintdata.js';
 import { constraintUi } from './constraintui.js';
 import { bindMesh, regionToMesh, unbindMesh } from './meshtool.js';
+import { eventUi, skinUi } from './skineventui.js';
 import { dragValue, h, select, textField } from './widgets.js';
 
 export function render(app, el) {
   const b = selBone(app.sel);
   const s = selSlot(app.sel);
   const k = app.sel?.constraint;
-  const content = k !== undefined ? constraintUi(app, k) : b !== null ? boneUi(app, b) : s !== null ? slotUi(app, s) : projectUi(app);
+  const content =
+    k !== undefined
+      ? constraintUi(app, k)
+      : app.sel?.skin !== undefined
+        ? skinUi(app, app.sel.skin)
+        : app.sel?.event !== undefined
+          ? eventUi(app, app.sel.event)
+          : b !== null
+            ? boneUi(app, b)
+            : s !== null
+              ? slotUi(app, s)
+              : projectUi(app);
   // The mesh being edited stays on top while bones are selected for binding or painting.
   const mesh = meshUi(app);
   el.replaceChildren(...[mesh, content].flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false));
@@ -204,10 +216,15 @@ function slotUi(app, s) {
     out.push(
       select(app.doc.images.map((i) => [i.name, i.name]), undefined, (name) => {
         const img = app.doc.images.find((i) => i.name === name);
-        const attName = uniqueName(name, (n) => !!findAttachment(slot, n));
-        slot.attachments.push(makeAttachment(attName, name, identityTransform(), img.width, img.height));
-        app.changed();
-      }, { placeholder: '＋ Add image to this slot…' }),
+        addToSlot(app, s, (attName) => makeAttachment(attName, name, identityTransform(), img.width, img.height), name);
+      }, { placeholder: app.doc.skin ? `＋ Add image to skin '${app.doc.skin}'…` : '＋ Add image to this slot…' }),
+    );
+  }
+  if (setupMode) {
+    out.push(
+      select([['boundingbox', 'Bounding box'], ['clipping', 'Clipping'], ['point', 'Point'], ['path', 'Path']], undefined, (type) => {
+        addToSlot(app, s, (attName) => makeShape(app, s, type, attName), type);
+      }, { placeholder: '＋ Add shape…' }),
     );
   }
 
@@ -225,6 +242,28 @@ function slotUi(app, s) {
         source?.triangles ? row('Triangles', String(source.triangles.length / 3)) : null,
         att.type === 'linkedmesh' ? row('Parent', `${att.parent}${att.skin ? ` (${att.skin})` : ''}`) : null,
       ),
+      att.type === 'clipping'
+        ? h(
+            'div',
+            { class: 'grid' },
+            row(
+              'Clip until',
+              select([['', '(end of draw order)'], ...app.doc.slots.map((sl, i) => [String(i), sl.name])], att.end === null || att.end === undefined || att.end === s ? '' : String(att.end), (v) => {
+                att.end = v === '' ? null : Number(v);
+                app.changed();
+              }, { disabled: !setupMode }),
+            ),
+          )
+        : null,
+      att.type === 'path'
+        ? h(
+            'div',
+            { class: 'grid' },
+            row('', h('label', { class: 'check' }, h('input', { type: 'checkbox', disabled: !setupMode, checked: !!att.closed, onchange: (e) => ((att.closed = e.target.checked), app.changed()) }), ' Closed')),
+            row('', h('label', { class: 'check' }, h('input', { type: 'checkbox', disabled: !setupMode, checked: att.constantSpeed !== false, onchange: (e) => ((att.constantSpeed = e.target.checked), app.changed()) }), ' Constant speed')),
+          )
+        : null,
+      setupMode ? h('div', { class: 'buttons' }, h('button', { onclick: () => removeAttachment(app, s, att) }, `🗑 Remove ${att.type}`)) : null,
       att.type === 'mesh' && setupMode && !(app.meshEdit?.slot === s && app.meshEdit?.name === visible)
         ? h('div', { class: 'buttons' }, h('button', { onclick: () => startMeshEdit(app, s, visible) }, '✎ Edit mesh'))
         : att.type === 'mesh'
@@ -292,11 +331,7 @@ function slotUi(app, s) {
           ? h(
               'button',
               {
-                onclick: () => {
-                  slot.attachments.splice(slot.attachments.indexOf(att), 1);
-                  if (slot.attachment === att.name) slot.attachment = slot.attachments[0]?.name ?? null;
-                  app.changed();
-                },
+                onclick: () => removeAttachment(app, s, att),
               },
               '🗑 Remove image',
             )
@@ -446,4 +481,54 @@ function meshUi(app) {
   }
   out.push(h('hr'));
   return out;
+}
+
+/** Adds an attachment to a slot: to the active skin when one is active, else the default skin. */
+function addToSlot(app, s, make, base) {
+  const doc = app.doc;
+  const slot = doc.slots[s];
+  const skin = doc.skin ? doc.findSkin(doc.skin) : null;
+  let list = slot.attachments;
+  if (skin) {
+    let entry = skin.slots.find((e) => e.slot === s);
+    if (!entry) skin.slots.push((entry = { slot: s, attachments: [] }));
+    list = entry.attachments;
+  }
+  const name = uniqueName(base, (n) => list.some((a) => a.name === n) || !!findAttachment(slot, n));
+  list.push(make(name));
+  if (!slot.attachment) slot.attachment = name;
+  app.changed();
+}
+
+/** Removes an attachment from whichever skin holds it. */
+function removeAttachment(app, s, att) {
+  const doc = app.doc;
+  const slot = doc.slots[s];
+  const lists = [slot.attachments, ...doc.skins.flatMap((k) => k.slots.filter((e) => e.slot === s).map((e) => e.attachments))];
+  for (const list of lists) {
+    const i = list.indexOf(att);
+    if (i >= 0) list.splice(i, 1);
+  }
+  if (slot.attachment === att.name && !doc.attachment(s, att.name)) slot.attachment = slot.attachments[0]?.name ?? null;
+  if (app.meshEdit?.slot === s && app.meshEdit?.name === att.name) app.meshEdit = null;
+  app.changed();
+}
+
+/** A new shape attachment around the slot's bone, sized to stay visible at the current zoom. */
+function makeShape(app, s, type, name) {
+  const size = 50 / Math.max(0.05, app.view.zoom);
+  if (type === 'point') return { name, type: 'point', offset: identityTransform() };
+  if (type === 'path') {
+    const pts = [[0, 0], [size * 2, 0]];
+    const vertices = [];
+    pts.forEach((p, i) => {
+      const d = (i === 0 ? 1 : -1) * size * 0.66;
+      vertices.push(p[0] - d, p[1], p[0], p[1], p[0] + d, p[1]);
+    });
+    return { name, type: 'path', image: name, vertexCount: 6, vertices, closed: false, constantSpeed: true, lengths: [size * 2, size * 4] };
+  }
+  const square = [-size, size, size, size, size, -size, -size, -size];
+  const att = { name, type, image: name, vertexCount: 4, vertices: square };
+  if (type === 'clipping') att.end = null;
+  return att;
 }
