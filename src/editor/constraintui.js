@@ -11,10 +11,11 @@ import {
   renameConstraint,
   uniqueConstraintName,
 } from '../core/constraintdata.js';
+import { channelKeys, constraintChannels, setConstraintKey, setIkKey } from '../core/constraintkeys.js';
 import { identityTransform } from '../core/math.js';
 import { makeBone, makeSlot, uniqueName } from '../core/model.js';
 import { Pose } from '../core/pose.js';
-import { Mode } from './app.js';
+import { FPS, Mode } from './app.js';
 import { dragValue, h, select, textField } from './widgets.js';
 
 export const CONSTRAINT_LABELS = { ik: 'IK', transform: 'Transform', path: 'Path', physics: 'Physics', slider: 'Slider' };
@@ -188,8 +189,7 @@ export function constraintUi(app, name) {
       ),
     ),
   ];
-  if (!setupMode) header.push(h('div', { class: 'small weak' }, 'Settings are edited in Setup mode; animate mixes with constraint keys.'));
-  const body = c.type === 'ik' ? ikUi(app, doc.ik[c.ik], boneChoices) : TYPE_UI[c.type]?.(app, c.data, boneNameChoices) ?? [];
+  const body = !setupMode ? animUi(app, c) : c.type === 'ik' ? ikUi(app, doc.ik[c.ik], boneChoices) : TYPE_UI[c.type]?.(app, c.data, boneNameChoices) ?? [];
   const footer = h(
     'div',
     { class: 'buttons' },
@@ -206,7 +206,81 @@ export function constraintUi(app, name) {
       '🗑 Delete constraint',
     ),
   );
-  return [header, setupMode ? body : h('fieldset', { disabled: true, class: 'plain' }, body), footer];
+  return [header, body, footer];
+}
+
+const CHANNEL_LABELS = {
+  mixRotate: 'Mix rotate',
+  mixX: 'Mix X',
+  mixY: 'Mix Y',
+  mixScaleX: 'Mix scale X',
+  mixScaleY: 'Mix scale Y',
+  mixShearY: 'Mix shear Y',
+};
+
+/** Animate mode: the constraint's animated values at the current frame; edits set keys. */
+function animUi(app, c) {
+  const anim = app.currentAnimation();
+  if (!anim) return [h('div', { class: 'small weak' }, 'Choose an animation to key this constraint.')];
+  const doc = app.doc;
+  const pose = app.pose();
+  const time = Math.round(app.time * FPS) / FPS;
+  const keyButton = (keyed, onclick) => h('button', { class: `keybtn ${keyed ? 'keyed' : 'none'}`, title: keyed ? 'Keyed at this frame' : 'Key at this frame', onclick }, '◆');
+  const note = h('div', { class: 'small weak' }, `Changes set keys at frame ${Math.round(time * FPS)}.`);
+  if (c.type === 'ik') {
+    const st = pose.ik[c.ik];
+    const value = { mix: st.mix, softness: st.softness, bendPositive: st.bendPositive, compress: st.compress, stretch: st.stretch };
+    const key = (changes) => {
+      setIkKey(anim, c.ik, time, { ...value, ...changes });
+      app.changed();
+    };
+    const keyed = !!anim.ik.find((t) => t.constraint === c.ik)?.keys.some((k) => Math.abs(k.time - time) < 5e-4);
+    return [
+      note,
+      h(
+        'div',
+        { class: 'grid' },
+        row('Mix', num(value.mix, (v) => key({ mix: v }), { min: 0, max: 1 }), keyButton(keyed, () => key({}))),
+        row('Softness', num(value.softness, (v) => key({ softness: v }), { min: 0, speed: 0.5, decimals: 2 })),
+        row(
+          'Bend',
+          h('span', { class: 'segmented' },
+            h('button', { class: value.bendPositive ? 'active' : '', onclick: () => key({ bendPositive: true }) }, '+'),
+            h('button', { class: value.bendPositive ? '' : 'active', onclick: () => key({ bendPositive: false }) }, '−'),
+          ),
+        ),
+        row('', checkbox(value.compress, (v) => key({ compress: v }), 'Compress')),
+        row('', checkbox(value.stretch, (v) => key({ stretch: v }), 'Stretch')),
+      ),
+    ];
+  }
+  const i = pose.constraintList?.findIndex((x) => x.name === c.name) ?? -1;
+  const st = pose.constraintState?.[i];
+  if (!st) return [h('div', { class: 'small weak' }, 'This constraint is not active.')];
+  const current = (channel) => {
+    if (c.type === 'transform') {
+      const m = st.mix;
+      return { mixRotate: m.rotate, mixX: m.x, mixY: m.y, mixScaleX: m.scaleX, mixScaleY: m.scaleY, mixShearY: m.shearY };
+    }
+    if (c.type === 'path' && channel === 'mix') return { mixRotate: st.mixRotate, mixX: st.mixX, mixY: st.mixY };
+    return { value: st[channel] };
+  };
+  const rows = [];
+  for (const { channel, fields } of constraintChannels(c.type)) {
+    const values = current(channel);
+    const keys = channelKeys(anim, c.type, c.name, channel);
+    const keyed = !!keys?.some((k) => Math.abs(k.time - time) < 5e-4);
+    const key = (changes) => {
+      setConstraintKey(anim, c.type, c.name, channel, time, { ...values, ...changes });
+      app.changed();
+    };
+    fields.forEach((field, n) => {
+      const label = field === 'value' ? channel[0].toUpperCase() + channel.slice(1) : CHANNEL_LABELS[field];
+      const opts = field === 'value' && ['position', 'spacing', 'strength', 'wind', 'gravity', 'time'].includes(channel) ? { speed: channel === 'time' ? 0.01 : 0.5, decimals: 3 } : { min: -1, max: 1, speed: 0.005 };
+      rows.push(row(label, num(values[field], (v) => key({ [field]: v }), opts), n === 0 ? keyButton(keyed, () => key({})) : null));
+    });
+  }
+  return [note, h('div', { class: 'grid' }, rows)];
 }
 
 function ikUi(app, ik, boneChoices) {

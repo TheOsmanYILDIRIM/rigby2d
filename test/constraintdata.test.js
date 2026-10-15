@@ -52,3 +52,21 @@ test('new constraints export to older formats in their layout', () => {
   const back = readSkeletonJson(json).skeleton;
   assert.equal(listConstraints(back).length, 1);
 });
+
+test('constraint keys: set, update and ease curves in the stored layout', async () => {
+  const { setConstraintKey, setConstraintCurve, channelKeys } = await import('../src/core/constraintkeys.js');
+  const { sampleRaw } = await import('../src/core/constraints.js');
+  const sk = rig();
+  const anim = sk.animations[0];
+  setConstraintKey(anim, 'path', 'p', 'position', 0.5, { value: 1 });
+  setConstraintKey(anim, 'path', 'p', 'position', 0, { value: 0 });
+  setConstraintKey(anim, 'path', 'p', 'position', 0.5, { value: 2 }); // updates
+  const keys = channelKeys(anim, 'path', 'p', 'position');
+  assert.deepEqual(keys.map((k) => [k.time, k.value]), [[0, 0], [0.5, 2]]);
+  assert.equal(sampleRaw(keys, 0.25, (k) => [k.value])[0], 1);
+  setConstraintCurve(keys, 0, ['value'], { value: 0 }, { bezier: [0.42, 0, 0.58, 1] });
+  assert.ok(Math.abs(sampleRaw(keys, 0.25, (k) => [k.value])[0] - 1) < 1e-3, 'symmetric ease passes the midpoint');
+  assert.ok(sampleRaw(keys, 0.1, (k) => [k.value])[0] < 0.4, 'eases in');
+  setConstraintCurve(keys, 0, ['value'], { value: 0 }, 'stepped');
+  assert.equal(sampleRaw(keys, 0.4, (k) => [k.value])[0], 0);
+});

@@ -2,6 +2,8 @@
 // Bottom panel: animation list, transport controls and the dopesheet (the graph editor is graph.js).
 
 import { Animation, BONE_CHANNELS, SLOT_CHANNELS } from '../core/animation.js';
+import { listConstraints } from '../core/constraintdata.js';
+import { channelKeys, keyedChannels, setConstraintCurve } from '../core/constraintkeys.js';
 import { EASE_IN, EASE_IN_OUT, EASE_OUT, LINEAR, STEPPED, cloneCurve, isBezier } from '../core/curve.js';
 import { uniqueName } from '../core/model.js';
 import { FPS, Mode, selBone, selSlot, snap } from './app.js';
@@ -153,12 +155,16 @@ function tracks(app, anim) {
     out.push({ track: { deform: i, slot: d.slot }, label: `${app.doc.slots[d.slot]?.name ?? '?'} · deform ${d.attachment}` });
   });
   anim.ik.forEach((k, i) => out.push({ track: { ik: i }, label: `IK ${app.doc.ik[k.constraint]?.name ?? '?'}` }));
+  for (const t of keyedChannels(anim, listConstraints(app.doc))) {
+    out.push({ track: { raw: { type: t.type, name: t.name, channel: t.channel } }, label: `${t.name} · ${t.channel ?? 'mix'}` });
+  }
   if (anim.drawOrder.length) out.push({ track: { drawOrder: true }, label: 'draw order' });
   if (anim.events.length) out.push({ track: { events: true }, label: 'events' });
   return out;
 }
 
 function trackKeys(anim, track) {
+  if (track.raw) return channelKeys(anim, track.raw.type, track.raw.name, track.raw.channel);
   if (track.deform !== undefined) return anim.deform[track.deform]?.keys;
   if (track.ik !== undefined) return anim.ik[track.ik]?.keys;
   if (track.drawOrder) return anim.drawOrder;
@@ -178,6 +184,8 @@ export function deleteSelectedKeys(app) {
   for (const tl of [...anim.deform, ...anim.ik]) drop(tl.keys);
   drop(anim.drawOrder);
   drop(anim.events);
+  for (const t of keyedChannels(anim, listConstraints(app.doc))) drop(t.keys);
+  pruneConstraintKeys(anim);
   const count = app.selectedKeys.size;
   app.selectedKeys.clear();
   anim.prune();
@@ -452,6 +460,23 @@ export class Dopesheet {
   }
 }
 
+/** Removes constraint channels whose keys were all deleted. */
+function pruneConstraintKeys(anim) {
+  for (const type of ['transform', 'path', 'physics', 'slider']) {
+    const byName = anim.extra?.[type];
+    if (!byName) continue;
+    for (const [name, v] of Object.entries(byName)) {
+      if (Array.isArray(v)) {
+        if (!v.length) delete byName[name];
+        continue;
+      }
+      for (const [ch, keys] of Object.entries(v)) if (Array.isArray(keys) && !keys.length) delete v[ch];
+      if (!Object.keys(v).length) delete byName[name];
+    }
+    if (!Object.keys(byName).length) delete anim.extra[type];
+  }
+}
+
 /** Keeps every key list sorted by time after keys moved. */
 export function resortAnimation(anim) {
   if (!anim) return;
@@ -460,8 +485,16 @@ export function resortAnimation(anim) {
   for (const tl of [...anim.deform, ...anim.ik]) sort(tl.keys);
   sort(anim.drawOrder);
   sort(anim.events);
+  for (const tl of anim.extra ? keyedChannels(anim, listConstraintsOf(anim)) : []) sort(tl.keys);
   const last = anim.lastKeyTime();
   if (last > anim.duration) anim.duration = last;
+}
+
+/** Constraint names keyed in an animation (for sorting without the document). */
+function listConstraintsOf(anim) {
+  const out = [];
+  for (const type of ['transform', 'path', 'physics', 'slider']) for (const name of Object.keys(anim.extra?.[type] ?? {})) out.push({ type, name });
+  return out;
 }
 
 /** Curve presets and delete for the selected keys. */
@@ -469,8 +502,17 @@ export function curveMenu(app, x, y) {
   const setCurve = (curve) => () => {
     const anim = app.currentAnimation();
     if (!anim) return;
+    // Constraint keys store absolute curves per value.
+    const raw = new Set();
+    for (const t of keyedChannels(anim, listConstraints(app.doc))) {
+      t.keys.forEach((k, i) => {
+        if (!app.selectedKeys.has(k)) return;
+        raw.add(k);
+        setConstraintCurve(t.keys, i, t.fields, t.defaults, curve);
+      });
+    }
     // Attachment, draw order and event keys have no curve.
-    const skip = new Set([...anim.events, ...anim.drawOrder, ...anim.slots.flatMap((s) => s.attachment ?? [])]);
+    const skip = new Set([...raw, ...anim.events, ...anim.drawOrder, ...anim.slots.flatMap((s) => s.attachment ?? [])]);
     for (const k of app.selectedKeys) if (!skip.has(k)) k.curve = cloneCurve(curve);
     app.changed();
   };
