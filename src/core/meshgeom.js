@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Mesh geometry for authoring: triangulating a hull polygon with interior points, mapping points
 // to texture coordinates, and computing or painting bone weights. Points are [x, y] pairs.
 

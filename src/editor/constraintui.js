@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Constraint authoring: creating IK, transform, path, physics and slider constraints from the
 // selection, and the properties panel with every setting of each type.
 

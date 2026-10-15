@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Transform, path and physics constraints: compiled from the constraint data kept in `sk.extra`
 // (format 3.8, 4.2 and the 4.3 unified list), animated by the constraint timelines kept in
 // `anim.extra`, and solved on a Pose's world transforms.

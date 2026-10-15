@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Mesh authoring: turning images into meshes, editing vertices, binding meshes to bones and
 // painting weights. Editing happens on the setup pose, in world space; the mesh is written back
 // in the slot bone's space (unweighted) or each bone's space (weighted).

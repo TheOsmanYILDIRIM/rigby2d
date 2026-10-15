@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Right panel: properties of the current selection.
 
 import { identityTransform, transformEquals } from '../core/math.js';

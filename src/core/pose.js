@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Evaluated skeleton state: local and world transforms of every bone, slot state, mesh
 // deformation, draw order and constraints (IK, transform and path).
 

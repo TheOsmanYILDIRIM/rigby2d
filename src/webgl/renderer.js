@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Reference WebGL renderer for the Rigby2D runtime: draws a posed skeleton with one batched
 // vertex buffer, two-color tint and the normal / additive / multiply / screen blend modes.
 //

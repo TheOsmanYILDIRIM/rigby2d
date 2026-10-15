@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Rigby2D: open-source 2D skeletal animation editor.
 // Copyright (c) 2026 jaisurya-dev-art and Rigby2D contributors
 
@@ -106,7 +106,8 @@ function menus() {
       h(
         'div',
         { class: 'help' },
-        h('p', null, 'Rigby2D: open-source 2D skeletal animation (MIT).'),
+        h('p', null, 'Rigby2D by Hoverlabs: 2D skeletal animation.'),
+        h('p', { class: 'weak' }, 'Code: MIT OR Apache-2.0. The Rigby2D and Hoverlabs names and logos are trademarks of Hoverlabs.'),
         h('p', { class: 'weak' }, `Shortcuts: ${PRESETS[app.keymap].label} (change in View)`),
         h('hr'),
         h(

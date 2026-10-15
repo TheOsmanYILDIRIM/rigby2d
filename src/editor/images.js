@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // In-memory image store: canvases keyed by image name, with cached alpha and tinted copies.
 
 export class Images {

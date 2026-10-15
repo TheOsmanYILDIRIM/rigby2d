@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // rigby-core: runtime for Rigby2D 2D skeletal animations.
 // Load an exported skeleton, play animations and get textured quads to draw with any renderer.
 //
@@ -16,7 +16,7 @@
 //     // draw quad.positions with quad.uvs from the atlas region named quad.attachment.image
 //   }
 //
-// Licensed under MIT so it can be embedded in any game.
+// Licensed under MIT OR Apache-2.0 so it can be embedded in any game.
 
 export * from './animation.js';
 export * as curve from './curve.js';

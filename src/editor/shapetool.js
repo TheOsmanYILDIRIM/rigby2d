@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Editing bounding boxes, clipping polygons and paths in the viewport (Setup mode). Vertices are
 // edited in setup-pose world space and written back in the slot bone's space, or each bone's
 // space for weighted shapes (new vertices take the weights of their neighbor).

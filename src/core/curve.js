@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Interpolation curves between keyframes.
 //
 // A curve is stored as one of:

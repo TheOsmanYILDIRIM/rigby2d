@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Constraint authoring helpers. IK constraints live in `sk.ik`; transform, path, physics and
 // slider constraints are kept in the skeleton JSON layout (bones and slots referenced by name)
 // in `sk.extra.constraints` (4.3 layout, one list) or `sk.extra.transform|path|physics` (older

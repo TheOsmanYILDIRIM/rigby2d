@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Minimal 2D math: local transforms and affine matrices.
 //
 // Rigby2D uses a Y-up coordinate system with rotations in degrees, counter-clockwise.

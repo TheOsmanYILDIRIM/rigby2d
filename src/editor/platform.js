@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Platform layer: native dialogs and file access in the desktop app (Tauri), and browser
 // equivalents (folder/file pickers, File System Access API or ZIP download) in the web build.
 //

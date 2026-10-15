@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Image sequences: an attachment that shows one of several numbered images ("flame01",
 // "flame02", ...). Sequence keys pick the frame: hold a frame, or play forward, backward, looping
 // or ping-ponging from a frame at a fixed delay per frame.

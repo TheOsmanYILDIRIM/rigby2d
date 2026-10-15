@@ -2,7 +2,7 @@
   "name": "rigby2d",
   "version": "0.1.0",
   "description": "Rigby2D: open-source 2D skeletal animation editor.",
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "private": true,
   "type": "module",
   "author": "jaisurya-dev-art (https://github.com/jaisurya-dev-art)",

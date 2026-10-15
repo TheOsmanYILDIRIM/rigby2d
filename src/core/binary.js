@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Binary skeleton files (".skel"), format 4.3. Converts between the binary encoding and the
 // skeleton JSON object structure, so all other code works with one representation.
 //

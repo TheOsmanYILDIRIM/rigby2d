@@ -39,7 +39,7 @@ quick UI work. File dialogs and disk access only work in the desktop app (`npm r
 ## Coding guidelines
 
 - Match the surrounding style: ES modules, 2-space indentation, single quotes, semicolons.
-- Every source file starts with `// SPDX-License-Identifier: MIT`.
+- Every source file starts with `// SPDX-License-Identifier: MIT OR Apache-2.0`.
 - Keep skeleton JSON import/export lossless: anything read must be written back. If the format
   handling must change, discuss it in an issue first.
 - Add or update tests in `test/` for changes to `src/core` or the pure editor helpers
@@ -61,4 +61,6 @@ explaining the reasoning when it isn't obvious.
 
 ## License
 
-By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).
+By contributing, you agree that your contributions are licensed under both the [MIT License](LICENSE-MIT)
+and the [Apache License 2.0](LICENSE-APACHE), so users can choose either. The Rigby2D and Hoverlabs names
+and logos are not part of that grant; see [TRADEMARKS.md](TRADEMARKS.md).

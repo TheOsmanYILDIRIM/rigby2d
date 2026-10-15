@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Bottom panel: animation list, transport controls and the dopesheet (the graph editor is graph.js).
 
 import { Animation, BONE_CHANNELS, SLOT_CHANNELS } from '../core/animation.js';

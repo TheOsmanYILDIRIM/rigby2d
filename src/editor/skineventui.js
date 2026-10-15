@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Skin and event authoring: creating, renaming and deleting skins and events, skin bones and
 // constraints, and event keys with their values.
 

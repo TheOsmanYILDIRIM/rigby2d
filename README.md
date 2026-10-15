@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="docs/logo.png" alt="Rigby2D logo" width="128" height="128">
+  <img src="branding/rigby2d-lockup-dark.svg" alt="Rigby2D by Hoverlabs" width="460">
 </p>
-
-<h1 align="center">Rigby2D</h1>
 
 <p align="center">
   <strong>Open-source 2D skeletal animation editor for games.</strong><br>
@@ -10,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+  <a href="#license"><img alt="License: MIT or Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey">
   <img alt="Built with Tauri" src="https://img.shields.io/badge/built%20with-Tauri%202-24c8db">
   <img alt="Node 20+" src="https://img.shields.io/badge/node-%3E%3D20-339933">
@@ -175,7 +173,21 @@ coding style and pull request process.
 
 ## License
 
-[MIT](LICENSE) © 2026 [jaisurya-dev-art](https://github.com/jaisurya-dev-art)
+Rigby2D's source code is licensed under either of
+
+- [MIT License](LICENSE-MIT)
+- [Apache License, Version 2.0](LICENSE-APACHE)
+
+at your option. © 2026 [jaisurya-dev-art](https://github.com/jaisurya-dev-art)
+
+Unless you state otherwise, any contribution you submit for inclusion in Rigby2D is licensed under
+both licenses as above, without any additional terms or conditions.
+
+## Trademarks
+
+**Rigby2D** and **Hoverlabs**, and the Rigby2D logo, lockups and icons in [`branding/`](branding/), are
+proprietary trademarks of Hoverlabs. They are not covered by the MIT or Apache 2.0 licenses. Forks
+and modified versions must use their own name and branding. See [TRADEMARKS.md](TRADEMARKS.md).
 
 ## Disclaimer
 

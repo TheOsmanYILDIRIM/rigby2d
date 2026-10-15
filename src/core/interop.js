@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Interoperability with the widely used third-party skeleton JSON + texture atlas format, written
 // clean-room from its public documentation.
 //

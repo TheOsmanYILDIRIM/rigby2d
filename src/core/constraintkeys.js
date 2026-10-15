@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Keys of transform, path, physics and slider constraints. They are kept in the skeleton JSON
 // layout in `anim.extra[type][constraint name]`: an array of keys (transform) or an object of
 // arrays per channel (path, physics, slider), with 4.x absolute bezier curves.

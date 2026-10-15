@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Project files, art import (PSD / PNG) and game export (JSON + packed atlas).
 // File access goes through a platform file system (see platform.js); PNG coding uses canvas.
 

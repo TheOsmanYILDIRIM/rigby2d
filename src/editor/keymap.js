@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Keyboard shortcuts: named actions and switchable presets.
 //
 // A binding is a lowercase combo string: optional "ctrl+", "shift+", "alt+" (in that order)

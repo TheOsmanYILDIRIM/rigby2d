@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // A procedurally drawn sample character so new users can explore without any art.
 
 import { Animation, setKey } from '../core/animation.js';

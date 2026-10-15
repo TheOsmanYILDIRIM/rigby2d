@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // WebGL layer of the viewport: background, grid and attachments, drawn with the runtime's
 // WebGL renderer. Bones, handles and other overlays stay on the 2D canvas above it.
 

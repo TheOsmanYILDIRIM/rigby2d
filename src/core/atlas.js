@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Texture atlas text files (the widely used ".atlas" text format).
 //
 // A file is a list of pages separated by blank lines. Each page starts with its image file name,

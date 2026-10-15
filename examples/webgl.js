@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Example player: loads a skeleton (.json or .skel), its .atlas and page images, and plays it with
 // the runtime and the reference WebGL renderer. Run `npm run web:dev` and open /examples/webgl.html.
 

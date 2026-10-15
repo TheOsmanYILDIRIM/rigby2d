@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Small DOM helpers: element builder, draggable number fields and popup menus.
 
 /** Shared widget state: panels are not rebuilt while a value is being dragged. */

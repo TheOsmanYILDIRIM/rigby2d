@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Playback: tracks of animations layered on top of each other, crossfades, queued animations and
 // event firing.
 //

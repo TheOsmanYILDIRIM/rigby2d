@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Clipping attachments: a polygon that masks the slots drawn after it (up to its end slot).
 // The polygon is split into triangles (it may be concave) and each drawn triangle is clipped
 // against each of them, interpolating UVs.

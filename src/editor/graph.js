@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Graph editor: bone channel values over time, with draggable keys and bezier handles.
 //
 // Curves are stored normalized per segment (x: fraction of the time between two keys, y: fraction

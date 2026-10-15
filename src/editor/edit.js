@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Document edits shared by the viewport, inspector and hierarchy. In animate mode, bone
 // changes are written as keyframes instead of changing the setup pose.
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Tree panel: the skeleton (bones, slots and their attachments) plus draw order, skins,
 // constraints, events, animations and images, in collapsible sections.
 

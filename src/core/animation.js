@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Animations: keyframed timelines for bones, slots, attachments, constraints, draw order and events.
 //
 // Bone timeline values are relative to the setup pose: rotation, translation and shear are added,

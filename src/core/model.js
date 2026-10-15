@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // The skeleton data model. Files are read and written as skeleton JSON (see interop.js);
 // toObject/fromObject are an internal snapshot used for undo history and cloning, not a file format.
 //

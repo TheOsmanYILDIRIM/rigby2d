@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Minimal ZIP writer (stored, no compression), used to download projects in the browser build.
 
 const CRC_TABLE = (() => {

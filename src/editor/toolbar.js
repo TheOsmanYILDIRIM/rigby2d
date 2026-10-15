@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // Viewport toolbar: tools, numeric fields for the active tool with key buttons, transform axes
 // (local / parent / world) and auto key.
 

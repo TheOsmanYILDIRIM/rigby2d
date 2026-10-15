@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT OR Apache-2.0
 // The canvas: draws the rig and handles pan/zoom, selection and the transform tools.
 
 import { Affine, toAffine, transform, wrapDegrees } from '../core/math.js';
