@@ -11,6 +11,10 @@ import { Images } from './images.js';
 import * as io from './io.js';
 import * as platform from './platform.js';
 import * as sample from './sample.js';
+import demoUrl from '../../branding/rigbytron/rigbytron.rigby?url&no-inline';
+
+/** The bundled demo project: Rigbytron, the Rigby2D mascot. */
+const DEMO_FILE = 'rigbytron.rigby';
 
 export const FPS = 30;
 
@@ -98,7 +102,7 @@ export class App {
     this.playing = false;
     this.looping = true;
     this.selectedKeys.clear();
-    this.status = 'Welcome to Rigby2D. File ▸ New sample to explore, or import a PSD / PNGs.';
+    this.status = 'Welcome to Rigby2D. Open the Rigbytron demo or a sample from the File menu, or import a PSD / PNGs.';
     this.showBones = true;
     /** Viewport drawing: 'webgl' (default when available) or 'canvas'. */
     this.renderer = loadSetting('rigby.renderer', 'webgl');
@@ -297,6 +301,27 @@ export class App {
     this.loadDocument(new Skeleton(), null);
     this.saveTarget = null;
     this.setStatus('New project');
+  }
+
+  /**
+   * Opens Rigbytron, the demo project bundled with the editor, playing its animation. It is not
+   * tied to a file: Save asks where to keep a copy. `ask` confirms discarding unsaved changes.
+   */
+  async openDemo(ask = true) {
+    if (ask && !(await this.confirmDiscard())) return;
+    try {
+      const blob = await (await fetch(demoUrl)).blob();
+      const { doc, warnings } = await io.openProject(DEMO_FILE, platform.memoryFs([new File([blob], DEMO_FILE)]), this.images);
+      this.loadDocument(doc, DEMO_FILE);
+      this.saveTarget = null;
+      this.anim = Math.max(0, doc.animations.findIndex((a) => a.name === 'release'));
+      this.mode = Mode.Animate;
+      this.playing = true;
+      this.frameRequest = true;
+      this.setStatus(warnings.length ? `Demo opened with warnings: ${warnings.join('; ')}` : 'Rigbytron demo: explore the rig and its hold and release animations. Save keeps a copy.');
+    } catch (e) {
+      this.setStatus(`Could not open the demo: ${errorText(e)}`);
+    }
   }
 
   async newSample() {

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-// Splash screen: the mascot holds its pose while the editor loads, then slashes outward and the
-// lockup is revealed. The animation is a Rigby2D project (branding/mascot) played with the runtime
-// and the WebGL renderer. The mascot and lockup artwork are Hoverlabs trademarks (TRADEMARKS.md).
+// Splash screen: Rigbytron, the mascot, plays its gesture once (`hold`, then `release`, whose
+// `slash` event reveals the lockup), then the editor window opens. The animation is a Rigby2D
+// project (branding/rigbytron) played with the runtime and the WebGL renderer. Rigbytron and the
+// lockup are Hoverlabs trademarks (TRADEMARKS.md).
 
-import { emit, listen } from '@tauri-apps/api/event';
 import { Window, getCurrentWindow } from '@tauri-apps/api/window';
 
 import { parseAtlas } from '../core/atlas.js';
@@ -12,27 +12,23 @@ import { readSkeletonJson } from '../core/interop.js';
 import { Pose } from '../core/pose.js';
 import { AnimationState } from '../core/state.js';
 import { WebGLRenderer } from '../webgl/renderer.js';
-import skelUrl from '../../branding/mascot/export/rigby2d-mascot.skel?url&no-inline';
-import atlasText from '../../branding/mascot/export/rigby2d-mascot.atlas?raw';
-import pageUrl from '../../branding/mascot/export/rigby2d-mascot.png?url';
+import skelUrl from '../../branding/rigbytron/export/rigbytron.skel?url&no-inline';
+import atlasText from '../../branding/rigbytron/export/rigbytron.atlas?raw';
+import pageUrl from '../../branding/rigbytron/export/rigbytron.png?url';
 import lockupUrl from '../../branding/rigby2d-lockup-transparent.svg?url';
 
 const inTauri = '__TAURI_INTERNALS__' in window;
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-/** The hold pose shows at least this long, so a fast start still reads as a gesture. */
-const MIN_HOLD = 1.2;
-/** Time from the end of the slash to handing over to the editor. */
+/** Seconds the lockup stays on screen after the animation before the editor opens. */
 const LINGER = 0.7;
 
 const $ = (s) => document.querySelector(s);
 const canvas = $('#view');
-const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true }) ?? canvas.getContext('webgl', { premultipliedAlpha: true, alpha: true });
 $('#lockup').src = lockupUrl;
 
-let editorReady = false;
 let finished = false;
 
-/** Shows the editor window and closes the splash. Safe to call more than once. */
+/** Opens the editor window and closes the splash. Safe to call more than once. */
 async function finish() {
   if (finished) return;
   finished = true;
@@ -47,11 +43,8 @@ async function finish() {
   }
 }
 
+// Closing the splash early still opens the editor.
 if (inTauri) {
-  listen('rigby://ready', () => (editorReady = true));
-  // The editor may have finished first: ask it to say so again.
-  emit('rigby://splash-up').catch(() => {});
-  // Closing the splash early still brings up the editor.
   getCurrentWindow()
     .onCloseRequested(async () => {
       if (finished) return;
@@ -60,9 +53,6 @@ if (inTauri) {
       await main?.show();
     })
     .catch(() => {});
-} else {
-  // Opened in a browser: pretend the editor is ready after a moment.
-  setTimeout(() => (editorReady = true), 2400);
 }
 
 function reveal() {
@@ -70,10 +60,17 @@ function reveal() {
   $('#note').style.opacity = '0';
 }
 
-async function start() {
+/** Without animation: the lockup alone for a moment. */
+function still() {
+  reveal();
+  setTimeout(finish, 1200);
+}
+
+async function play() {
+  const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true }) ?? canvas.getContext('webgl', { premultipliedAlpha: true, alpha: true });
   if (!gl) throw new Error('WebGL unavailable');
   const bytes = new Uint8Array(await (await fetch(skelUrl)).arrayBuffer());
-  const sk = readSkeletonJson(readSkeletonBinary(bytes), 'rigby2d-mascot').skeleton;
+  const sk = readSkeletonJson(readSkeletonBinary(bytes), 'rigbytron').skeleton;
   const atlas = parseAtlas(atlasText);
   const page = await createImageBitmap(await (await fetch(pageUrl)).blob(), { premultiplyAlpha: 'none' });
   const renderer = new WebGLRenderer(gl);
@@ -81,40 +78,18 @@ async function start() {
   const pose = new Pose(sk);
   const state = new AnimationState();
 
-  let phase = 'hold';
-  let held = 0;
-  let doneAt = null;
   state.addListener({
     event: (_, e) => e.name === 'slash' && reveal(),
-    complete: (entry) => {
-      if (phase === 'release' && entry.name === 'release') doneAt ??= performance.now();
-    },
+    complete: (entry) => entry.name === 'release' && setTimeout(finish, LINGER * 1000),
   });
-  state.setAnimation(sk, 0, 'hold', true, 0);
+  state.setAnimation(sk, 0, 'hold', false, 0);
+  state.addAnimation(sk, 0, 'release', false, 0.08);
 
   let last = performance.now();
-  function frame(now) {
-    try {
-      step(now);
-    } catch (e) {
-      // Never leave the user on a frozen splash: show the lockup and hand over when ready.
-      console.error('splash:', e);
-      fallback();
-      return;
-    }
-    if (!finished || !inTauri) requestAnimationFrame(frame);
-  }
-
-  function step(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+  const draw = () => {
+    const now = performance.now();
+    const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
     last = now;
-    held += dt;
-    if (phase === 'hold' && editorReady && held >= MIN_HOLD) {
-      phase = 'release';
-      state.setAnimation(sk, 0, 'release', false, 0.08);
-    }
-    if (doneAt !== null && now - doneAt > LINGER * 1000) finish();
-
     const dpr = window.devicePixelRatio || 1;
     const w = Math.round(canvas.clientWidth * dpr);
     const h = Math.round(canvas.clientHeight * dpr);
@@ -122,31 +97,31 @@ async function start() {
     gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    // The mascot stands at 30% of the width, its height filling about 84% of the window.
+    // Rigbytron stands at 30% of the width, feet near the bottom, about 84% of the window tall.
     const zoom = (0.84 * canvas.clientHeight) / 1400;
-    const cam = { x: (0.5 - 0.3) * (canvas.clientWidth / zoom), y: (0.5 * canvas.clientHeight - 0.06 * canvas.clientHeight) / zoom, zoom: zoom * dpr };
+    const camera = { x: (0.2 * canvas.clientWidth) / zoom, y: (0.44 * canvas.clientHeight) / zoom, zoom: zoom * dpr };
     state.update(sk, dt);
     state.apply(sk, pose);
-    renderer.begin(w, h, cam);
+    renderer.begin(w, h, camera);
     renderer.drawSkeleton(sk, pose, textures);
     renderer.end();
-  }
-  requestAnimationFrame(frame);
+  };
+  const loop = () => {
+    try {
+      draw();
+    } catch (e) {
+      console.error('splash:', e);
+      still();
+      return;
+    }
+    if (!finished || !inTauri) requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
 }
 
-/** Static splash: the lockup, handing over as soon as the editor is ready. */
-function fallback() {
-  reveal();
-  const wait = setInterval(() => editorReady && (clearInterval(wait), setTimeout(finish, 600)), 100);
-}
-
-if (reducedMotion) {
-  fallback();
-} else {
-  start().catch((e) => {
+if (reducedMotion) still();
+else
+  play().catch((e) => {
     console.error('splash:', e);
-    fallback();
+    still();
   });
-}
-
-window.rigbySplash = { finish, get editorReady() { return editorReady; } };
