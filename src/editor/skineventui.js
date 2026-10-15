@@ -125,6 +125,62 @@ export function skinUi(app, name) {
         ),
       ),
     ),
+    h('strong', null, 'Attachments by slot'),
+    skin.slots.length
+      ? h(
+          'table',
+          { class: 'props' },
+          skin.slots
+            .slice()
+            .sort((a, b) => b.slot - a.slot)
+            .flatMap((entry) =>
+              entry.attachments.map((att, i) =>
+                h(
+                  'tr',
+                  null,
+                  h(
+                    'td',
+                    null,
+                    h(
+                      'a',
+                      {
+                        href: '#',
+                        title: 'Select the slot',
+                        onclick: (e) => {
+                          e.preventDefault();
+                          doc.skin = skin.name;
+                          app.sel = { slot: entry.slot };
+                          app.changed();
+                        },
+                      },
+                      doc.slots[entry.slot]?.name ?? '?',
+                    ),
+                  ),
+                  h('td', null, `${att.name}${att.type && att.type !== 'region' ? ` (${att.type})` : ''}`),
+                  h(
+                    'td',
+                    null,
+                    setupMode
+                      ? h(
+                          'button',
+                          {
+                            class: 'small',
+                            title: 'Remove from this skin',
+                            onclick: () => {
+                              entry.attachments.splice(i, 1);
+                              skin.slots = skin.slots.filter((e) => e.attachments.length);
+                              app.changed();
+                            },
+                          },
+                          '✕',
+                        )
+                      : null,
+                  ),
+                ),
+              ),
+            ),
+        )
+      : h('div', { class: 'small weak' }, 'Make this skin active, select a slot and add images or shapes: they go into this skin.'),
     h('strong', null, 'Constraints'),
     constraints.length
       ? constraints.map((c) =>
