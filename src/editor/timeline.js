@@ -155,6 +155,15 @@ function tracks(app, anim) {
     out.push({ track: { deform: i, slot: d.slot }, label: `${app.doc.slots[d.slot]?.name ?? '?'} · deform ${d.attachment}` });
   });
   anim.ik.forEach((k, i) => out.push({ track: { ik: i }, label: `IK ${app.doc.ik[k.constraint]?.name ?? '?'}` }));
+  for (const [skin, slots] of Object.entries(anim.extra?.attachments ?? {})) {
+    for (const [slot, atts] of Object.entries(slots)) {
+      for (const [attachment, timelines] of Object.entries(atts)) {
+        if (Array.isArray(timelines.sequence) && timelines.sequence.length) {
+          out.push({ track: { sequence: { skin, slot, attachment } }, label: `${slot} · sequence${skin === 'default' ? '' : ` [${skin}]`}` });
+        }
+      }
+    }
+  }
   for (const t of keyedChannels(anim, listConstraints(app.doc))) {
     out.push({ track: { raw: { type: t.type, name: t.name, channel: t.channel } }, label: `${t.name} · ${t.channel ?? 'mix'}` });
   }
@@ -165,6 +174,11 @@ function tracks(app, anim) {
 
 function trackKeys(anim, track) {
   if (track.raw) return channelKeys(anim, track.raw.type, track.raw.name, track.raw.channel);
+  if (track.sequence) {
+    const keys = anim.extra?.attachments?.[track.sequence.skin]?.[track.sequence.slot]?.[track.sequence.attachment]?.sequence;
+    for (const k of keys ?? []) k.time ??= 0;
+    return keys;
+  }
   if (track.deform !== undefined) return anim.deform[track.deform]?.keys;
   if (track.ik !== undefined) return anim.ik[track.ik]?.keys;
   if (track.drawOrder) return anim.drawOrder;
@@ -185,6 +199,7 @@ export function deleteSelectedKeys(app) {
   drop(anim.drawOrder);
   drop(anim.events);
   for (const t of keyedChannels(anim, listConstraints(app.doc))) drop(t.keys);
+  for (const keys of sequenceLists(anim)) drop(keys);
   pruneConstraintKeys(anim);
   const count = app.selectedKeys.size;
   app.selectedKeys.clear();
@@ -486,8 +501,18 @@ export function resortAnimation(anim) {
   sort(anim.drawOrder);
   sort(anim.events);
   for (const tl of anim.extra ? keyedChannels(anim, listConstraintsOf(anim)) : []) sort(tl.keys);
+  for (const keys of sequenceLists(anim)) sort(keys);
   const last = anim.lastKeyTime();
   if (last > anim.duration) anim.duration = last;
+}
+
+/** Every sequence key list of an animation. */
+function sequenceLists(anim) {
+  const out = [];
+  for (const slots of Object.values(anim.extra?.attachments ?? {})) {
+    for (const atts of Object.values(slots)) for (const t of Object.values(atts)) if (Array.isArray(t.sequence)) out.push(t.sequence);
+  }
+  return out;
 }
 
 /** Constraint names keyed in an animation (for sorting without the document). */
@@ -512,7 +537,7 @@ export function curveMenu(app, x, y) {
       });
     }
     // Attachment, draw order and event keys have no curve.
-    const skip = new Set([...raw, ...anim.events, ...anim.drawOrder, ...anim.slots.flatMap((s) => s.attachment ?? [])]);
+    const skip = new Set([...raw, ...anim.events, ...anim.drawOrder, ...anim.slots.flatMap((s) => s.attachment ?? []), ...sequenceLists(anim).flat()]);
     for (const k of app.selectedKeys) if (!skip.has(k)) k.curve = cloneCurve(curve);
     app.changed();
   };

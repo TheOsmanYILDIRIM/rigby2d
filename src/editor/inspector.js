@@ -3,9 +3,10 @@
 
 import { identityTransform, transformEquals } from '../core/math.js';
 import { BLEND_MODES, INHERIT_MODES, findAttachment, makeAttachment, uniqueName, vertexCount } from '../core/model.js';
-import { Mode, selBone, selSlot } from './app.js';
+import { FPS, Mode, selBone, selSlot } from './app.js';
 import * as edit from './edit.js';
 import { renameBoneRefs, renameSlotRefs } from '../core/constraintdata.js';
+import { sequenceFrameName } from '../core/sequence.js';
 import { constraintUi } from './constraintui.js';
 import { bindMesh, regionToMesh, unbindMesh } from './meshtool.js';
 import { eventUi, skinUi } from './skineventui.js';
@@ -237,11 +238,24 @@ function slotUi(app, s) {
       h(
         'div',
         { class: 'grid' },
-        row('Image', att.image),
+        att.type === 'mesh' || att.type === 'linkedmesh'
+          ? row('Image', select(app.doc.images.map((i) => [i.name, i.name]), att.image, (name) => ((att.image = name), app.changed()), { disabled: !setupMode }))
+          : null,
         source ? row('Vertices', `${vertexCount(source)}${source.weights ? ' (weighted)' : ''}`) : null,
         source?.triangles ? row('Triangles', String(source.triangles.length / 3)) : null,
         att.type === 'linkedmesh' ? row('Parent', `${att.parent}${att.skin ? ` (${att.skin})` : ''}`) : null,
+        att.type === 'linkedmesh'
+          ? row('', h('label', { class: 'check', title: 'Use the deform keys of the parent mesh' }, h('input', { type: 'checkbox', disabled: !setupMode, checked: att.deform !== false, onchange: (e) => ((att.deform = e.target.checked), app.changed()) }), ' Inherit deform'))
+          : null,
       ),
+      att.type === 'mesh' && setupMode && app.doc.images.length
+        ? select(app.doc.images.map((i) => [i.name, i.name]), undefined, (image) => {
+            const img = app.doc.images.find((i) => i.name === image);
+            addToSlot(app, s, (name) => ({ name, type: 'linkedmesh', image, parent: att.name, skin: null, deform: true, width: img?.width ?? att.width, height: img?.height ?? att.height }), image); // named after its image, like exported linked meshes
+            app.setStatus('Linked mesh added: it shares this mesh\'s shape and weights with another image');
+          }, { placeholder: '＋ Linked mesh with image…' })
+        : null,
+      att.type === 'mesh' || att.type === 'linkedmesh' ? sequenceUi(app, s, att, setupMode) : null,
       att.type === 'clipping'
         ? h(
             'div',
@@ -280,9 +294,9 @@ function slotUi(app, s) {
       setupMode ? h('div', { class: 'buttons' }, h('button', { onclick: () => removeAttachment(app, s, att) }, `🗑 Remove ${att.type}`)) : null,
       att.type === 'mesh' && !(app.meshEdit?.slot === s && app.meshEdit?.name === visible)
         ? h('div', { class: 'buttons' }, h('button', { onclick: () => startMeshEdit(app, s, visible) }, setupMode ? '✎ Edit mesh' : '✎ Deform mesh'))
-        : att.type === 'mesh'
-          ? null
-          : h('div', { class: 'small weak' }, 'Linked meshes share their parent mesh; edit the parent.'),
+        : att.type === 'linkedmesh'
+          ? h('div', { class: 'small weak' }, 'Linked meshes share their parent mesh; edit the parent.')
+          : null,
     );
   }
   if (att && att.offset) {
@@ -311,6 +325,7 @@ function slotUi(app, s) {
         row('Scale', num(att.offset, 'scale_x', { ...scl, prefix: 'x ' }), num(att.offset, 'scale_y', { ...scl, prefix: 'y ' })),
         row('Size', num(att, 'width', { ...pos, prefix: 'w ', min: 0 }), num(att, 'height', { ...pos, prefix: 'h ', min: 0 })),
       ),
+      sequenceUi(app, s, att, setupMode),
       h(
         'div',
         { class: 'buttons' },
@@ -553,4 +568,112 @@ function makeShape(app, s, type, name) {
   const att = { name, type, image: name, vertexCount: 4, vertices: square };
   if (type === 'clipping') att.end = null;
   return att;
+}
+
+const SEQUENCE_MODES = [
+  ['hold', 'Hold'],
+  ['once', 'Once'],
+  ['loop', 'Loop'],
+  ['pingpong', 'Ping-pong'],
+  ['onceReverse', 'Once reverse'],
+  ['loopReverse', 'Loop reverse'],
+  ['pingpongReverse', 'Ping-pong reverse'],
+];
+
+/** Sequence keys of an attachment in the current animation (created when `create`). */
+export function sequenceKeys(app, s, att, create = false) {
+  const anim = app.currentAnimation();
+  if (!anim) return null;
+  const doc = app.doc;
+  const skin = doc.slots[s].attachments.includes(att) ? 'default' : doc.skin ?? 'default';
+  anim.extra ??= {};
+  const slotName = doc.slots[s].name;
+  if (!create) return anim.extra.attachments?.[skin]?.[slotName]?.[att.name]?.sequence ?? null;
+  const timelines = (((anim.extra.attachments ??= {})[skin] ??= {})[slotName] ??= {})[att.name] ??= {};
+  return (timelines.sequence ??= []);
+}
+
+/** Image sequence settings (Setup) or sequence keys (Animate) of a region or mesh. */
+function sequenceUi(app, s, att, setupMode) {
+  const doc = app.doc;
+  if (setupMode) {
+    const seq = att.sequence;
+    const toggle = h(
+      'label',
+      { class: 'check', title: 'Show numbered images (name01, name02, …) one at a time' },
+      h('input', {
+        type: 'checkbox',
+        checked: !!seq,
+        onchange: (e) => {
+          if (e.target.checked) att.sequence = { count: 2 };
+          else delete att.sequence;
+          app.changed();
+        },
+      }),
+      ' Image sequence',
+    );
+    if (!seq) return h('div', { class: 'buttons' }, toggle);
+    const set = (key, v, def) => {
+      if (v === def) delete seq[key];
+      else seq[key] = v;
+      app.changed();
+    };
+    const count = seq.count ?? 1;
+    const frames = Array.from({ length: count }, (_, i) => sequenceFrameName(att, i));
+    const found = frames.filter((n) => app.images.get(n)).length;
+    return [
+      h('div', { class: 'buttons' }, toggle),
+      h(
+        'div',
+        { class: 'grid' },
+        row('Frames', dragValue(count, (v) => set('count', Math.max(1, Math.round(v)), undefined), { speed: 0.1, min: 1, decimals: 0 })),
+        row('Start', dragValue(seq.start ?? 1, (v) => set('start', Math.round(v), 1), { speed: 0.1, min: 0, decimals: 0 })),
+        row('Digits', dragValue(seq.digits ?? 0, (v) => set('digits', Math.max(0, Math.round(v)), 0), { speed: 0.05, min: 0, max: 8, decimals: 0 })),
+        row('Setup frame', dragValue(seq.setup ?? 0, (v) => set('setup', Math.min(count - 1, Math.max(0, Math.round(v))), 0), { speed: 0.1, decimals: 0 })),
+        row('Images', `${frames[0]} … ${frames.at(-1)} (${found} of ${count} found)`),
+      ),
+    ];
+  }
+  if (!att.sequence) return null;
+  const anim = app.currentAnimation();
+  if (!anim) return null;
+  const time = Math.round(app.time * FPS) / FPS;
+  const keys = sequenceKeys(app, s, att) ?? [];
+  let current = null;
+  let delay = 0;
+  for (const k of keys) {
+    if ((k.time ?? 0) > time + 1e-6) break;
+    current = k;
+    delay = k.delay ?? delay;
+  }
+  const state = { mode: current?.mode ?? 'hold', index: current?.index ?? 0, delay: delay || 1 / FPS };
+  const keyed = !!current && Math.abs((current.time ?? 0) - time) < 5e-4;
+  const write = (changes) => {
+    const v = { ...state, ...changes };
+    const list = sequenceKeys(app, s, att, true);
+    let k = list.find((x) => Math.abs((x.time ?? 0) - time) < 5e-4);
+    if (!k) {
+      k = { time };
+      list.push(k);
+      list.sort((a, b) => (a.time ?? 0) - (b.time ?? 0));
+    }
+    k.time = time;
+    if (v.mode === 'hold') delete k.mode;
+    else k.mode = v.mode;
+    if (v.index) k.index = v.index;
+    else delete k.index;
+    k.delay = v.delay;
+    app.changed();
+  };
+  return [
+    h('strong', null, 'Sequence'),
+    h(
+      'div',
+      { class: 'grid' },
+      row('Mode', select(SEQUENCE_MODES, state.mode, (v) => write({ mode: v }))),
+      row('Frame', dragValue(state.index, (v) => write({ index: Math.max(0, Math.round(v)) }), { speed: 0.1, min: 0, max: (att.sequence.count ?? 1) - 1, decimals: 0 })),
+      row('Frame time', dragValue(state.delay, (v) => write({ delay: Math.max(0, v) }), { speed: 0.001, min: 0, decimals: 3, suffix: ' s' })),
+      row('', h('button', { class: `keybtn ${keyed ? 'keyed' : 'none'}`, onclick: () => write({}) }, '◆'), h('span', { class: 'small weak' }, ` Key at frame ${Math.round(time * FPS)}`)),
+    ),
+  ];
 }
