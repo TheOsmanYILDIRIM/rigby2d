@@ -441,7 +441,7 @@ function meshUi(app) {
   if (app.mode === Mode.Animate) {
     return [
       h('h2', null, `Deform mesh: ${e.name}`),
-      h('div', { class: 'small weak' }, 'Drag vertices to key their positions at the current frame. Keys appear in the dopesheet as the deform row.'),
+      h('div', { class: 'small weak' }, 'Drag vertices to key their positions at the current frame; drag a box (or Ctrl+click) to select several and move them together. Keys appear in the dopesheet as the deform row.'),
       h('div', { class: 'buttons' }, h('button', { onclick: () => { app.meshEdit = null; app.changed(); } }, '✓ Done')),
       h('hr'),
     ];
@@ -460,7 +460,7 @@ function meshUi(app) {
     h('div', { class: 'buttons' }, h('span', { class: 'segmented' }, mode('vertices', 'Vertices'), mode('weights', 'Weights')), h('button', { onclick: () => { app.meshEdit = null; app.changed(); } }, '✓ Done')),
   ];
   if (e.mode === 'vertices') {
-    out.push(h('div', { class: 'small weak' }, 'Click inside to add a vertex, near or outside the outline to extend it. Drag a vertex to move it over the image; Delete removes the selected one.'));
+    out.push(h('div', { class: 'small weak' }, 'Click inside to add a vertex, near or outside the outline to extend it. Drag vertices to move them over the image. Ctrl+click or Ctrl+drag a box to select several; Delete removes the selection.'));
   } else {
     const bindLabel = selectedBones.length ? `Bind to ${selectedBones.length} selected bone${selectedBones.length === 1 ? '' : 's'}` : 'Select bones to bind (Ctrl+click in the tree)';
     out.push(

@@ -217,20 +217,31 @@ export class MeshTool {
     this.app.changed();
   }
 
+  /** Selected vertex indices (the last clicked one is `edit.selected`). */
+  selection(t) {
+    t.edit.selection ??= new Set(t.edit.selected !== null && t.edit.selected !== undefined ? [t.edit.selected] : []);
+    return t.edit.selection;
+  }
+
+  /** Click on a vertex: select it (Ctrl adds or removes it). */
+  pick(t, hit, add) {
+    const sel = this.selection(t);
+    if (add) {
+      if (sel.has(hit)) sel.delete(hit);
+      else sel.add(hit);
+    } else if (!sel.has(hit)) {
+      sel.clear();
+      sel.add(hit);
+    }
+    t.edit.selected = sel.has(hit) ? hit : [...sel].at(-1) ?? null;
+  }
+
   down(pos, e) {
     const t = this.target();
     if (!t) return;
+    const add = e.ctrlKey || e.metaKey;
     const state = meshState(this.app.doc, t.slot, t.att);
     const world = this.viewport.toWorld(pos);
-    if (t.mode === 'deform') {
-      const hit = this.vertexAt({ points: this.shownPoints(t) }, pos);
-      if (hit >= 0) {
-        t.edit.selected = hit;
-        this.drag = { kind: 'deform', index: hit };
-      }
-      this.app.changed();
-      return;
-    }
     if (t.mode === 'weights') {
       if (!state.weights) {
         this.app.setStatus('Bind the mesh to bones first (properties panel)');
@@ -240,10 +251,19 @@ export class MeshTool {
       this.paint(t, pos);
       return;
     }
-    const hit = this.vertexAt(state, pos);
+    const shown = this.shownPoints(t);
+    const hit = this.vertexAt({ points: shown }, pos);
     if (hit >= 0) {
-      t.edit.selected = hit;
-      this.drag = { kind: 'vertex', index: hit, start: state };
+      this.pick(t, hit, add);
+      const indices = [...this.selection(t)];
+      this.drag = { kind: t.mode === 'deform' ? 'deform' : 'vertex', indices, start: state, shown, from: world, moved: false };
+      this.app.changed();
+      return;
+    }
+    // Empty space: Ctrl (or any drag while deforming) draws a selection box.
+    if (add || t.mode === 'deform') {
+      if (!add) this.selection(t).clear();
+      this.drag = { kind: 'box', from: pos, to: pos, add };
       this.app.changed();
       return;
     }
@@ -265,34 +285,59 @@ export class MeshTool {
       state.uvs.push(uv);
       if (weights) state.weights.push(weights.length ? weights : state.weights[0].map((w) => ({ ...w })));
     }
+    t.edit.selection = new Set([index]);
     t.edit.selected = index;
     this.commit(t, state);
-    this.drag = { kind: 'vertex', index, start: meshState(this.app.doc, t.slot, t.att) };
+    const next = meshState(this.app.doc, t.slot, t.att);
+    this.drag = { kind: 'vertex', indices: [index], start: next, shown: next.points, from: world };
   }
 
   move(pos) {
     this.hover = pos;
     const t = this.target();
     if (!t || !this.drag) return;
-    if (this.drag.kind === 'paint') {
+    const d = this.drag;
+    if (d.kind === 'paint') {
       this.paint(t, pos);
       return;
     }
-    if (this.drag.kind === 'deform') {
-      deformVertex(this.app, t.slot, t.att, this.drag.index, this.viewport.toWorld(pos));
+    if (d.kind === 'box') {
+      d.to = pos;
+      this.app.changed();
       return;
     }
-    // Move the vertex over the image: its texture coordinate follows its position.
-    const start = this.drag.start;
-    const state = { ...start, points: start.points.slice(), uvs: start.uvs.slice() };
     const world = this.viewport.toWorld(pos);
-    state.points[this.drag.index] = world;
-    state.uvs[this.drag.index] = uvAt(world, start.points, start.uvs, start.triangles);
+    const delta = [world[0] - d.from[0], world[1] - d.from[1]];
+    if (d.kind === 'deform') {
+      deformVertices(this.app, t.slot, t.att, d.indices.map((i) => [i, [d.shown[i][0] + delta[0], d.shown[i][1] + delta[1]]]));
+      return;
+    }
+    // Move the vertices over the image: their texture coordinates follow their positions.
+    const start = d.start;
+    const state = { ...start, points: start.points.slice(), uvs: start.uvs.slice() };
+    for (const i of d.indices) {
+      const p = [start.points[i][0] + delta[0], start.points[i][1] + delta[1]];
+      state.points[i] = p;
+      state.uvs[i] = uvAt(p, start.points, start.uvs, start.triangles);
+    }
     this.commit(t, state);
   }
 
   up() {
+    const t = this.target();
+    const d = this.drag;
     this.drag = null;
+    if (!t || d?.kind !== 'box') return;
+    const [x0, x1] = [Math.min(d.from[0], d.to[0]), Math.max(d.from[0], d.to[0])];
+    const [y0, y1] = [Math.min(d.from[1], d.to[1]), Math.max(d.from[1], d.to[1])];
+    const sel = this.selection(t);
+    this.shownPoints(t).forEach((p, i) => {
+      const [sx, sy] = this.screen(p);
+      if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1) sel.add(i);
+    });
+    t.edit.selected = [...sel].at(-1) ?? null;
+    this.app.setStatus(`${sel.size} vertex${sel.size === 1 ? '' : 'es'} selected`);
+    this.app.changed();
   }
 
   paint(t, pos) {
@@ -304,21 +349,26 @@ export class MeshTool {
     if (changed.length) this.commit(t, state, { topology: false });
   }
 
-  /** Deletes the selected vertex. Returns false when there is nothing to delete. */
+  /** Deletes the selected vertices. Returns false when there is nothing to delete. */
   deleteSelected() {
     const t = this.target();
-    if (!t || t.mode === 'deform' || t.edit.selected === undefined || t.edit.selected === null) return false;
+    if (!t || t.mode === 'deform') return false;
+    const sel = [...this.selection(t)].sort((a, b) => b - a);
+    if (!sel.length) return false;
     const state = meshState(this.app.doc, t.slot, t.att);
-    const i = t.edit.selected;
-    if (i >= state.points.length) return false;
-    if (i < state.hull && state.hull <= 3) {
+    const hullLeft = state.hull - sel.filter((i) => i < state.hull).length;
+    if (hullLeft < 3) {
       this.app.setStatus('A mesh outline needs at least 3 vertices');
       return true;
     }
-    state.points.splice(i, 1);
-    state.uvs.splice(i, 1);
-    if (state.weights) state.weights.splice(i, 1);
-    if (i < state.hull) state.hull--;
+    for (const i of sel) {
+      if (i >= state.points.length) continue;
+      state.points.splice(i, 1);
+      state.uvs.splice(i, 1);
+      if (state.weights) state.weights.splice(i, 1);
+      if (i < state.hull) state.hull--;
+    }
+    t.edit.selection = new Set();
     t.edit.selected = null;
     this.commit(t, state);
     return true;
@@ -354,15 +404,25 @@ export class MeshTool {
     for (let i = 0; i < state.hull; i++) (i ? ctx.lineTo : ctx.moveTo).call(ctx, pts[i][0], pts[i][1]);
     ctx.closePath();
     ctx.stroke();
+    const sel = this.selection(t);
     pts.forEach((p, i) => {
+      const picked = sel.has(i);
       ctx.beginPath();
-      ctx.arc(p[0], p[1], i === t.edit.selected ? 5 : 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = weightsMode ? heat(weightOf(i)).replace(/[\d.]+\)$/, '1)') : i < state.hull ? 'rgb(255,170,40)' : 'rgb(120,200,255)';
+      ctx.arc(p[0], p[1], picked ? 5 : 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = weightsMode ? heat(weightOf(i)).replace(/[\d.]+\)$/, '1)') : picked ? 'white' : i < state.hull ? 'rgb(255,170,40)' : 'rgb(120,200,255)';
       ctx.fill();
-      ctx.strokeStyle = i === t.edit.selected ? 'white' : 'black';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = picked ? 'rgb(255,170,40)' : 'black';
+      ctx.lineWidth = picked ? 2 : 1;
       ctx.stroke();
     });
+    if (this.drag?.kind === 'box') {
+      const { from, to } = this.drag;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = 'rgb(255,170,40)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(Math.min(from[0], to[0]) + 0.5, Math.min(from[1], to[1]) + 0.5, Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1]));
+      ctx.setLineDash([]);
+    }
     if (t.mode === 'weights' && this.hover) {
       ctx.strokeStyle = 'rgba(255,255,255,0.7)';
       ctx.beginPath();
@@ -374,32 +434,42 @@ export class MeshTool {
 }
 
 /**
- * Moves a mesh vertex to a world position in the current animation frame by keying its deform
- * offset. Weighted vertices get the same world movement through each of their bones.
+ * Moves mesh vertices to world positions ([index, [x, y]] pairs) in the current animation frame
+ * by keying their deform offsets. Weighted vertices get the same world movement through each of
+ * their bones.
  */
-export function deformVertex(app, slot, att, index, world) {
+export function deformVertices(app, slot, att, moves) {
   const doc = app.doc;
   const anim = app.currentAnimation();
-  if (!anim) return;
+  if (!anim || !moves.length) return;
   const time = Math.round(app.time * FPS) / FPS;
   const pose = app.pose();
   const flat = pose.worldVertices(doc, slot, att);
-  const move = [world[0] - flat[2 * index], world[1] - flat[2 * index + 1]];
   const n = att.weights ? att.weights.reduce((s, v) => s + v.length * 2, 0) : att.vertices.length;
   const deltas = Array.from(pose.deform.get(`${slot}/${att.name}`) ?? new Float64Array(n));
-  const local = (bone) => pose.world[bone].inverse().applyVector(move);
+  const offsets = [];
   if (att.weights) {
     let k = 0;
-    for (let v = 0; v < index; v++) k += att.weights[v].length * 2;
-    for (const w of att.weights[index]) {
-      const [dx, dy] = local(w.bone);
-      deltas[k++] += dx;
-      deltas[k++] += dy;
+    for (const v of att.weights) {
+      offsets.push(k);
+      k += v.length * 2;
     }
-  } else {
-    const [dx, dy] = local(doc.slots[slot].bone);
-    deltas[2 * index] += dx;
-    deltas[2 * index + 1] += dy;
+  }
+  for (const [index, world] of moves) {
+    const move = [world[0] - flat[2 * index], world[1] - flat[2 * index + 1]];
+    const local = (bone) => pose.world[bone].inverse().applyVector(move);
+    if (att.weights) {
+      let k = offsets[index];
+      for (const w of att.weights[index]) {
+        const [dx, dy] = local(w.bone);
+        deltas[k++] += dx;
+        deltas[k++] += dy;
+      }
+    } else {
+      const [dx, dy] = local(doc.slots[slot].bone);
+      deltas[2 * index] += dx;
+      deltas[2 * index + 1] += dy;
+    }
   }
   // The deform timeline of this attachment in the skin that holds it.
   const skin = doc.slots[slot].attachments.includes(att) ? null : doc.skin;
