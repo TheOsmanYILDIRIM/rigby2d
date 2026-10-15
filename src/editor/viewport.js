@@ -7,6 +7,7 @@ import { Pose } from '../core/pose.js';
 import { FPS, Mode, TOOLS, selBone, selSlot } from './app.js';
 import * as edit from './edit.js';
 import { GLView } from './glview.js';
+import { MeshTool } from './meshtool.js';
 
 const SELECTED = 'rgb(255,170,40)';
 const BONE = 'rgb(110,200,230)';
@@ -22,6 +23,8 @@ export class Viewport {
     /** WebGL layer under this canvas for attachments, or null (Canvas 2D only). */
     this.glCanvas = glCanvas;
     this.glView = glCanvas ? GLView.create(glCanvas) : null;
+    this.meshTool = new MeshTool(app, this);
+    this.meshPress = false;
     this.width = 1;
     this.height = 1;
     /** Active tool drag: { kind: 'bone'|'slot'|'create', index, start, last }. */
@@ -96,6 +99,7 @@ export class Viewport {
     }
     this.attachmentTime = performance.now() - t0;
     if (app.showBones) this.drawBones(pose);
+    this.meshTool.draw(this.ctx);
     if (this.drag?.kind === 'box') {
       const { from, to } = this.drag;
       this.ctx.save();
@@ -412,7 +416,10 @@ export class Viewport {
     this.canvas.setPointerCapture(e.pointerId);
     document.activeElement?.blur?.();
     const pos = this.eventPos(e);
-    if (e.button === 0) {
+    if (e.button === 0 && this.meshTool.active) {
+      this.meshPress = true;
+      this.meshTool.down(pos, e);
+    } else if (e.button === 0) {
       this.press = { pos, started: false, add: e.ctrlKey || e.metaKey };
     } else if (e.button === 1 || e.button === 2) {
       e.preventDefault();
@@ -423,6 +430,11 @@ export class Viewport {
   onPointerMove(e) {
     const app = this.app;
     const pos = this.eventPos(e);
+    if (this.meshTool.active) {
+      this.meshTool.hover = pos;
+      if (this.meshPress && e.buttons & 1) this.meshTool.move(pos);
+      else if (app.meshEdit?.mode === 'weights') app.changed(); // brush outline follows the cursor
+    }
     if (this.panning) {
       app.view.panX += pos[0] - this.panning[0];
       app.view.panY += pos[1] - this.panning[1];
@@ -440,6 +452,11 @@ export class Viewport {
 
   onPointerUp(e) {
     if (e.button === 1 || e.button === 2) this.panning = null;
+    if (this.meshPress && (e.button === 0 || e.type === 'pointercancel')) {
+      this.meshPress = false;
+      this.meshTool.up();
+      return;
+    }
     if (e.button === 0 && this.press) {
       if (this.press.started) this.dragStop();
       else if (e.type === 'pointerup') this.click(this.press.pos, this.press.add);

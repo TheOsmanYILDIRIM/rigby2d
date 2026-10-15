@@ -5,13 +5,16 @@ import { identityTransform, transformEquals } from '../core/math.js';
 import { BLEND_MODES, INHERIT_MODES, findAttachment, makeAttachment, uniqueName, vertexCount } from '../core/model.js';
 import { Mode, selBone, selSlot } from './app.js';
 import * as edit from './edit.js';
+import { bindMesh, regionToMesh, unbindMesh } from './meshtool.js';
 import { dragValue, h, select, textField } from './widgets.js';
 
 export function render(app, el) {
   const b = selBone(app.sel);
   const s = selSlot(app.sel);
   const content = b !== null ? boneUi(app, b) : s !== null ? slotUi(app, s) : projectUi(app);
-  el.replaceChildren(...content.flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false));
+  // The mesh being edited stays on top while bones are selected for binding or painting.
+  const mesh = meshUi(app);
+  el.replaceChildren(...[mesh, content].flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false));
 }
 
 const row = (label, ...content) => [h('label', null, label), h('div', { class: 'cell' }, ...content)];
@@ -217,7 +220,11 @@ function slotUi(app, s) {
         source?.triangles ? row('Triangles', String(source.triangles.length / 3)) : null,
         att.type === 'linkedmesh' ? row('Parent', `${att.parent}${att.skin ? ` (${att.skin})` : ''}`) : null,
       ),
-      h('div', { class: 'small weak' }, 'Mesh editing is not available yet; meshes deform with their bones and deform keys.'),
+      att.type === 'mesh' && setupMode && !(app.meshEdit?.slot === s && app.meshEdit?.name === visible)
+        ? h('div', { class: 'buttons' }, h('button', { onclick: () => startMeshEdit(app, s, visible) }, '✎ Edit mesh'))
+        : att.type === 'mesh'
+          ? null
+          : h('div', { class: 'small weak' }, 'Linked meshes share their parent mesh; edit the parent.'),
     );
   }
   if (att && att.offset) {
@@ -263,6 +270,19 @@ function slotUi(app, s) {
           },
           'Reset size',
         ),
+        setupMode
+          ? h(
+              'button',
+              {
+                title: 'Replace this image with a mesh you can reshape and bind to bones',
+                onclick: () => {
+                  regionToMesh(app.doc, s, att);
+                  startMeshEdit(app, s, att.name);
+                },
+              },
+              '▦ Convert to mesh',
+            )
+          : null,
         setupMode
           ? h(
               'button',
@@ -336,4 +356,89 @@ function projectUi(app) {
       h('li', null, 'File ▸ Save writes skeleton JSON + images; File ▸ Export writes JSON + a packed atlas for game runtimes.'),
     ),
   ];
+}
+
+function startMeshEdit(app, slot, name) {
+  app.meshEdit = { slot, name, mode: 'vertices', radius: 40, strength: 0.5, subtract: false, selected: null };
+  app.changed();
+}
+
+/** Mesh editing controls, shown while a mesh is being edited. */
+function meshUi(app) {
+  const e = app.meshEdit;
+  if (!e || app.mode !== Mode.Setup) return null;
+  const att = app.doc.attachment(e.slot, e.name);
+  if (!att || att.type !== 'mesh') return null;
+  const doc = app.doc;
+  const set = (key, value) => {
+    e[key] = value;
+    app.changed();
+  };
+  const mode = (id, label) => h('button', { class: e.mode === id ? 'active' : '', onclick: () => set('mode', id) }, label);
+  const bound = att.weights ? [...new Set(att.weights.flatMap((v) => v.map((w) => w.bone)))].sort((x, y) => x - y) : [];
+  const selectedBones = app.selectedBones();
+  const out = [
+    h('h2', null, `Mesh: ${e.name}`),
+    h('div', { class: 'grid' }, row('Slot', doc.slots[e.slot].name), row('Vertices', `${att.uvs.length / 2} (outline ${att.hull})${att.weights ? ', weighted' : ''}`)),
+    h('div', { class: 'buttons' }, h('span', { class: 'segmented' }, mode('vertices', 'Vertices'), mode('weights', 'Weights')), h('button', { onclick: () => { app.meshEdit = null; app.changed(); } }, '✓ Done')),
+  ];
+  if (e.mode === 'vertices') {
+    out.push(h('div', { class: 'small weak' }, 'Click inside to add a vertex, near or outside the outline to extend it. Drag a vertex to move it over the image; Delete removes the selected one.'));
+  } else {
+    const bindLabel = selectedBones.length ? `Bind to ${selectedBones.length} selected bone${selectedBones.length === 1 ? '' : 's'}` : 'Select bones to bind (Ctrl+click in the tree)';
+    out.push(
+      h(
+        'div',
+        { class: 'buttons' },
+        h(
+          'button',
+          {
+            disabled: !selectedBones.length,
+            title: 'Weights each vertex to the nearest of the selected bones',
+            onclick: () => {
+              const removed = bindMesh(doc, e.slot, att, selectedBones);
+              e.bone = selectedBones[0];
+              app.setStatus(`Bound to ${selectedBones.length} bone${selectedBones.length === 1 ? '' : 's'}${removed ? `; removed ${removed} deform timeline(s)` : ''}`);
+              app.changed();
+            },
+          },
+          bindLabel,
+        ),
+        att.weights
+          ? h(
+              'button',
+              {
+                onclick: () => {
+                  unbindMesh(doc, e.slot, att);
+                  app.changed();
+                },
+              },
+              'Unbind',
+            )
+          : null,
+      ),
+    );
+    if (att.weights) {
+      const choices = doc.bones.map((bone, i) => [i, `${bound.includes(i) ? '● ' : ''}${bone.name}`]);
+      out.push(
+        h(
+          'div',
+          { class: 'grid' },
+          row('Paint bone', select(choices, e.bone ?? bound[0], (v) => set('bone', Number(v)))),
+          row('Brush', dragValue(e.radius ?? 40, (v) => set('radius', v), { speed: 0.5, min: 2, max: 400, suffix: ' px', decimals: 0 })),
+          row('Strength', dragValue(e.strength ?? 0.5, (v) => set('strength', v), { speed: 0.01, min: 0.01, max: 1, decimals: 2 })),
+          row(
+            'Mode',
+            h('span', { class: 'segmented' },
+              h('button', { class: e.subtract ? '' : 'active', onclick: () => set('subtract', false) }, 'Add'),
+              h('button', { class: e.subtract ? 'active' : '', onclick: () => set('subtract', true) }, 'Subtract'),
+            ),
+          ),
+        ),
+        h('div', { class: 'small weak' }, 'Drag over the mesh to paint (Shift subtracts). Colors show the paint bone: red = full weight, blue = none. ● marks bones the mesh uses.'),
+      );
+    }
+  }
+  out.push(h('hr'));
+  return out;
 }

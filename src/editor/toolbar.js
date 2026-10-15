@@ -140,13 +140,15 @@ export function render(app, el) {
       : null;
 
   el.replaceChildren(
-    h('div', { class: 'toolgroup' }, tools),
-    h('span', { class: 'vsep' }),
-    h('div', { class: 'toolgroup fields' }, fields),
-    h('span', { class: 'vsep' }),
-    axes,
-    autoKey ? h('span', { class: 'vsep' }) : null,
-    autoKey,
+    ...[
+      h('div', { class: 'toolgroup' }, tools),
+      h('span', { class: 'vsep' }),
+      h('div', { class: 'toolgroup fields' }, fields),
+      h('span', { class: 'vsep' }),
+      axes,
+      autoKey ? h('span', { class: 'vsep' }) : null,
+      autoKey,
+    ].filter(Boolean),
   );
 }
 

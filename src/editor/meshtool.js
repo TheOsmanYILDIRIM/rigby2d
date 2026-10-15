@@ -1,0 +1,347 @@
+// SPDX-License-Identifier: MIT
+// Mesh authoring: turning images into meshes, editing vertices, binding meshes to bones and
+// painting weights. Editing happens on the setup pose, in world space; the mesh is written back
+// in the slot bone's space (unweighted) or each bone's space (weighted).
+
+import { toAffine } from '../core/math.js';
+import { autoWeights, paintWeights, triangulateMesh, uvAt, weightsAt } from '../core/meshgeom.js';
+import { Pose } from '../core/pose.js';
+import { Mode } from './app.js';
+
+const VERTEX_HIT = 7;
+const EDGE_HIT = 8;
+
+/** Every list holding attachments (default skin per slot, then named skins). */
+function attachmentLists(doc) {
+  const lists = doc.slots.map((s) => s.attachments);
+  for (const skin of doc.skins) for (const e of skin.slots) lists.push(e.attachments);
+  return lists;
+}
+
+function replaceAttachment(doc, old, neu) {
+  for (const list of attachmentLists(doc)) {
+    const i = list.indexOf(old);
+    if (i >= 0) list[i] = neu;
+  }
+}
+
+/** Removes deform keys of an attachment (they no longer match its vertices). Returns how many. */
+function dropDeformKeys(doc, slot, name) {
+  let removed = 0;
+  for (const anim of doc.animations) {
+    const before = anim.deform.length;
+    anim.deform = anim.deform.filter((d) => !(d.slot === slot && d.attachment === name));
+    removed += before - anim.deform.length;
+  }
+  return removed;
+}
+
+/** Replaces a region attachment with a 4-vertex mesh covering the same image. */
+export function regionToMesh(doc, slot, att) {
+  const m = toAffine(att.offset);
+  const hw = att.width / 2;
+  const hh = att.height / 2;
+  const corners = [
+    [-hw, hh],
+    [hw, hh],
+    [hw, -hh],
+    [-hw, -hh],
+  ].map((p) => m.apply(p));
+  const mesh = {
+    name: att.name,
+    type: 'mesh',
+    image: att.image,
+    uvs: [0, 0, 1, 0, 1, 1, 0, 1],
+    triangles: [0, 1, 2, 0, 2, 3],
+    hull: 4,
+    vertices: corners.flat(),
+    width: att.width,
+    height: att.height,
+  };
+  for (const key of ['color', 'sequence', 'sourceName', 'extra']) if (att[key] !== undefined) mesh[key] = att[key];
+  replaceAttachment(doc, att, mesh);
+  return mesh;
+}
+
+/** The mesh as editable world-space data: { points, uvs, weights (or null), hull }. */
+export function meshState(doc, slot, att) {
+  const pose = new Pose(doc);
+  const flat = pose.worldVertices(doc, slot, att);
+  const points = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) points.push([flat[i], flat[i + 1]]);
+  const uvs = [];
+  for (let i = 0; i + 1 < att.uvs.length; i += 2) uvs.push([att.uvs[i], att.uvs[i + 1]]);
+  const weights = att.weights ? att.weights.map((v) => v.map((w) => ({ bone: w.bone, weight: w.weight }))) : null;
+  return { points, uvs, weights, hull: att.hull ?? points.length, triangles: att.triangles.slice() };
+}
+
+/**
+ * Writes edited world-space data back into the mesh (re-triangulated). Returns the number of
+ * deform keys removed because the vertices changed.
+ */
+export function writeMesh(doc, slot, att, state, { topology = true } = {}) {
+  const pose = new Pose(doc);
+  att.uvs = state.uvs.flat();
+  att.hull = state.hull;
+  if (topology) {
+    att.triangles = triangulateMesh(state.points, state.hull);
+    delete att.edges;
+  }
+  if (state.weights) {
+    att.weights = state.points.map((p, i) =>
+      state.weights[i].map(({ bone, weight }) => {
+        const [x, y] = pose.world[bone].inverse().apply(p);
+        return { bone, x, y, weight };
+      }),
+    );
+    delete att.vertices;
+  } else {
+    const inv = pose.world[doc.slots[slot].bone].inverse();
+    att.vertices = state.points.flatMap((p) => inv.apply(p));
+    delete att.weights;
+  }
+  return dropDeformKeys(doc, slot, att.name);
+}
+
+/** Binds the mesh to bones with automatic weights. */
+export function bindMesh(doc, slot, att, bones) {
+  const pose = new Pose(doc);
+  const state = meshState(doc, slot, att);
+  const segments = bones.map((bone) => ({
+    bone,
+    from: pose.world[bone].apply([0, 0]),
+    to: pose.world[bone].apply([doc.bones[bone].length, 0]),
+  }));
+  state.weights = autoWeights(state.points, segments);
+  return writeMesh(doc, slot, att, state, { topology: false });
+}
+
+/** Removes the weights: vertices follow the slot's bone again. */
+export function unbindMesh(doc, slot, att) {
+  const state = meshState(doc, slot, att);
+  state.weights = null;
+  return writeMesh(doc, slot, att, state, { topology: false });
+}
+
+function pointInPolygon(p, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function distToSegment(p, a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  const t = len2 > 1e-12 ? Math.min(1, Math.max(0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2)) : 0;
+  return Math.hypot(p[0] - (a[0] + dx * t), p[1] - (a[1] + dy * t));
+}
+
+/**
+ * Viewport tool for the mesh being edited (`app.meshEdit = { slot, name, mode, bone, ... }`).
+ * Vertices mode: click inside to add a vertex, near (or outside) the outline to add an outline
+ * vertex, drag to move a vertex over the image, Delete removes the selected one. Weights mode:
+ * drag to paint the chosen bone's weight (Shift or the Subtract option removes weight).
+ */
+export class MeshTool {
+  constructor(app, viewport) {
+    this.app = app;
+    this.viewport = viewport;
+    this.drag = null;
+    this.hover = null;
+  }
+
+  /** The edited slot and mesh, or null when not editing. */
+  target() {
+    const app = this.app;
+    const e = app.meshEdit;
+    if (!e || app.mode !== Mode.Setup) return null;
+    const att = app.doc.attachment(e.slot, e.name);
+    if (!att || att.type !== 'mesh') return null;
+    return { slot: e.slot, att, edit: e };
+  }
+
+  get active() {
+    return this.target() !== null;
+  }
+
+  screen(p) {
+    return this.viewport.toScreen(p);
+  }
+
+  vertexAt(state, pos) {
+    let best = -1;
+    let bestD = VERTEX_HIT;
+    state.points.forEach((p, i) => {
+      const s = this.screen(p);
+      const d = Math.hypot(s[0] - pos[0], s[1] - pos[1]);
+      if (d <= bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    return best;
+  }
+
+  /** Index of the outline edge nearest to a screen point and its screen distance. */
+  nearestEdge(state, pos) {
+    let best = { index: 0, d: Infinity };
+    for (let i = 0; i < state.hull; i++) {
+      const d = distToSegment(pos, this.screen(state.points[i]), this.screen(state.points[(i + 1) % state.hull]));
+      if (d < best.d) best = { index: i, d };
+    }
+    return best;
+  }
+
+  commit(t, state, opts) {
+    const removed = writeMesh(this.app.doc, t.slot, t.att, state, opts);
+    if (removed) this.app.setStatus(`Mesh changed: removed ${removed} deform timeline${removed === 1 ? '' : 's'} that no longer match it`);
+    this.app.changed();
+  }
+
+  down(pos, e) {
+    const t = this.target();
+    if (!t) return;
+    const state = meshState(this.app.doc, t.slot, t.att);
+    const world = this.viewport.toWorld(pos);
+    if (t.edit.mode === 'weights') {
+      if (!state.weights) {
+        this.app.setStatus('Bind the mesh to bones first (properties panel)');
+        return;
+      }
+      this.drag = { kind: 'paint', subtract: e.shiftKey || t.edit.subtract };
+      this.paint(t, pos);
+      return;
+    }
+    const hit = this.vertexAt(state, pos);
+    if (hit >= 0) {
+      t.edit.selected = hit;
+      this.drag = { kind: 'vertex', index: hit, start: state };
+      this.app.changed();
+      return;
+    }
+    // Add a vertex: near or outside the outline extends the outline, inside adds an interior one.
+    const uv = uvAt(world, state.points, state.uvs, state.triangles);
+    const weights = state.weights ? weightsAt(world, state.points, state.weights, state.triangles) : null;
+    const edge = this.nearestEdge(state, pos);
+    const outline = state.points.slice(0, state.hull);
+    let index;
+    if (edge.d <= EDGE_HIT || !pointInPolygon(world, outline)) {
+      index = edge.index + 1;
+      state.points.splice(index, 0, world);
+      state.uvs.splice(index, 0, uv);
+      if (weights) state.weights.splice(index, 0, weights.length ? weights : state.weights[edge.index].map((w) => ({ ...w })));
+      state.hull++;
+    } else {
+      index = state.points.length;
+      state.points.push(world);
+      state.uvs.push(uv);
+      if (weights) state.weights.push(weights.length ? weights : state.weights[0].map((w) => ({ ...w })));
+    }
+    t.edit.selected = index;
+    this.commit(t, state);
+    this.drag = { kind: 'vertex', index, start: meshState(this.app.doc, t.slot, t.att) };
+  }
+
+  move(pos) {
+    this.hover = pos;
+    const t = this.target();
+    if (!t || !this.drag) return;
+    if (this.drag.kind === 'paint') {
+      this.paint(t, pos);
+      return;
+    }
+    // Move the vertex over the image: its texture coordinate follows its position.
+    const start = this.drag.start;
+    const state = { ...start, points: start.points.slice(), uvs: start.uvs.slice() };
+    const world = this.viewport.toWorld(pos);
+    state.points[this.drag.index] = world;
+    state.uvs[this.drag.index] = uvAt(world, start.points, start.uvs, start.triangles);
+    this.commit(t, state);
+  }
+
+  up() {
+    this.drag = null;
+  }
+
+  paint(t, pos) {
+    const app = this.app;
+    const state = meshState(app.doc, t.slot, t.att);
+    const bone = t.edit.bone ?? state.weights[0]?.[0]?.bone ?? 0;
+    const radius = (t.edit.radius ?? 40) / app.view.zoom;
+    const changed = paintWeights(state.points, state.weights, bone, this.viewport.toWorld(pos), radius, (t.edit.strength ?? 0.5) * 0.25, this.drag.subtract);
+    if (changed.length) this.commit(t, state, { topology: false });
+  }
+
+  /** Deletes the selected vertex. Returns false when there is nothing to delete. */
+  deleteSelected() {
+    const t = this.target();
+    if (!t || t.edit.selected === undefined || t.edit.selected === null) return false;
+    const state = meshState(this.app.doc, t.slot, t.att);
+    const i = t.edit.selected;
+    if (i >= state.points.length) return false;
+    if (i < state.hull && state.hull <= 3) {
+      this.app.setStatus('A mesh outline needs at least 3 vertices');
+      return true;
+    }
+    state.points.splice(i, 1);
+    state.uvs.splice(i, 1);
+    if (state.weights) state.weights.splice(i, 1);
+    if (i < state.hull) state.hull--;
+    t.edit.selected = null;
+    this.commit(t, state);
+    return true;
+  }
+
+  draw(ctx) {
+    const t = this.target();
+    if (!t) return;
+    const state = meshState(this.app.doc, t.slot, t.att);
+    const pts = state.points.map((p) => this.screen(p));
+    const weightsMode = t.edit.mode === 'weights' && state.weights;
+    const bone = t.edit.bone ?? state.weights?.[0]?.[0]?.bone;
+    const weightOf = (i) => state.weights[i].find((w) => w.bone === bone)?.weight ?? 0;
+    const heat = (w) => `rgba(${Math.round(255 * w)},${Math.round(80 + 60 * (1 - Math.abs(w - 0.5) * 2))},${Math.round(255 * (1 - w))},0.55)`;
+    ctx.save();
+    ctx.lineWidth = 1;
+    for (let k = 0; k + 2 < state.triangles.length; k += 3) {
+      const tri = [state.triangles[k], state.triangles[k + 1], state.triangles[k + 2]];
+      ctx.beginPath();
+      tri.forEach((v, n) => (n ? ctx.lineTo(pts[v][0], pts[v][1]) : ctx.moveTo(pts[v][0], pts[v][1])));
+      ctx.closePath();
+      if (weightsMode) {
+        ctx.fillStyle = heat((weightOf(tri[0]) + weightOf(tri[1]) + weightOf(tri[2])) / 3);
+        ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(120,200,255,0.55)';
+      ctx.stroke();
+    }
+    // Outline.
+    ctx.strokeStyle = 'rgb(255,170,40)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < state.hull; i++) (i ? ctx.lineTo : ctx.moveTo).call(ctx, pts[i][0], pts[i][1]);
+    ctx.closePath();
+    ctx.stroke();
+    pts.forEach((p, i) => {
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], i === t.edit.selected ? 5 : 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = weightsMode ? heat(weightOf(i)).replace(/[\d.]+\)$/, '1)') : i < state.hull ? 'rgb(255,170,40)' : 'rgb(120,200,255)';
+      ctx.fill();
+      ctx.strokeStyle = i === t.edit.selected ? 'white' : 'black';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+    if (t.edit.mode === 'weights' && this.hover) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+      ctx.beginPath();
+      ctx.arc(this.hover[0], this.hover[1], t.edit.radius ?? 40, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}

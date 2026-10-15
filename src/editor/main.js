@@ -198,7 +198,11 @@ function run(action) {
     'select.none': () => app.deselect(),
     'view.fit': () => (app.frameRequest = true),
     'view.actual': () => zoomActual(),
-    'edit.delete': () => (app.selectedKeys.size ? deleteSelectedKeys(app) : edit.deleteSelection(app)),
+    'edit.delete': () => {
+      if (viewport.meshTool.deleteSelected()) return;
+      if (app.selectedKeys.size) deleteSelectedKeys(app);
+      else edit.deleteSelection(app);
+    },
     'edit.undo': () => app.undo(),
     'edit.redo': () => app.redo(),
     'file.open': () => app.openDialog(),
