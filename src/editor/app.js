@@ -66,6 +66,8 @@ export class App {
     this.sel = null;
     /** Mesh being edited: { slot, name, mode: 'vertices' | 'weights', bone, radius, strength, subtract, selected }. */
     this.meshEdit = null;
+    /** Shape being edited (bounding box, clipping or path): { slot, name, selected }. */
+    this.shapeEdit = null;
     /** Physics simulation state kept between frames while playing, and the time to simulate. */
     this.physics = new Map();
     this.physicsDelta = 0;
@@ -124,6 +126,7 @@ export class App {
   /** Replaces the document (new/open/sample) and resets editor state. */
   loadDocument(doc, path) {
     this.meshEdit = null;
+    this.shapeEdit = null;
     this.anim = doc.animations.length ? 0 : null;
     this.doc = doc;
     this.path = path;

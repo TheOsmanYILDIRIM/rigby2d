@@ -6,7 +6,8 @@
 import { toAffine } from '../core/math.js';
 import { autoWeights, paintWeights, triangulateMesh, uvAt, weightsAt } from '../core/meshgeom.js';
 import { Pose } from '../core/pose.js';
-import { Mode } from './app.js';
+import { setKey } from '../core/animation.js';
+import { FPS, Mode } from './app.js';
 
 const VERTEX_HIT = 7;
 const EDGE_HIT = 8;
@@ -159,10 +160,23 @@ export class MeshTool {
   target() {
     const app = this.app;
     const e = app.meshEdit;
-    if (!e || app.mode !== Mode.Setup) return null;
+    if (!e) return null;
+    // Animate mode deforms the mesh; Setup mode edits vertices and weights.
+    const animate = app.mode === Mode.Animate;
+    if (animate && !app.currentAnimation()) return null;
     const att = app.doc.attachment(e.slot, e.name);
     if (!att || att.type !== 'mesh') return null;
-    return { slot: e.slot, att, edit: e };
+    const mode = animate ? 'deform' : e.mode === 'deform' ? 'vertices' : e.mode;
+    return { slot: e.slot, att, edit: e, mode };
+  }
+
+  /** Vertex positions as shown: the setup pose, or the animated pose when deforming. */
+  shownPoints(t) {
+    if (t.mode !== 'deform') return meshState(this.app.doc, t.slot, t.att).points;
+    const flat = this.app.pose().worldVertices(this.app.doc, t.slot, t.att);
+    const pts = [];
+    for (let i = 0; i + 1 < flat.length; i += 2) pts.push([flat[i], flat[i + 1]]);
+    return pts;
   }
 
   get active() {
@@ -208,7 +222,16 @@ export class MeshTool {
     if (!t) return;
     const state = meshState(this.app.doc, t.slot, t.att);
     const world = this.viewport.toWorld(pos);
-    if (t.edit.mode === 'weights') {
+    if (t.mode === 'deform') {
+      const hit = this.vertexAt({ points: this.shownPoints(t) }, pos);
+      if (hit >= 0) {
+        t.edit.selected = hit;
+        this.drag = { kind: 'deform', index: hit };
+      }
+      this.app.changed();
+      return;
+    }
+    if (t.mode === 'weights') {
       if (!state.weights) {
         this.app.setStatus('Bind the mesh to bones first (properties panel)');
         return;
@@ -255,6 +278,10 @@ export class MeshTool {
       this.paint(t, pos);
       return;
     }
+    if (this.drag.kind === 'deform') {
+      deformVertex(this.app, t.slot, t.att, this.drag.index, this.viewport.toWorld(pos));
+      return;
+    }
     // Move the vertex over the image: its texture coordinate follows its position.
     const start = this.drag.start;
     const state = { ...start, points: start.points.slice(), uvs: start.uvs.slice() };
@@ -280,7 +307,7 @@ export class MeshTool {
   /** Deletes the selected vertex. Returns false when there is nothing to delete. */
   deleteSelected() {
     const t = this.target();
-    if (!t || t.edit.selected === undefined || t.edit.selected === null) return false;
+    if (!t || t.mode === 'deform' || t.edit.selected === undefined || t.edit.selected === null) return false;
     const state = meshState(this.app.doc, t.slot, t.att);
     const i = t.edit.selected;
     if (i >= state.points.length) return false;
@@ -301,8 +328,8 @@ export class MeshTool {
     const t = this.target();
     if (!t) return;
     const state = meshState(this.app.doc, t.slot, t.att);
-    const pts = state.points.map((p) => this.screen(p));
-    const weightsMode = t.edit.mode === 'weights' && state.weights;
+    const pts = this.shownPoints(t).map((p) => this.screen(p));
+    const weightsMode = t.mode === 'weights' && state.weights;
     const bone = t.edit.bone ?? state.weights?.[0]?.[0]?.bone;
     const weightOf = (i) => state.weights[i].find((w) => w.bone === bone)?.weight ?? 0;
     const heat = (w) => `rgba(${Math.round(255 * w)},${Math.round(80 + 60 * (1 - Math.abs(w - 0.5) * 2))},${Math.round(255 * (1 - w))},0.55)`;
@@ -336,7 +363,7 @@ export class MeshTool {
       ctx.lineWidth = 1;
       ctx.stroke();
     });
-    if (t.edit.mode === 'weights' && this.hover) {
+    if (t.mode === 'weights' && this.hover) {
       ctx.strokeStyle = 'rgba(255,255,255,0.7)';
       ctx.beginPath();
       ctx.arc(this.hover[0], this.hover[1], t.edit.radius ?? 40, 0, Math.PI * 2);
@@ -344,4 +371,40 @@ export class MeshTool {
     }
     ctx.restore();
   }
+}
+
+/**
+ * Moves a mesh vertex to a world position in the current animation frame by keying its deform
+ * offset. Weighted vertices get the same world movement through each of their bones.
+ */
+export function deformVertex(app, slot, att, index, world) {
+  const doc = app.doc;
+  const anim = app.currentAnimation();
+  if (!anim) return;
+  const time = Math.round(app.time * FPS) / FPS;
+  const pose = app.pose();
+  const flat = pose.worldVertices(doc, slot, att);
+  const move = [world[0] - flat[2 * index], world[1] - flat[2 * index + 1]];
+  const n = att.weights ? att.weights.reduce((s, v) => s + v.length * 2, 0) : att.vertices.length;
+  const deltas = Array.from(pose.deform.get(`${slot}/${att.name}`) ?? new Float64Array(n));
+  const local = (bone) => pose.world[bone].inverse().applyVector(move);
+  if (att.weights) {
+    let k = 0;
+    for (let v = 0; v < index; v++) k += att.weights[v].length * 2;
+    for (const w of att.weights[index]) {
+      const [dx, dy] = local(w.bone);
+      deltas[k++] += dx;
+      deltas[k++] += dy;
+    }
+  } else {
+    const [dx, dy] = local(doc.slots[slot].bone);
+    deltas[2 * index] += dx;
+    deltas[2 * index + 1] += dy;
+  }
+  // The deform timeline of this attachment in the skin that holds it.
+  const skin = doc.slots[slot].attachments.includes(att) ? null : doc.skin;
+  let timeline = anim.deform.find((d) => d.slot === slot && d.attachment === att.name && (d.skin ?? null) === skin);
+  if (!timeline) anim.deform.push((timeline = { slot, attachment: att.name, skin, keys: [] }));
+  setKey(timeline.keys, time, { offset: 0, vertices: deltas });
+  app.changed();
 }

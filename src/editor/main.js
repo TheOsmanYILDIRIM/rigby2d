@@ -199,7 +199,7 @@ function run(action) {
     'view.fit': () => (app.frameRequest = true),
     'view.actual': () => zoomActual(),
     'edit.delete': () => {
-      if (viewport.meshTool.deleteSelected()) return;
+      if (viewport.meshTool.deleteSelected() || viewport.shapeTool.deleteSelected()) return;
       if (app.selectedKeys.size) deleteSelectedKeys(app);
       else edit.deleteSelection(app);
     },

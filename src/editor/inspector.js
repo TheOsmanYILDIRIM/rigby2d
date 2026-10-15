@@ -263,9 +263,23 @@ function slotUi(app, s) {
             row('', h('label', { class: 'check' }, h('input', { type: 'checkbox', disabled: !setupMode, checked: att.constantSpeed !== false, onchange: (e) => ((att.constantSpeed = e.target.checked), app.changed()) }), ' Constant speed')),
           )
         : null,
+      setupMode && ['boundingbox', 'clipping', 'path'].includes(att.type)
+        ? h(
+            'div',
+            { class: 'buttons' },
+            app.shapeEdit?.slot === s && app.shapeEdit?.name === visible
+              ? h('button', { class: 'active', onclick: () => ((app.shapeEdit = null), app.changed()) }, '✓ Done editing')
+              : h('button', { onclick: () => ((app.shapeEdit = { slot: s, name: visible, selected: null }), (app.meshEdit = null), app.changed()) }, '✎ Edit shape'),
+            h(
+              'span',
+              { class: 'small weak' },
+              att.type === 'path' ? ' Drag points or handles (Alt: unlinked), click to add, Delete removes.' : ' Drag vertices, click to add on the nearest edge, Delete removes.',
+            ),
+          )
+        : null,
       setupMode ? h('div', { class: 'buttons' }, h('button', { onclick: () => removeAttachment(app, s, att) }, `🗑 Remove ${att.type}`)) : null,
-      att.type === 'mesh' && setupMode && !(app.meshEdit?.slot === s && app.meshEdit?.name === visible)
-        ? h('div', { class: 'buttons' }, h('button', { onclick: () => startMeshEdit(app, s, visible) }, '✎ Edit mesh'))
+      att.type === 'mesh' && !(app.meshEdit?.slot === s && app.meshEdit?.name === visible)
+        ? h('div', { class: 'buttons' }, h('button', { onclick: () => startMeshEdit(app, s, visible) }, setupMode ? '✎ Edit mesh' : '✎ Deform mesh'))
         : att.type === 'mesh'
           ? null
           : h('div', { class: 'small weak' }, 'Linked meshes share their parent mesh; edit the parent.'),
@@ -406,9 +420,17 @@ function startMeshEdit(app, slot, name) {
 /** Mesh editing controls, shown while a mesh is being edited. */
 function meshUi(app) {
   const e = app.meshEdit;
-  if (!e || app.mode !== Mode.Setup) return null;
+  if (!e) return null;
   const att = app.doc.attachment(e.slot, e.name);
   if (!att || att.type !== 'mesh') return null;
+  if (app.mode === Mode.Animate) {
+    return [
+      h('h2', null, `Deform mesh: ${e.name}`),
+      h('div', { class: 'small weak' }, 'Drag vertices to key their positions at the current frame. Keys appear in the dopesheet as the deform row.'),
+      h('div', { class: 'buttons' }, h('button', { onclick: () => { app.meshEdit = null; app.changed(); } }, '✓ Done')),
+      h('hr'),
+    ];
+  }
   const doc = app.doc;
   const set = (key, value) => {
     e[key] = value;
