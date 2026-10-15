@@ -181,3 +181,20 @@ test('clipping masks triangles to a concave polygon and interpolates UVs', async
     assert.ok(!(out.p[k] > 1 + 1e-9 && out.p[k + 1] > 1 + 1e-9), 'nothing in the cut-out corner');
   }
 });
+
+test('deform keys interpolate between keys along their curve', async () => {
+  const { readSkeletonJson, VERSION_FIELD } = await import('../src/core/interop.js');
+  const { Pose } = await import('../src/core/pose.js');
+  const { skeleton: sk } = readSkeletonJson({
+    skeleton: { [VERSION_FIELD]: '4.2.0' },
+    bones: [{ name: 'root' }],
+    slots: [{ name: 's', bone: 'root', attachment: 'm' }],
+    skins: [{ name: 'default', attachments: { s: { m: { type: 'mesh', uvs: [0, 0, 1, 0, 0, 1], triangles: [0, 1, 2], hull: 3, vertices: [0, 0, 10, 0, 0, 10] } } } }],
+    animations: { a: { attachments: { default: { s: { m: { deform: [{ vertices: [0, 0] }, { time: 1, offset: 2, vertices: [4, 8] }] } } } } } },
+  });
+  const pose = new Pose(sk);
+  pose.apply(sk, sk.animations[0], 0.5, 1);
+  pose.updateWorld(sk);
+  const v = pose.worldVertices(sk, 0, sk.slots[0].attachments[0]);
+  assert.deepEqual(v.map((x) => Math.round(x * 1e6) / 1e6), [0, 0, 12, 4, 0, 10]);
+});

@@ -3,6 +3,7 @@
 // deformation, draw order and constraints (IK, transform and path).
 
 import { keyIndexAt, sample, sampleComponent } from './animation.js';
+import { ease } from './curve.js';
 import {
   applyConstraintTimelines,
   compileConstraints,
@@ -188,15 +189,12 @@ export class Pose {
       if (dark) this.dark[i] = (this.dark[i] ?? dark).map((c, k) => lerp(c, dark[k], alpha));
     }
     for (const t of anim.deform) {
-      const k = sample(t.keys, time);
-      if (!k) continue;
+      if (!t.keys.length) continue;
       const slot = sk.slots[t.slot];
       const att = slot && sk.attachment(t.slot, t.attachment, t.skin ?? sk.skin);
       if (!att) continue;
       const source = sk.meshSource(t.slot, att) ?? att;
-      const n = deformLength(source);
-      const deltas = new Float64Array(n);
-      for (let j = 0; j < k.vertices.length && k.offset + j < n; j++) deltas[k.offset + j] = k.vertices[j];
+      const deltas = sampleDeform(t.keys, time, deformLength(source));
       const key = `${t.slot}/${t.attachment}`;
       const prev = this.deform.get(key);
       this.deform.set(key, prev && alpha < 1 ? prev.map((p, j) => lerp(p, deltas[j], alpha)) : deltas);
@@ -512,6 +510,25 @@ export class Pose {
     }
     return out;
   }
+}
+
+/** Deform deltas at `time`: each key's sparse values expanded, interpolated along its curve. */
+function sampleDeform(keys, time, n) {
+  const expand = (k) => {
+    const d = new Float64Array(n);
+    const { offset = 0, vertices = [] } = k.value ?? {};
+    for (let j = 0; j < vertices.length && offset + j < n; j++) d[offset + j] = vertices[j];
+    return d;
+  };
+  const i = Math.max(0, keyIndexAt(keys, time));
+  const a = keys[i];
+  const b = keys[i + 1];
+  const from = expand(a);
+  if (!b || time <= a.time || a.curve === 'stepped') return from;
+  const to = expand(b);
+  const e = ease(a.curve, (time - a.time) / (b.time - a.time), 0);
+  for (let j = 0; j < n; j++) from[j] += (to[j] - from[j]) * e;
+  return from;
 }
 
 /** Number of floats a deform key covers for `att` (one x/y pair per vertex or per bone weight). */
