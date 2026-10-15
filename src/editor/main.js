@@ -271,12 +271,17 @@ const graph = new GraphEditor(app, $('#graph'), $('#graph canvas'));
 const renderMenuBar = buildMenuBar();
 
 let pointersDown = 0;
-window.addEventListener('pointerdown', () => pointersDown++, true);
+/** Element under the last press: its panel must not be rebuilt before the release, or the click is lost. */
+let pressTarget = null;
+window.addEventListener('pointerdown', (e) => {
+  pointersDown++;
+  pressTarget = e.target;
+}, true);
 window.addEventListener('pointerup', () => (pointersDown = Math.max(0, pointersDown - 1)), true);
 window.addEventListener('pointercancel', () => (pointersDown = Math.max(0, pointersDown - 1)), true);
 window.addEventListener('blur', () => (pointersDown = 0));
 
-/** Panels are rebuilt when the app changes, except while the user is editing a field in them. */
+/** Panels are rebuilt when the app changes, except while the user is editing a field or pressing in them. */
 const panels = [
   { el: $('#tree'), render: tree.render, built: -1 },
   { el: $('#properties .content'), render: inspector.render, built: -1 },
@@ -286,6 +291,8 @@ const panels = [
 
 function editingIn(el) {
   const active = document.activeElement;
+  // Keep a panel while a press inside it is held (playback otherwise rebuilds it every frame).
+  if (pointersDown > 0 && pressTarget && el.contains(pressTarget)) return true;
   return widgetState.dragging || (active && el.contains(active) && ['INPUT', 'SELECT', 'TEXTAREA'].includes(active.tagName));
 }
 
