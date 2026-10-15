@@ -16,7 +16,20 @@
         "width": 1400,
         "height": 860,
         "minWidth": 900,
-        "minHeight": 560
+        "minHeight": 560,
+        "label": "main",
+        "visible": false
+      },
+      {
+        "label": "splash",
+        "title": "Rigby2D",
+        "url": "splash.html",
+        "width": 720,
+        "height": 405,
+        "center": true,
+        "resizable": false,
+        "decorations": false,
+        "focus": true
       }
     ],
     "security": {

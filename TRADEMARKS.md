@@ -9,6 +9,8 @@ the Rigby2D or Hoverlabs names, logos or other brand assets.
 - The names **Rigby2D** and **Hoverlabs**.
 - The Rigby2D logo, logo mark, lockups and app icon (the files in [`branding/`](branding/), the
   application icons in `src-tauri/icons/` and `app-icon.png`).
+- The Rigby2D mascot: its character design, artwork and animation (the files in
+  [`branding/mascot/`](branding/mascot/)), including the splash screen that shows it.
 - Any other branding that identifies Rigby2D or Hoverlabs as the source of a product.
 
 These are trademarks and brand assets of Hoverlabs. All rights reserved.
@@ -22,8 +24,9 @@ These are trademarks and brand assets of Hoverlabs. All rights reserved.
 
 ## What needs permission
 
-- Distributing a modified or forked version under the Rigby2D name or with the Rigby2D logo.
-  Forks must use a different name and different branding.
+- Distributing a modified or forked version under the Rigby2D name, with the Rigby2D logo or with
+  the mascot. Forks must use a different name and different branding, and replace the splash
+  screen artwork.
 - Using the names or logos in a way that suggests endorsement by, or affiliation with, Hoverlabs.
 - Using the names or logos in your own product names, company names, domain names or app icons.
 

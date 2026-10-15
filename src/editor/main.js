@@ -2,6 +2,7 @@
 // Rigby2D: open-source 2D skeletal animation editor.
 // Copyright (c) 2026 jaisurya-dev-art and Rigby2D contributors
 
+import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import './style.css';
@@ -344,6 +345,15 @@ function frame(now) {
 }
 
 requestAnimationFrame(frame);
+
+// The window starts hidden behind the splash screen: tell the splash the editor is ready (again
+// when the splash starts after us), and show ourselves anyway if no splash takes over.
+if (inTauri) {
+  const ready = () => emit('rigby://ready').catch(() => {});
+  listen('rigby://splash-up', ready).catch(() => {});
+  setTimeout(ready, 0);
+  setTimeout(() => getCurrentWindow().show().catch(() => {}), 10000);
+}
 
 // Development builds expose the editor for debugging from the console.
 if (import.meta.env.DEV) window.rigby = { app, memoryFs, dopesheet, graph, viewport };
