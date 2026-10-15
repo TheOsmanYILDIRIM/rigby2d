@@ -16,12 +16,3 @@ They are **not** covered by the MIT or Apache 2.0 licenses that apply to the sou
 
 Use the lockups on charcoal or near-black backgrounds, keep clear space of at least a quarter of
 the icon height around them, and do not recolor, stretch or rearrange their parts.
-
-## Rigbytron
-
-The splash screen (`splash.html`, `src/splash/splash.js`) plays `rigbytron/export/rigbytron.skel`
-once: `hold`, then `release`, whose `slash` event reveals the lockup; when it finishes the editor
-opens. To change the animation, open `rigbytron/rigbytron.rigby` in Rigby2D,
-edit it and export the `.skel + atlas (4.3)` into `rigbytron/export/` with the same file names.
-The editor bundles `rigbytron/rigbytron.rigby` as its demo project (File ▸ Open demo), so the
-same save updates the demo.

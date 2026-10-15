@@ -32,8 +32,11 @@ quick UI work. File dialogs and disk access only work in the desktop app (`npm r
 | Path | Notes |
 | --- | --- |
 | `src/core/` | Runtime used by games. **No dependencies and no DOM access**: it must run in any JS engine. |
-| `src/editor/` | Editor UI. Plain JavaScript modules, DOM and Canvas 2D; no UI framework. |
-| `src-tauri/` | Native shell only. Keep app logic out of Rust; add permissions in `capabilities/default.json` only when needed. |
+| `src/editor/` | Editor UI. Plain JavaScript modules, DOM, a WebGL viewport with a Canvas 2D fallback; no UI framework. |
+| `src/webgl/` | Reference WebGL renderer for the runtime, also used by the editor viewport. |
+| `src/splash/` | Splash screen window. |
+| `branding/` | Proprietary brand assets and the Rigbytron demo project; see [TRADEMARKS.md](TRADEMARKS.md). |
+| `src-tauri/` | Native shell only. Keep app logic out of Rust; add permissions in `capabilities/` (`default.json` for the editor, `splash.json` for the splash) only when needed. |
 | `test/` | `node:test` suites (`*.test.js`). |
 
 ## Coding guidelines
@@ -62,5 +65,5 @@ explaining the reasoning when it isn't obvious.
 ## License
 
 By contributing, you agree that your contributions are licensed under both the [MIT License](LICENSE-MIT)
-and the [Apache License 2.0](LICENSE-APACHE), so users can choose either. The Rigby2D and Hoverlabs names
-and logos are not part of that grant; see [TRADEMARKS.md](TRADEMARKS.md).
+and the [Apache License 2.0](LICENSE-APACHE), so users can choose either. The Rigby2D, Hoverlabs and
+Rigbytron names, logos and artwork are not part of that grant; see [TRADEMARKS.md](TRADEMARKS.md).

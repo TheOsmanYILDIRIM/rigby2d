@@ -1,12 +1,11 @@
 {
   "skeleton": {
     "hash": "",
+    "spine": "4.3.0",
     "x": -841,
     "y": -7,
     "width": 1138.49606,
-    "height": 1327.6,
-    "images": "./images/",
-    "spine": "4.3.00"
+    "height": 1327.6
   },
   "bones": [
     {

@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.jpg" alt="Rigby2D editor with the sample robot: bone hierarchy, viewport, inspector and dopesheet" width="800">
+  <img src="docs/screenshot.jpg" alt="Rigby2D editor with the Rigbytron demo: viewport, bone hierarchy, inspector and dopesheet" width="800">
 </p>
 
 ## Features
@@ -26,13 +26,27 @@
 - **Constraints, skins and events**: create IK, transform, path, physics and slider constraints from the selected bones and edit every setting; key their mixes and values in Animate mode; key mesh deformation and image sequence frames; create skins (with skin bones and constraints) and events with keyed values; add bounding box, clipping, point and path attachments.
 - **Animation**: Setup and Animate modes, pose / rotate / translate / scale / shear tools, key buttons and optional auto key, switchable shortcut presets.
 - **Dopesheet and graph editor**: multi-key selection, moving and retiming keys, curve presets, bezier handle editing, image-swap keys.
+- **WebGL viewport** with a Canvas 2D fallback (*View* menu).
 - **Undo / redo** for every edit, with unsaved-change tracking.
 - **`.rigby` work file**: one self-contained file with the whole project and its images (like a `.blend`).
 - **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, constraints, events, deform and draw-order keys round-trip losslessly.
 - **Runtime included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, image sequences, IK, transform, path, physics and slider constraints, plus a reference WebGL renderer (`src/webgl`).
-- **Sample character**: *File ▸ New sample (robot)* gives you a rigged, animated character to explore.
+- **Demo project**: the editor opens with Rigbytron, the Rigby2D mascot, rigged and animated, so you can explore a real rig right away (*File ▸ Open demo (Rigbytron)* reopens it). *File ▸ New sample (robot)* gives a simpler character drawn by the editor.
 
 ## Getting started
+
+### Download
+
+Windows installers (MSI and setup `.exe`) are on the
+[Releases](https://github.com/jaisurya-dev-art/rigby2d/releases) page. They are **not code-signed**
+yet, so Windows SmartScreen may warn before running them (*More info ▸ Run anyway*). Each release
+lists the SHA-256 checksums of its files; compare them before installing:
+
+```powershell
+Get-FileHash .Rigby2D_0.1.0_x64_en-US.msi -Algorithm SHA256
+```
+
+To build from source instead, follow the steps below.
 
 ### Prerequisites
 
@@ -57,7 +71,8 @@ npm run dev
 npm run build
 ```
 
-The app is written to `src-tauri/target/release/` and the installer to `src-tauri/target/release/bundle/`.
+The app is written to `src-tauri/target/release/` and the installers (MSI and NSIS setup `.exe`) to
+`src-tauri/target/release/bundle/`.
 
 ### Test
 
@@ -66,6 +81,8 @@ npm test
 ```
 
 ## Using Rigby2D
+
+The editor opens with the Rigbytron demo; *File ▸ New* starts an empty project.
 
 1. **Import art:** *File ▸ Import PSD…* or *File ▸ Import PNG images…*
 2. **Draw bones:** pick the *Create* tool in the viewport toolbar and drag. Select a bone first to chain children from it.
@@ -160,10 +177,12 @@ frames:
 src/core/       Runtime: data model, skeleton JSON/.skel + atlas I/O, pose evaluation, constraints, playback
 src/editor/     Editor UI: viewport, tree, properties, dopesheet, graph editor, import/export
 src/webgl/      Reference WebGL renderer for the runtime
+src/splash/     Splash screen (plays the Rigbytron animation with the runtime)
+branding/       Logo, lockups, icons and Rigbytron (proprietary, see TRADEMARKS.md)
 examples/       WebGL player example
-src-tauri/      Native desktop shell (window + file dialog/fs plugins only)
+src-tauri/      Native desktop shell (editor and splash windows, file dialog/fs plugins only)
 test/           node:test suites
-docs/           Logo and screenshots
+docs/           Screenshot
 ```
 
 ## Contributing
@@ -185,8 +204,8 @@ both licenses as above, without any additional terms or conditions.
 
 ## Trademarks
 
-**Rigby2D** and **Hoverlabs**, and the Rigby2D logo, lockups and icons in [`branding/`](branding/), are
-proprietary trademarks of Hoverlabs. They are not covered by the MIT or Apache 2.0 licenses. Forks
+**Rigby2D**, **Hoverlabs** and **Rigbytron**, and the Rigby2D logo, lockups, icons and the Rigbytron
+mascot in [`branding/`](branding/), are proprietary trademarks of Hoverlabs. They are not covered by the MIT or Apache 2.0 licenses. Forks
 and modified versions must use their own name and branding. See [TRADEMARKS.md](TRADEMARKS.md).
 
 ## Disclaimer
