@@ -2,6 +2,7 @@
 // Help ▸ Tutorials: the lesson list, and a one-time welcome that offers the first lesson to new users.
 
 import { h } from '../widgets.js';
+import { runArena } from './arena.js';
 import { Coach, finishedLessons } from './coach.js';
 import { LESSONS } from './lessons.js';
 
@@ -28,8 +29,10 @@ function modal(build) {
 }
 
 /** The tutorials: a coach bound to the editor, the lesson list and the welcome. */
-export function createTutorials(app, viewport) {
+/** `refresh()` redraws the editor at once (used by the arena; the editor redraws itself anyway). */
+export function createTutorials(app, viewport, { refresh = () => {} } = {}) {
   const coach = new Coach(app, viewport, {
+    refresh,
     // At the end of a lesson, offer the next one.
     onFinish: (lesson) => {
       const next = LESSONS[LESSONS.indexOf(lesson) + 1];
@@ -127,5 +130,16 @@ export function createTutorials(app, viewport) {
     ]);
   }
 
-  return { open, welcome, coach };
+  /** Plays every lesson as a student and reports each step (development builds). */
+  async function arena(lessons = LESSONS) {
+    const confirm = app.confirmDiscard;
+    app.confirmDiscard = async () => true;
+    try {
+      return await runArena(coach, lessons, { refresh });
+    } finally {
+      app.confirmDiscard = confirm;
+    }
+  }
+
+  return { open, welcome, coach, arena };
 }

@@ -107,10 +107,10 @@ export function textField(value, onInput, { disabled = false, width } = {}) {
 }
 
 /** A <select>; `options` is a list of [value, label]. Values are compared as strings. */
-export function select(options, value, onChange, { disabled = false, placeholder } = {}) {
+export function select(options, value, onChange, { disabled = false, placeholder, tut = null } = {}) {
   const el = h(
     'select',
-    { disabled },
+    { disabled, 'data-tut': tut },
     placeholder ? h('option', { value: '', disabled: true }, placeholder) : null,
     options.map(([v, label]) => h('option', { value: String(v) }, label)),
   );
@@ -148,6 +148,7 @@ export function popupMenu(x, y, items) {
         'button',
         {
           class: 'item',
+          'data-tut': `item:${it.label}`,
           title: it.title ?? null,
           disabled: !!it.disabled,
           onclick: () => {

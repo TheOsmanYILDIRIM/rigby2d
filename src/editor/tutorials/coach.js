@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-// The tutorial coach: a small panel that walks through a lesson one step at a time, highlights the
-// control to use, and moves on by itself when the step is done (or with Next, for steps that only
-// explain). Lessons are plain data (lessons.js); the coach never clicks anything for the user.
+// The tutorial coach: a panel that walks through a lesson one step at a time and a ring on the
+// control to use. Two kinds of steps, never mixed:
+// - action steps (`done`): the coach watches the editor and moves on the moment the step is done;
+//   there is no Next button, only Skip;
+// - explanation steps (`next: true`): nothing to do but read; Next moves on.
+// The panel's place is worked out from the target alone (never from where the panel is), so it
+// cannot flip back and forth; once the user drags it, it stays put.
 
 import { makeDraggable } from '../logwindow.js';
 import { h } from '../widgets.js';
+import { lintLesson } from './lint.js';
+import { overlaps, resolve } from './targets.js';
 
 const PROGRESS = 'rigby.tutorials';
 
@@ -27,132 +33,114 @@ function markFinished(id) {
   }
 }
 
-// ---- finding things on screen -----------------------------------------------------------------
-
-/** The first element matching `selector` whose text or title contains `text` (case-insensitive). */
-export function byText(selector, text) {
-  const t = text.toLowerCase();
-  return [...document.querySelectorAll(selector)].find((el) => el.offsetParent !== null && `${el.textContent} ${el.title ?? ''}`.toLowerCase().includes(t)) ?? null;
-}
-
-/** A menu: the item when the menu is open, otherwise its title in the menu bar. */
-export function menuItem(menu, item) {
-  return byText('.popup .item', item) ?? [...document.querySelectorAll('.menu-title')].find((b) => b.textContent === menu) ?? null;
-}
-
-/** A tree row by the name it shows. */
-export function treeRow(name) {
-  return [...document.querySelectorAll('#tree .row')].find((r) => r.textContent.replace(/[▾▸]/g, '').trim().endsWith(name)) ?? null;
-}
-
-/** A screen box around a bone's base in the viewport. */
-export function boneSpot(ctx, name) {
-  const { app, viewport } = ctx;
-  const i = app.doc.bones.findIndex((b) => b.name === name);
-  if (i < 0 || !viewport) return null;
-  const [x, y] = viewport.toScreen(app.pose().world[i].apply([0, 0]));
-  const r = viewport.canvas.getBoundingClientRect();
-  return { left: r.left + x - 22, top: r.top + y - 22, width: 44, height: 44, round: true };
-}
-
-// ---- coach ------------------------------------------------------------------------------------
-
 /**
- * Runs lessons. A lesson is { id, title, minutes, summary, steps }. A step is:
- * - text: what to do (simple HTML: <b>, <kbd>, <i>);
- * - target(ctx): the element (or screen box) to highlight, or null;
- * - enter(ctx): runs when the step starts (remember starting values in ctx.mark);
- * - done(ctx): true when the user has done it (checked several times a second); without it the
- *   step waits for Next;
- * - action: { label, run(ctx) } for a button in the step (e.g. load the practice character).
- * ctx is { app, viewport, mark }.
+ * Where the panel can sit, in order of preference: the viewport's corners, then over the timeline
+ * or the side panel (for a target in the middle of a small viewport).
  */
+const PLACES = ['bottom-left', 'top-left', 'top-right', 'bottom-right', 'timeline', 'side'];
+
 export class Coach {
-  constructor(app, viewport, { onFinish = () => {} } = {}) {
+  /** `refresh()` redraws the editor's panels at once (the arena uses it; normally a no-op). */
+  constructor(app, viewport, { onFinish = () => {}, refresh = () => {} } = {}) {
     this.app = app;
     this.viewport = viewport;
     this.onFinish = onFinish;
+    this.refresh = refresh;
     this.lesson = null;
     this.index = 0;
     this.panel = null;
-    this.spot = null;
-    this.timer = 0;
+    this.ring = null;
+    this.moved = false;
+    this.mark = {};
   }
 
   get ctx() {
     return { app: this.app, viewport: this.viewport, mark: this.mark };
   }
 
+  get step() {
+    return this.lesson?.steps[this.index] ?? null;
+  }
+
+  get running() {
+    return !!this.lesson;
+  }
+
   start(lesson) {
+    const problems = lintLesson(lesson);
+    if (problems.length) throw new Error(`Lesson '${lesson.id}' is malformed: ${problems.join('; ')}`);
     this.stop();
     this.lesson = lesson;
     this.index = 0;
-    this.spot = h('div', { class: 'coach-spot', hidden: true });
-    document.body.append(this.spot);
+    this.moved = false;
+    this.corner = null;
+    this.ring = h('div', { class: 'coach-ring', hidden: true });
+    document.body.append(this.ring);
     this.build();
-    this.enter();
-    // The highlight follows its target every frame; whether the step is done is checked on a
-    // timer, so lessons advance even while the window is in the background.
-    const loop = () => {
+    this.enter(null);
+    // The ring follows its target every frame; completion is checked on a timer, so lessons go on
+    // even when animation frames are paused (a background window).
+    const frame = () => {
       if (!this.lesson) return;
       this.place();
-      this.timer = requestAnimationFrame(loop);
+      this.raf = requestAnimationFrame(frame);
     };
-    this.timer = requestAnimationFrame(loop);
-    this.checker = setInterval(() => {
-      if (!this.lesson) return;
-      this.check();
-      // Also here, in case animation frames are paused (a hidden or background window).
-      this.place();
-    }, 200);
+    this.raf = requestAnimationFrame(frame);
+    this.timer = setInterval(() => this.tick(), 120);
+    this.onResize = () => this.dock(true);
+    window.addEventListener('resize', this.onResize);
   }
 
   stop() {
-    cancelAnimationFrame(this.timer);
-    clearInterval(this.checker);
+    cancelAnimationFrame(this.raf);
+    clearInterval(this.timer);
+    window.removeEventListener('resize', this.onResize);
     this.panel?.remove();
-    this.spot?.remove();
-    this.panel = this.spot = this.lesson = null;
+    this.ring?.remove();
+    this.panel = this.ring = this.lesson = null;
   }
 
-  get step() {
-    return this.lesson.steps[this.index];
+  tick() {
+    if (!this.lesson) return;
+    this.check();
+    this.place();
   }
 
-  enter() {
+  /** Starts the current step; `praise` is shown when the previous step was just done. */
+  enter(praise) {
     this.mark = {};
-    this.completed = false;
+    this.revealed = new Set();
     try {
       this.step.enter?.(this.ctx);
     } catch (e) {
       console.warn('tutorial step', e);
     }
-    this.render();
+    this.render(praise);
+    this.dock(true);
+    this.place();
+    // Done already (for example: already in Setup mode)? Move on straight away.
+    this.check();
   }
 
-  go(delta) {
+  go(delta, praise = null) {
     const next = this.index + delta;
-    if (next < 0) return;
+    if (next < 0 || !this.lesson) return;
     if (next >= this.lesson.steps.length) return this.finish();
     this.index = next;
-    this.enter();
+    this.enter(praise);
   }
 
-  /** A step that checks for itself moves on a moment after it is done, so the user sees the tick. */
+  /** An action step moves on the moment it is done; nothing the user does in between is lost. */
   check() {
     const step = this.step;
-    if (!step.done || this.completed) return;
+    if (!step?.done) return;
     let ok = false;
     try {
       ok = !!step.done(this.ctx);
     } catch {
       ok = false;
     }
-    if (!ok) return;
-    this.completed = true;
-    this.render();
-    const at = this.index;
-    setTimeout(() => this.lesson && this.index === at && this.go(1), 700);
+    if (ok) this.go(1, '✓ Done');
   }
 
   finish() {
@@ -162,38 +150,71 @@ export class Coach {
     this.onFinish(lesson);
   }
 
-  place() {
-    let target = null;
+  /** The current step's target on screen, or null. */
+  target() {
+    const step = this.step;
+    if (!step?.target) return null;
     try {
-      target = this.step.target?.(this.ctx) ?? null;
+      const spec = typeof step.target === 'function' ? step.target(this.ctx) : step.target;
+      // Scroll a target into view the first time it is found in this step (it may only appear
+      // after the panels redraw, e.g. new bones in the tree), then leave scrolling to the user.
+      const key = JSON.stringify(spec);
+      const t = resolve(spec, this.ctx, { reveal: !this.revealed.has(key) });
+      if (t) this.revealed.add(key);
+      return t;
     } catch {
-      target = null;
+      return null;
     }
-    const box = target instanceof Element ? target.getBoundingClientRect() : target;
-    if (!box || (box.width === 0 && box.height === 0)) {
-      this.spot.hidden = true;
-      return;
-    }
-    const pad = 4;
-    Object.assign(this.spot.style, {
-      left: `${box.left - pad}px`,
-      top: `${box.top - pad}px`,
-      width: `${box.width + pad * 2}px`,
-      height: `${box.height + pad * 2}px`,
-      borderRadius: box.round ? '50%' : '8px',
-    });
-    this.spot.hidden = false;
-    this.dodge(box);
   }
 
-  /** Keeps the panel off the control it points at: it moves to the other end of the viewport. */
-  dodge(box) {
-    if (this.moved || !this.panel) return;
+  place() {
+    if (!this.ring) return;
+    const t = this.target();
+    if (!t) {
+      this.ring.hidden = true;
+      return;
+    }
+    const pad = t.kind === 'area' ? 0 : 4;
+    Object.assign(this.ring.style, {
+      left: `${t.box.left - pad}px`,
+      top: `${t.box.top - pad}px`,
+      width: `${t.box.width + pad * 2}px`,
+      height: `${t.box.height + pad * 2}px`,
+    });
+    this.ring.className = `coach-ring ${t.kind}`;
+    this.ring.hidden = false;
+    this.dock(false, t);
+  }
+
+  /**
+   * Puts the panel in a corner of the viewport that keeps the target uncovered. The choice depends
+   * only on the target, so it is stable; `force` re-docks after a step change or a resize.
+   */
+  dock(force, t = this.target()) {
+    if (!this.panel || this.moved) return;
+    const area = document.querySelector('#center')?.getBoundingClientRect();
+    if (!area) return;
+    const timeline = document.querySelector('#timeline')?.getBoundingClientRect() ?? area;
+    const side = document.querySelector('#side')?.getBoundingClientRect() ?? area;
     const r = this.panel.getBoundingClientRect();
-    const overlaps = box.left < r.right && box.left + box.width > r.left && box.top < r.bottom && box.top + box.height > r.top;
-    if (!overlaps) return;
-    this.atTop = !this.atTop;
-    this.panel.classList.toggle('at-top', this.atTop);
+    const m = 12;
+    const at = {
+      'bottom-left': [area.left + m, area.bottom - r.height - m - 44],
+      'top-left': [area.left + m, area.top + m + 28],
+      'top-right': [area.right - r.width - m, area.top + m + 28],
+      'bottom-right': [area.right - r.width - m, area.bottom - r.height - m - 44],
+      timeline: [timeline.right - r.width - m, Math.min(timeline.top + m, window.innerHeight - r.height - m)],
+      side: [side.left + m, side.bottom - r.height - m],
+    };
+    const boxAt = ([x, y]) => ({ left: x, top: y, right: x + r.width, bottom: y + r.height });
+    // An area target (the whole viewport) cannot be avoided: keep the first corner.
+    // A button inside the panel itself (Load the practice character) needs no avoiding.
+    const avoid = t && t.kind !== 'area' && !(t.el && this.panel.contains(t.el)) ? t.box : null;
+    const corner = (avoid && PLACES.find((c) => !overlaps(boxAt(at[c]), avoid, 12))) ?? PLACES[0];
+    if (!force && corner === this.corner) return;
+    this.corner = corner;
+    const [x, y] = at[corner];
+    Object.assign(this.panel.style, { left: `${Math.max(4, x)}px`, top: `${Math.max(4, y)}px`, right: 'auto', bottom: 'auto' });
   }
 
   build() {
@@ -203,51 +224,51 @@ export class Coach {
     this.panel = h('div', { class: 'float-window coach' }, this.header, this.body);
     makeDraggable(this.panel, this.header);
     // Once the user places the panel, it stays where they put it.
-    this.moved = false;
-    this.atTop = false;
     this.header.addEventListener('pointerdown', (e) => {
       if (!e.target.closest('button')) this.moved = true;
     });
     document.body.append(this.panel);
   }
 
-  render() {
+  render(praise) {
     const { lesson, index } = this;
     const step = this.step;
     const total = lesson.steps.length;
     this.header.querySelector('.coach-title').textContent = lesson.title;
     const text = h('div', { class: 'coach-text' });
     text.innerHTML = step.text;
-    const waiting = step.done && !this.completed;
     const parts = [
-      h('div', { class: 'coach-progress' }, h('div', { class: 'bar', style: { width: `${((index + (this.completed ? 1 : 0)) / total) * 100}%` } })),
-      h('div', { class: 'coach-count weak small' }, `Step ${index + 1} of ${total}`),
+      h('div', { class: 'coach-progress' }, h('div', { class: 'bar', style: { width: `${(index / total) * 100}%` } })),
+      h('div', { class: 'coach-count small' }, h('span', { class: 'weak' }, `Step ${index + 1} of ${total}`), praise ? h('span', { class: 'coach-praise' }, praise) : null),
       text,
       step.action
         ? h(
             'button',
             {
               class: 'primary coach-action',
+              'data-tut': 'coach:action',
               onclick: async (e) => {
-                e.currentTarget.disabled = true;
+                const button = e.currentTarget;
+                button.disabled = true;
                 try {
                   await step.action.run(this.ctx);
                 } finally {
-                  if (e.currentTarget) e.currentTarget.disabled = false;
+                  button.disabled = false;
+                  this.check();
                 }
               },
             },
             step.action.label,
           )
         : null,
-      this.completed ? h('div', { class: 'coach-done' }, '✓ Done') : waiting ? h('div', { class: 'coach-wait weak small' }, 'Waiting for you to do this…') : null,
+      step.done ? h('div', { class: 'coach-wait weak small' }, 'Do this in the editor; the lesson goes on by itself.') : null,
       h(
         'div',
         { class: 'coach-buttons' },
         h('button', { disabled: index === 0, onclick: () => this.go(-1) }, 'Back'),
         h('span', { class: 'float-spacer' }),
-        waiting ? h('button', { class: 'weak', title: 'Go on without doing this step', onclick: () => this.go(1) }, 'Skip') : null,
-        !step.done || this.completed ? h('button', { class: 'primary', onclick: () => this.go(1) }, index === total - 1 ? 'Finish' : 'Next') : null,
+        step.done ? h('button', { class: 'coach-skip', 'data-tut': 'coach:skip', title: 'Go on without doing this step', onclick: () => this.go(1) }, 'Skip') : null,
+        step.next ? h('button', { class: 'primary', 'data-tut': 'coach:next', onclick: () => this.go(1) }, index === total - 1 ? 'Finish' : 'Next') : null,
       ),
     ];
     this.body.replaceChildren(...parts.filter(Boolean));

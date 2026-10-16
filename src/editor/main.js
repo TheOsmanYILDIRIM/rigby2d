@@ -171,7 +171,7 @@ function showMenu(title, button) {
 function buildMenuBar() {
   const bar = $('#menubar');
   const titles = Object.keys(menus()).map((title) => {
-    const btn = h('button', { class: 'menu-title' }, title);
+    const btn = h('button', { class: 'menu-title', 'data-tut': `menu:${title}` }, title);
     btn.addEventListener('click', () => {
       if (isMenuOpen() && openTitle === title) {
         closeMenu();
@@ -183,10 +183,10 @@ function buildMenuBar() {
     });
     return btn;
   });
-  const mode = h('button', { class: 'mode', onclick: () => app.toggleMode() });
+  const mode = h('button', { class: 'mode', 'data-tut': 'mode', onclick: () => app.toggleMode() });
   // Workspace switcher: which tools the editor shows for this project.
-  const tabs = Object.values(WORKSPACES).map((ws) => h('button', { class: 'workspace-tab', title: ws.description, onclick: () => app.workspace !== ws.id && app.setWorkspace(ws.id) }, ws.label));
-  const switcher = h('div', { class: 'workspaces', role: 'tablist', title: 'Workspace' }, tabs);
+  const tabs = Object.values(WORKSPACES).map((ws) => h('button', { class: 'workspace-tab', 'data-tut': `workspace:${ws.id}`, title: ws.description, onclick: () => app.workspace !== ws.id && app.setWorkspace(ws.id) }, ws.label));
+  const switcher = h('div', { class: 'workspaces', 'data-tut': 'workspaces', role: 'tablist', title: 'Workspace' }, tabs);
   bar.replaceChildren(...titles, h('span', { class: 'vsep' }), mode, h('span', { class: 'spacer' }), switcher);
   // Called every frame: touch the DOM only when something shown changed.
   let shown = '';
@@ -319,7 +319,7 @@ app.viewport = viewport;
 const dopesheet = new Dopesheet(app, $('#dopesheet'), $('#dopesheet canvas'));
 const graph = new GraphEditor(app, $('#graph'), $('#graph canvas'));
 const renderMenuBar = buildMenuBar();
-const tutorials = createTutorials(app, viewport);
+const tutorials = createTutorials(app, viewport, { refresh: () => renderNow() });
 
 let pointersDown = 0;
 let audioPlaying = false;
@@ -357,6 +357,17 @@ let lastTitle = '';
 
 let lastTime = 0;
 let lastAnim = null;
+
+/** Redraws everything at once (the tutorial arena uses it; the frame loop normally does this). */
+function renderNow() {
+  for (const p of panels) {
+    p.built = app.version;
+    p.builtTime = app.timeVersion;
+    p.render(app, p.el);
+  }
+  viewport.draw();
+  renderMenuBar();
+}
 
 /** Sets an element's text only when it differs (the frame loop runs 60 times a second). */
 function setText(el, text) {

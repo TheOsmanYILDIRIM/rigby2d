@@ -9,19 +9,19 @@
   <body>
     <div id="app">
       <nav id="menubar"></nav>
-      <main id="center">
+      <main id="center" data-tut="viewport">
         <canvas id="viewport-gl"></canvas>
         <canvas id="viewport"></canvas>
         <div id="viewbar"></div>
       </main>
       <div id="split-right" class="split-v"></div>
       <aside id="side">
-        <section id="tree" class="panel"></section>
+        <section id="tree" class="panel" data-tut="tree"></section>
         <div id="split-tree" class="split-h"></div>
-        <section id="properties" class="panel"><div class="content scroll"></div></section>
+        <section id="properties" class="panel" data-tut="inspector"><div class="content scroll"></div></section>
       </aside>
       <div id="split-bottom" class="split-h"></div>
-      <section id="timeline">
+      <section id="timeline" data-tut="timeline">
         <div id="controls"></div>
         <div class="dopesheet-wrap">
           <div class="empty">No animation. Press ＋ New or Tab to start animating.</div>

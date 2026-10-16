@@ -19,20 +19,26 @@ const RULER = 22;
 export function renderControls(app, el) {
   const anim = app.currentAnimation();
   const names = app.doc.animations.map((a, i) => [i, a.name]);
-  const play = h('button', { disabled: app.anim === null, title: 'Play / pause (Space)', onclick: () => app.togglePlay() }, app.playing ? '⏸' : '▶');
+  const play = h('button', { 'data-tut': 'timeline:play', disabled: app.anim === null, title: 'Play / pause (Space)', onclick: () => app.togglePlay() }, app.playing ? '⏸' : '▶');
   el.replaceChildren(
     ...[
       names.length
-        ? select(names, app.anim ?? 0, (i) => {
-            app.anim = i;
-            app.time = 0;
-            app.selectedKeys.clear();
-            app.changed();
-          })
+        ? select(
+            names,
+            app.anim ?? 0,
+            (i) => {
+              app.anim = i;
+              app.time = 0;
+              app.selectedKeys.clear();
+              app.changed();
+            },
+            { tut: 'timeline:animations' },
+          )
         : h('span', { class: 'weak' }, '(no animation)'),
       h(
         'button',
         {
+          'data-tut': 'timeline:new',
           onclick: () => {
             app.doc.animations.push(new Animation(uniqueName('animation', (n) => app.doc.animations.some((a) => a.name === n)), 1));
             app.anim = app.doc.animations.length - 1;
@@ -92,7 +98,7 @@ export function renderControls(app, el) {
       ),
       h('button', { title: 'Previous frame (←)', onclick: () => app.stepFrame(-1) }, '◀'),
       play,
-      h('button', { title: 'Next frame (→)', onclick: () => app.stepFrame(1) }, '▶|'),
+      h('button', { 'data-tut': 'timeline:next', title: 'Next frame (→)', onclick: () => app.stepFrame(1) }, '▶|'),
       h(
         'label',
         null,
@@ -112,7 +118,7 @@ export function renderControls(app, el) {
         has(app, 'timecode') ? `${timecode(app.time, FPS)}  frame ${Math.round(app.time * FPS)}` : `frame ${String(Math.round(app.time * FPS)).padStart(3, ' ')}  ${app.time.toFixed(2)}s`,
       ),
       h('span', { class: 'vsep' }),
-      h('button', { disabled: app.mode !== Mode.Animate, onclick: () => edit.keySelection(app) }, '◆ Key (K)'),
+      h('button', { 'data-tut': 'timeline:key', disabled: app.mode !== Mode.Animate, onclick: () => edit.keySelection(app) }, '◆ Key (K)'),
       h('span', { class: 'vsep' }),
       h(
         'span',

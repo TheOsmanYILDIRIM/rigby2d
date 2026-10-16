@@ -69,6 +69,7 @@ export function render(app, el) {
       'button',
       {
         class: `tool${app.tool === t.id ? ' active' : ''}`,
+        'data-tut': `tool:${t.id}`,
         title: key ? `${t.label.replace(/^\S+ /, '')} (${key})` : t.label,
         onclick: () => {
           app.tool = t.id;
@@ -129,6 +130,7 @@ export function render(app, el) {
           'button',
           {
             class: `autokey${app.autoKey ? ' on' : ''}`,
+            'data-tut': 'autokey',
             title: 'Auto key: every change in Animate mode sets keys right away',
             onclick: () => {
               app.autoKey = !app.autoKey;

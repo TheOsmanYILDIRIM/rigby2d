@@ -30,3 +30,11 @@ test('tutorial practice character: loose layers that AutoRig rigs with the bones
   assert.deepEqual([side('upperarm'), side('forearm'), side('hand')], ['r', 'r', 'r']);
   assert.deepEqual(report.warnings, []);
 });
+
+test('tutorial lessons: every step is an action that moves on by itself, or an explanation with Next', async () => {
+  const { LESSONS } = await import('../src/editor/tutorials/lessons.js');
+  const { lintLesson } = await import('../src/editor/tutorials/lint.js');
+  assert.ok(LESSONS.length >= 4);
+  for (const lesson of LESSONS) assert.deepEqual(lintLesson(lesson), [], lesson.id);
+  assert.equal(new Set(LESSONS.map((l) => l.id)).size, LESSONS.length, 'lesson ids are unique');
+});

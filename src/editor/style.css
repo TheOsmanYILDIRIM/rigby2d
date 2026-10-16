@@ -1030,8 +1030,8 @@ div.log-entry {
 /* ---- tutorials ---- */
 .coach {
   left: 16px;
-  bottom: calc(var(--bottom) + 40px);
-  width: min(360px, calc(100vw - 32px));
+  top: 80px;
+  width: min(340px, calc(100vw - 32px));
   min-height: 0;
   resize: none;
   z-index: 180;
@@ -1090,17 +1090,36 @@ div.log-entry {
   background: var(--accent);
   color: white;
 }
-.coach-spot {
+/* The ring on the control to use: placed exactly (no sliding), clicks pass through it. */
+.coach-ring {
   position: fixed;
   z-index: 170;
   pointer-events: none;
   border: 2px solid var(--accent);
+  border-radius: 8px;
   box-shadow: 0 0 0 4px rgba(90, 143, 214, 0.25), 0 0 18px rgba(90, 143, 214, 0.55);
   animation: coach-pulse 1.4s ease-in-out infinite;
-  transition: left 0.15s ease, top 0.15s ease, width 0.15s ease, height 0.15s ease;
 }
-.coach-spot[hidden] {
+.coach-ring.spot {
+  border-radius: 50%;
+}
+/* A whole area to work in (the viewport, the tree): a calm outline, no pulse. */
+.coach-ring.area {
+  border: 2px dashed rgba(90, 143, 214, 0.7);
+  box-shadow: none;
+  animation: none;
+}
+.coach-ring[hidden] {
   display: none;
+}
+.coach-praise {
+  margin-left: 8px;
+  color: #7ee08a;
+  font-weight: 600;
+}
+.coach-count {
+  display: flex;
+  align-items: center;
 }
 @keyframes coach-pulse {
   50% {
@@ -1113,7 +1132,7 @@ div.log-entry {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .coach-spot,
+  .coach-ring,
   .coach-wait::before {
     animation: none;
   }
@@ -1146,8 +1165,4 @@ div.log-entry {
 }
 .lesson-title {
   font-weight: 600;
-}
-.coach.at-top {
-  top: 64px;
-  bottom: auto;
 }

@@ -185,7 +185,7 @@ function slotUi(app, s) {
         'Bone',
         select(app.doc.bones.map((x, i) => [i, x.name]), slot.bone, (i) => {
           if (i !== slot.bone) edit.setSlotBoneKeepWorld(app, s, i);
-        }, { disabled: !setupMode }),
+        }, { disabled: !setupMode, tut: 'slot-bone' }),
       ),
       row('Tint', color, alpha),
       row(

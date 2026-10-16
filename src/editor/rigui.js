@@ -147,7 +147,7 @@ export function openAutoRig(app) {
         ? h('p', null, problem)
         : !parts?.length
           ? h('p', null, 'Import layered artwork first: a PSD with one layer per body part.')
-          : h('div', { class: 'autorig-table' }, h('table', null, h('thead', null, h('tr', null, h('th', null, 'Layer'), h('th', null, 'Part'), h('th', null, 'Side'), h('th', null, 'Found by'))), h('tbody', null, rows))),
+          : h('div', { class: 'autorig-table', 'data-tut': 'autorig:parts' }, h('table', null, h('thead', null, h('tr', null, h('th', null, 'Layer'), h('th', null, 'Part'), h('th', null, 'Side'), h('th', null, 'Found by'))), h('tbody', null, rows))),
       parts?.length
         ? h(
             'div',
@@ -175,7 +175,7 @@ export function openAutoRig(app) {
         h('button', { onclick: importPsd }, parts?.length || problem ? 'Start over from a PSD…' : 'Import PSD…'),
         h('span', { class: 'float-spacer' }),
         h('button', { onclick: close }, 'Cancel'),
-        h('button', { class: 'primary', disabled: !parts?.length, onclick: generate }, 'Generate rig'),
+        h('button', { class: 'primary', 'data-tut': 'autorig:generate', disabled: !parts?.length, onclick: generate }, 'Generate rig'),
       ),
     );
   };

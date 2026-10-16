@@ -36,10 +36,10 @@ function section(app, id, title, count, children, actions = null) {
   );
 }
 
-function row(label, { depth = 0, selected = false, cls = '', onclick, extra = null, title } = {}) {
+function row(label, { depth = 0, selected = false, cls = '', onclick, extra = null, title, tut = null } = {}) {
   return h(
     'div',
-    { class: `row${selected ? ' selected' : ''}${cls ? ` ${cls}` : ''}`, style: { paddingLeft: `${depth * 14 + 4}px` }, onclick, title },
+    { class: `row${selected ? ' selected' : ''}${cls ? ` ${cls}` : ''}`, 'data-tut': tut, style: { paddingLeft: `${depth * 14 + 4}px` }, onclick, title },
     label,
     extra,
   );
@@ -61,6 +61,7 @@ export function render(app, el) {
     const open = !collapsed.has(key);
     skeleton.push(
       row(`🦴 ${doc.bones[bone].name}`, {
+        tut: `bone:${doc.bones[bone].name}`,
         depth,
         selected: selected.has(bone),
         onclick: select({ bone }),
@@ -84,7 +85,7 @@ export function render(app, el) {
     );
     if (!open) return;
     for (const [slot, i] of slots) {
-      skeleton.push(row(`▣ ${slot.name}`, { depth: depth + 1, cls: 'slot', selected: selSlot(app.sel) === i, onclick: select({ slot: i }) }));
+      skeleton.push(row(`▣ ${slot.name}`, { tut: `slot:${slot.name}`, depth: depth + 1, cls: 'slot', selected: selSlot(app.sel) === i, onclick: select({ slot: i }) }));
       const names = new Set(slot.attachments.map((a) => a.name));
       if (doc.skin) for (const a of doc.skinAttachments(i, doc.skin)) names.add(a.name);
       for (const name of names) {
@@ -214,6 +215,8 @@ export function render(app, el) {
     }),
   );
 
+  // The tree is rebuilt on every change: keep where the user had scrolled to.
+  const scrolled = el.querySelector('.tree-scroll')?.scrollTop ?? 0;
   el.replaceChildren(
     h('div', { class: 'tree-scroll scroll' },
       section(app, 'skeleton', doc.name || 'Skeleton', doc.bones.length, skeleton, addBone),
@@ -225,4 +228,5 @@ export function render(app, el) {
       section(app, 'images', 'Images', doc.images.length, doc.images.map((i) => row(`🖼 ${i.name}`, { title: `${i.width}×${i.height}` }))),
     ),
   );
+  el.querySelector('.tree-scroll').scrollTop = scrolled;
 }
