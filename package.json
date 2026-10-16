@@ -12,7 +12,10 @@
     "type": "git",
     "url": "git+https://github.com/jaisurya-dev-art/rigby2d.git"
   },
-  "keywords": ["animation", "skeletal-animation", "2d", "rigging", "gamedev", "tauri", "editor"],
+  "bin": {
+    "rigby2d-mcp": "src/mcp/server.js"
+  },
+  "keywords": ["animation", "skeletal-animation", "2d", "rigging", "gamedev", "tauri", "editor", "mcp"],
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",

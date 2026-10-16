@@ -35,6 +35,7 @@ quick UI work. File dialogs and disk access only work in the desktop app (`npm r
 | `src/editor/` | Editor UI. Plain JavaScript modules, DOM, a WebGL viewport with a Canvas 2D fallback; no UI framework. |
 | `src/webgl/` | Reference WebGL renderer for the runtime, also used by the editor viewport. |
 | `src/splash/` | Splash screen window. |
+| `src/mcp/` | Model Context Protocol server ([docs/mcp.md](docs/mcp.md)). Node only, no dependencies; built on `src/core`. |
 | `branding/` | Proprietary brand assets and the Rigbytron demo project; see [TRADEMARKS.md](TRADEMARKS.md). |
 | `src-tauri/` | Native shell only. Keep app logic out of Rust; add permissions in `capabilities/` (`default.json` for the editor, `splash.json` for the splash) only when needed. |
 | `test/` | `node:test` suites (`*.test.js`). |
