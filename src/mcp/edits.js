@@ -21,10 +21,10 @@ const CHANNELS = ['rotate', 'translate', 'scale', 'shear'];
 /** Keys closer than this (seconds) are the same key, as in the editor. */
 const SAME_TIME = 5e-4;
 
-const OUTPUT = { type: 'string', description: 'Save to this file instead of changing the input (same format as the input, inside the workspace).' };
-const OVERWRITE = { type: 'boolean', description: 'Replace `output` if it already exists (default false).' };
-const EDIT = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
-const NAME = (what) => ({ type: 'string', description: `${what} name.` });
+export const OUTPUT = { type: 'string', description: 'Save to this file instead of changing the input (same format as the input, inside the workspace).' };
+export const OVERWRITE = { type: 'boolean', description: 'Replace `output` if it already exists (default false).' };
+export const EDIT = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
+export const NAME = (what) => ({ type: 'string', description: `${what} name.` });
 
 // ---- saving -----------------------------------------------------------------------------------
 
@@ -83,13 +83,13 @@ async function save(ws, p, { output, overwrite = false }) {
   return target;
 }
 
-/** Loads, checks it can be saved, applies `edit(doc)` (which returns a summary) and saves. */
-async function edit(ws, args, apply) {
+/** Loads, checks it can be saved, applies `edit(doc, project)` (which returns a summary) and saves. */
+export async function edit(ws, args, apply) {
   const p = await loadProject(await ws.existing(args.path));
   if (p.format === 'json' && !jsonVersion(p.doc)) {
     throw new ToolError(`Skeleton JSON ${p.version} cannot be written back. Convert it to 3.8, 4.2 or 4.3 with convert_project, then edit the copy.`);
   }
-  const summary = apply(p.doc);
+  const summary = await apply(p.doc, p);
   const err = p.doc.validate();
   if (err) throw new ToolError(`The edit would make the project invalid: ${err}`);
   const file = await save(ws, p, args);
@@ -98,25 +98,25 @@ async function edit(ws, args, apply) {
 
 // ---- lookups ----------------------------------------------------------------------------------
 
-function boneIndex(doc, name) {
+export function boneIndex(doc, name) {
   const i = doc.bones.findIndex((b) => b.name === name);
   if (i < 0) throw new ToolError(`No bone '${name}'.`);
   return i;
 }
 
-function slotIndex(doc, name) {
+export function slotIndex(doc, name) {
   const i = doc.slots.findIndex((s) => s.name === name);
   if (i < 0) throw new ToolError(`No slot '${name}'. Slots: ${doc.slots.map((s) => s.name).join(', ') || 'none'}.`);
   return i;
 }
 
-function animationOf(doc, name) {
+export function animationOf(doc, name) {
   const anim = doc.animations.find((a) => a.name === name);
   if (!anim) throw new ToolError(`No animation '${name}'. Animations: ${doc.animations.map((a) => a.name).join(', ') || 'none'}; add one with add_animation.`);
   return anim;
 }
 
-function checkName(name, what) {
+export function checkName(name, what) {
   if (!name.trim()) throw new ToolError(`The ${what} name must not be empty.`);
 }
 
@@ -135,7 +135,7 @@ const extend = (anim, time) => {
   if (time > anim.duration) anim.duration = time;
 };
 
-const roundTime = (t) => Math.round(t * 1e6) / 1e6;
+export const roundTime = (t) => Math.round(t * 1e6) / 1e6;
 
 // ---- tools ------------------------------------------------------------------------------------
 

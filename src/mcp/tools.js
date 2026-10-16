@@ -13,6 +13,7 @@ import { Skeleton } from '../core/model.js';
 import { Pose } from '../core/pose.js';
 import { usedImages } from '../editor/io.js';
 import { unzip } from '../editor/zip.js';
+import { filmSummary } from './film.js';
 import { ToolError } from './protocol.js';
 
 const JSON_VERSIONS = ['3.8', '4.2', '4.3'];
@@ -206,6 +207,8 @@ function summary(p) {
     skins: ['default', ...doc.skins.map((s) => s.name)],
     constraints,
     events: doc.events.map((e) => e.name),
+    // Work files also hold the film output, the pose library, face controls and audio tracks.
+    ...(p.format === 'rigby' ? { film: filmSummary(doc) } : {}),
     warnings: p.warnings,
   };
 }

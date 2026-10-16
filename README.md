@@ -35,12 +35,16 @@ as Claude can work directly on your animation projects, not just talk about them
 - **Understand a rig**: list bones, slots, skins, constraints and animations with their keys.
 - **Check it**: evaluate any pose with the real runtime, find missing images and export problems.
 - **Animate it**: add bones and animations, set eased keys, image swaps and events.
+- **Direct it**: set film output and camera framing, build pose libraries and face controls, add
+  audio tracks and lip-sync a mouth to dialogue.
+- **Script it**: run Python scripts with the editor's `rigby` API for anything else, with
+  tracebacks when something goes wrong.
 - **Ship it**: convert between skeleton JSON 3.8 / 4.2 / 4.3 and binary `.skel`.
 
-Ask things like *"Which images are missing from hero.skel?"* or *"Add a 1-second wave animation to
-rigbytron.rigby that raises the right arm and fires a 'hi' event at the end."* Edits save in the
-file's own format and stay inside the folders you allow. Setup is one line, no packages to install
-([details](docs/mcp.md)):
+Ask things like *"Which images are missing from hero.skel?"* *"Add a 1-second wave animation to
+rigbytron.rigby that raises the right arm and fires a 'hi' event at the end"*, or *"Add line.wav to the
+talk animation and lip-sync the mouth control to it."* Edits save in the
+file's own format and stay inside the folders you allow. Setup is one line ([details](docs/mcp.md)):
 
 ```bash
 claude mcp add rigby2d -- node /path/to/rigby2d/src/mcp/server.js --root /path/to/your/projects
@@ -228,9 +232,13 @@ blend mode for every visible region and mesh. `examples/webgl.html` is a small p
 
 ## MCP server reference
 
-Tools: `inspect_project`, `describe_rig`, `describe_animation`, `sample_pose`, `validate_project`
-and `convert_project` read and convert; `add_bone`, `set_bone_setup`, `add_animation`,
-`set_bone_key`, `delete_bone_key`, `set_attachment_key` and `set_event_key` edit. The server only
+30 tools. Read and convert: `inspect_project`, `describe_rig`, `describe_animation`, `sample_pose`,
+`validate_project`, `convert_project`. Edit: `add_bone`, `set_bone_setup`, `rename_bone`,
+`add_animation`, `rename_animation`, `delete_animation`, `set_bone_key`, `delete_bone_key`,
+`set_attachment_key`, `set_event_key`, `set_slot`. Film, poses and audio (`.rigby`): `set_workspace`,
+`set_output`, `save_pose`, `apply_pose`, `delete_pose`, `add_face_control`, `set_face_control`,
+`delete_face_control`, `add_audio_track`, `set_audio_track`, `remove_audio_track`, `lip_sync`.
+Scripts: `run_script` (Python; needs `npm install` once). The server only
 reads and writes inside the `--root` folders, and edits save atomically in the file's own format
 (or to a copy). See [docs/mcp.md](docs/mcp.md) for Claude Desktop and other clients, every tool
 and the security model.

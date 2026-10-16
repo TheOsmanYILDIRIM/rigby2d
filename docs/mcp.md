@@ -2,10 +2,12 @@
 
 Rigby2D includes a [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server, so AI
 assistants such as Claude can inspect, validate, sample, edit and convert Rigby2D projects:
-`.rigby` work files and skeleton `.json` / `.skel` exports.
+`.rigby` work files and skeleton `.json` / `.skel` exports. They can also set up film output,
+build pose libraries and face controls, add audio and lip-sync, and run Python scripts.
 
-It uses the same runtime as the editor and games (`src/core`), runs on Node.js 20 or newer, and
-has no dependencies: a clone of the repository is enough, `npm install` is not needed.
+It uses the same runtime as the editor and games (`src/core`) and runs on Node.js 20 or newer. A
+clone of the repository is enough for every tool except `run_script`, which needs Pyodide: run
+`npm install` once in the Rigby2D folder to use it.
 
 ## Setup
 
@@ -74,6 +76,69 @@ only replaced with `overwrite: true`. To undo, keep a copy or use `output`: the 
 history. After editing, `sample_pose` and `validate_project` check the result; the Rigby2D editor
 opens the edited `.rigby` file as usual.
 
+### Film, poses and audio (`.rigby` work files)
+
+These features live only in `.rigby` work files; skeleton exports have no place for them. To use
+them on an export, open it in the editor and save it as a `.rigby` file. `inspect_project` lists
+them under `film`.
+
+| Tool | What it does |
+| --- | --- |
+| `set_workspace` | Switches the project between the `game` and `film` workspaces (which tools the editor shows). |
+| `set_output` | Film output: frame rate, size, background (`transparent` or `#rrggbb`), framing (`auto`, `fixed` with center and scale, or `camera`, which follows a bone named `camera` and creates it if needed). |
+| `save_pose` | Saves a pose to the pose library: bone transforms and the attachments their slots show, from the setup pose or an animation at a time. |
+| `apply_pose` | Applies a pose at an amount (0 to 1): to the setup pose, or as keys in an animation at a time. |
+| `delete_pose` | Deletes a pose and the face controls that use it. |
+| `add_face_control` | Adds a face control that blends from the setup pose (or a pose) to a pose. |
+| `set_face_control` | Sets a face control's value: in the setup pose, or as keys at a time. |
+| `delete_face_control` | Deletes a face control. |
+| `add_audio_track` | Stores a sound file (WAV, MP3, OGG, M4A, AAC, FLAC) in the work file as an audio track of an animation, with start time and volume. |
+| `set_audio_track` | Changes a track's start time or volume. |
+| `remove_audio_track` | Removes a track, and its sound file when nothing else uses it. |
+| `lip_sync` | Keys a face control on every frame from the loudness of an audio track (WAV through MCP). |
+
+Times can be given in seconds (`time`) or as a `frame` at the project's frame rate.
+
+### Structure
+
+| Tool | What it does |
+| --- | --- |
+| `rename_bone` | Renames a bone; poses follow. |
+| `rename_animation` | Renames an animation; its audio tracks follow. |
+| `delete_animation` | Deletes an animation and its audio tracks. |
+| `set_slot` | Sets a slot's setup attachment (or hides it) and color. |
+
+### Python scripts
+
+`run_script` runs a Python script against a project with the same `rigby` module as the editor's
+script editor (see the [scripting guide](scripting.md)), then saves the project. It covers what
+the other tools do not, in one call:
+
+```json
+{
+  "path": "hero.rigby",
+  "selection": ["arm_l", "arm_r"],
+  "script": "import rigby
+for b in rigby.selected_bones():
+    b.rotation += 10
+print('done')"
+}
+```
+
+- `print()` output comes back in `output`.
+- If the script raises an exception, nothing is saved, and the error comes back with the script's
+  traceback.
+- `dry_run: true` runs it without saving, for questions such as "which bones have no keys?".
+- `animation` and `time` set what the script sees as the open animation and the current time
+  (Animate mode). `selection` sets the selected bones.
+- Scripts run in a sandbox: CPython 3.14 on Pyodide, standard library only, no file or network
+  access. The first call starts Python, which takes about 2 seconds.
+
+### Not available through MCP
+
+Rendering PNG sequences, WebM and MP4 uses the editor's GPU drawing and video encoders: use
+*File ▸ Render animation* in the editor.
+
 ### Conventions
 
 Coordinates are in skeleton units with Y up; angles are in degrees. Results are returned both as
@@ -97,8 +162,10 @@ structured content and as JSON text.
 
 - Every path is resolved inside the `--root` folders. Symbolic links are followed before the
   check, so links cannot lead outside them. Relative paths resolve against the first root.
-- Only `convert_project` and the editing tools write: the project file they are given, or the
-  `output` file. The tools never delete files and make no network requests.
+- Only `convert_project`, the editing tools and `run_script` write: the project file they are
+  given, or the `output` file. `add_audio_track` and `run_script` (`script_file`) read files inside
+  the roots. The tools never delete files and make no network requests. Scripts run sandboxed,
+  without access to files or the network.
 - Tool annotations tell clients which tools are read-only (`readOnlyHint`) and which change files
   (`destructiveHint`), so clients can ask for confirmation before edits.
 
@@ -112,5 +179,6 @@ structured content and as JSON text.
   message the model can act on; unknown tools and methods are JSON-RPC errors.
 
 The implementation is in `src/mcp/` (`protocol.js`: protocol handling and transport; `tools.js`:
-reading, validation and conversion; `edits.js`: editing; `server.js`: command line) and is covered
-by `test/mcp.test.js`.
+reading, validation and conversion; `edits.js`: editing; `film.js`: film, poses and audio;
+`scripting.js`: Python scripts; `server.js`: command line) and is covered by `test/mcp.test.js` and
+`test/mcpfilm.test.js`.
