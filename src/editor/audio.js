@@ -104,7 +104,32 @@ export async function mixBuffer(doc, animation, duration) {
 
 /** The tracks of `animation` mixed over `duration` seconds as a 16-bit stereo WAV, or null. */
 export async function mixWav(doc, animation, duration) {
-  const out = await mixBuffer(doc, animation, duration);
+  return wavOf(await mixBuffer(doc, animation, duration));
+}
+
+/**
+ * Joins audio end to end: `parts` are [{ buffer (or null for silence), seconds }]. Returns a
+ * 48 kHz stereo AudioBuffer, or null when every part is silent.
+ */
+export function joinBuffers(parts) {
+  if (!parts.some((p) => p.buffer)) return null;
+  const rate = 48000;
+  const total = Math.ceil(parts.reduce((s, p) => s + p.seconds, 0) * rate);
+  const out = new AudioBuffer({ length: Math.max(1, total), sampleRate: rate, numberOfChannels: 2 });
+  let at = 0;
+  for (const p of parts) {
+    const start = Math.round(at * rate);
+    const room = Math.min(Math.round(p.seconds * rate), total - start);
+    if (p.buffer && room > 0) {
+      for (let c = 0; c < 2; c++) out.getChannelData(c).set(p.buffer.getChannelData(Math.min(c, p.buffer.numberOfChannels - 1)).subarray(0, room), start);
+    }
+    at += p.seconds;
+  }
+  return out;
+}
+
+/** A 16-bit stereo WAV of an AudioBuffer, or null. */
+export function wavOf(out) {
   if (!out) return null;
   const rate = out.sampleRate;
   const n = out.length;

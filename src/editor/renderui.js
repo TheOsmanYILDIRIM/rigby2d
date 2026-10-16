@@ -5,7 +5,7 @@
 import { dirname, joinPath } from './io.js';
 import { describeOutput } from './output.js';
 import * as platform from './platform.js';
-import { FORMATS, canEncodeVideo, frameRange, renderJob } from './render/offline.js';
+import { FORMATS, canEncodeVideo, frameRange, renderJob, renderMerged } from './render/offline.js';
 import { h, select } from './widgets.js';
 import { mixWav } from './audio.js';
 
@@ -19,7 +19,7 @@ const QUALITIES = [
 const safe = (s) => s.replace(/[\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '') || 'render';
 
 /** Remembered choices for the next time the dialog opens. */
-let last = { format: 'png', quality: 'high' };
+let last = { format: 'png', quality: 'high', merge: false };
 
 /** Opens the render dialog. */
 export function openRenderDialog(app) {
@@ -34,6 +34,7 @@ export function openRenderDialog(app) {
     skins: new Set([doc.skin ?? '']),
     format: last.format === 'png' || canEncodeVideo() ? last.format : 'png',
     quality: last.quality,
+    merge: last.merge,
     start: null,
     end: null,
   };
@@ -150,8 +151,23 @@ export function openRenderDialog(app) {
             )
           : null,
       ),
+      video && list.length > 1
+        ? h(
+            'label',
+            { class: 'small' },
+            h('input', {
+              type: 'checkbox',
+              checked: choice.merge,
+              onchange: (e) => {
+                choice.merge = e.target.checked;
+                draw();
+              },
+            }),
+            ` Merge into one video (the ${list.length} renders back to back)`,
+          )
+        : null,
       choice.format === 'mp4' && !s.background ? h('div', { class: 'small weak' }, 'MP4 has no transparency: the background is black. Pick a background color in Output, or render WebM or PNG for transparency.') : null,
-      h('div', { class: 'small' }, list.length ? `${list.length} render${list.length === 1 ? '' : 's'}, ${frames} frame${frames === 1 ? '' : 's'} in all.` : 'Pick at least one animation and skin.'),
+      h('div', { class: 'small' }, list.length ? `${merged(list) ? '1 video' : `${list.length} render${list.length === 1 ? '' : 's'}`}, ${frames} frame${frames === 1 ? '' : 's'} in all.` : 'Pick at least one animation and skin.'),
       running ? h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${Math.round(running.fraction * 100)}%` } })) : null,
       running ? h('div', { class: 'small' }, running.text) : null,
       h('div', { class: 'modal-buttons' }, h('button', { onclick: close }, running ? 'Cancel' : 'Close'), h('button', { class: 'primary', disabled: !list.length || !!running, onclick: () => start(list) }, 'Render…')),
@@ -159,7 +175,11 @@ export function openRenderDialog(app) {
     body.replaceChildren(...parts.filter(Boolean));
   }
 
+  /** Several video renders merged into one file. */
+  const merged = (list) => choice.merge && choice.format !== 'png' && list.length > 1;
+
   async function start(list) {
+    if (merged(list)) return startMerged(list);
     const first = list[0];
     const ext = first.format === 'png' ? 'png' : first.format;
     const label = { png: 'PNG image', webm: 'WebM video', mp4: 'MP4 video' }[first.format];
@@ -171,7 +191,7 @@ export function openRenderDialog(app) {
       return;
     }
     if (!target) return;
-    last = { format: first.format, quality: first.quality };
+    last = { format: first.format, quality: first.quality, merge: choice.merge };
     const dir = dirname(target.path);
     const pathFor = (name) => (dir === '.' ? name : joinPath(dir, name));
     const total = list.reduce((n, j) => n + frameRange(doc, j.animation, s.fps, j.start, j.end).count, 0);
@@ -209,6 +229,45 @@ export function openRenderDialog(app) {
       running = null;
       app.setStatus(cancelled ? `Render cancelled after ${written} file(s)` : `Rendered ${written} file(s) to ${dir === '.' ? target.path : dir}`);
       if (!cancelled) close();
+      else draw();
+    } catch (e) {
+      running = null;
+      draw();
+      app.setStatus(`Render failed: ${e.message ?? e}`);
+    }
+  }
+
+  /** One video of every job back to back, with the joined audio as a WAV next to it. */
+  async function startMerged(list) {
+    const first = list[0];
+    const ext = first.format;
+    const name = `${safe(doc.name || 'render')}_${list.length === doc.animations.length * Math.max(1, choice.skins.size) ? 'all' : `${list.length}_animations`}`;
+    let target;
+    try {
+      target = await platform.pickSaveTarget(`${name}.${ext}`, { webm: 'WebM video', mp4: 'MP4 video' }[ext], ext, { single: true });
+    } catch (e) {
+      app.setStatus(`Render failed: ${e.message ?? e}`);
+      return;
+    }
+    if (!target) return;
+    last = { format: first.format, quality: first.quality, merge: true };
+    const dir = dirname(target.path);
+    running = { cancelled: false, fraction: 0, text: 'Starting…' };
+    draw();
+    try {
+      const files = await renderMerged(doc, app.images, list, name, (n, count, k) => {
+        running.fraction = n / count;
+        running.text = `${doc.animations[list[k].animation].name}: frame ${n} of ${count} (animation ${k + 1} of ${list.length})`;
+        draw();
+        return !running.cancelled;
+      });
+      if (files) {
+        for (const f of files) await target.fs.writeFile(f.name.endsWith('.wav') ? (dir === '.' ? f.name : joinPath(dir, f.name)) : target.path, f.bytes);
+        await target.fs.finish();
+      }
+      running = null;
+      app.setStatus(files ? `Rendered ${list.length} animations into ${target.path}` : 'Render cancelled');
+      if (files) close();
       else draw();
     } catch (e) {
       running = null;

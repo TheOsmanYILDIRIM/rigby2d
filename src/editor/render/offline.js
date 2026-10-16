@@ -10,7 +10,7 @@ import { WebGLRenderer } from '../../webgl/renderer.js';
 import { animationBounds, outputFrame } from '../output.js';
 import { writeMp4 } from './mp4.js';
 import { writeWebm } from './webm.js';
-import { encodeAac, encodeOpus, mixBuffer } from '../audio.js';
+import { encodeAac, encodeOpus, joinBuffers, mixBuffer, wavOf } from '../audio.js';
 
 export const FORMATS = [
   ['png', 'PNG sequence (transparent)'],
@@ -161,6 +161,61 @@ async function framePng(r, scratch) {
   return new Promise((resolve, reject) => c.toBlob((b) => (b ? b.arrayBuffer().then((a) => resolve(new Uint8Array(a))) : reject(new Error('PNG encoding failed'))), 'image/png'));
 }
 
+/**
+ * Workers that encode PNGs in parallel (see pngworker.js), or null where workers or
+ * OffscreenCanvas are not available (then frames are encoded one by one on this thread).
+ */
+function pngPool() {
+  if (typeof Worker !== 'function' || typeof OffscreenCanvas !== 'function') return null;
+  // More than four workers did not help in measurements: the main thread becomes the limit.
+  const size = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
+  let workers;
+  try {
+    workers = Array.from({ length: size }, () => new Worker(new URL('./pngworker.js', import.meta.url), { type: 'module' }));
+  } catch {
+    return null;
+  }
+  const pending = new Map();
+  let next = 0;
+  for (const w of workers) {
+    w.onmessage = (e) => {
+      const { id, bytes, error } = e.data;
+      const job = pending.get(id);
+      pending.delete(id);
+      if (error) job.reject(new Error(`PNG encoding failed: ${error}`));
+      else job.resolve(bytes);
+    };
+    w.onerror = (e) => {
+      for (const job of pending.values()) job.reject(new Error(`PNG encoding failed: ${e.message}`));
+      pending.clear();
+    };
+  }
+  return {
+    size,
+    encode(width, height, pixels) {
+      const id = next++;
+      return new Promise((resolve, reject) => {
+        pending.set(id, { resolve, reject });
+        workers[id % size].postMessage({ id, width, height, pixels: pixels.buffer }, [pixels.buffer]);
+      });
+    },
+    close() {
+      for (const w of workers) w.terminate();
+    },
+  };
+}
+
+/**
+ * Waits until an encoder has taken a frame from its queue: its dequeue event, or a short timeout
+ * (browsers without the event, or an encoder that failed and will not dequeue again).
+ */
+function drained(encoder) {
+  return new Promise((resolve) => {
+    encoder.addEventListener('dequeue', resolve, { once: true });
+    setTimeout(resolve, 20);
+  });
+}
+
 /** The first supported encoder configuration, or null. */
 async function supportedConfig(candidates) {
   if (typeof VideoEncoder !== 'function') return null;
@@ -190,22 +245,55 @@ export async function renderJob(doc, images, job, progress = () => true) {
   const range = frameRange(doc, job.animation, s.fps, job.start, job.end);
   if (job.format === 'png') {
     const r = new FrameRenderer(doc, images, job);
+    const pool = pngPool();
     try {
       const digits = Math.max(4, String(range.end).length);
       const files = [];
       const scratch = {};
+      const inflight = [];
       for (let f = range.start; f <= range.end; f++) {
         r.render(f);
-        files.push({ name: `${job.name}_${String(f).padStart(digits, '0')}.png`, bytes: await framePng(r, scratch) });
+        const file = { name: `${job.name}_${String(f).padStart(digits, '0')}.png`, bytes: null };
+        files.push(file);
+        if (pool) {
+          // Raw pixels go to a worker; the next frame renders while earlier ones encode.
+          const pixels = new Uint8Array(r.width * r.height * 4);
+          r.gl.readPixels(0, 0, r.width, r.height, r.gl.RGBA, r.gl.UNSIGNED_BYTE, pixels);
+          inflight.push(pool.encode(r.width, r.height, pixels).then((bytes) => (file.bytes = bytes)));
+          while (inflight.length >= pool.size * 2) await inflight.shift();
+        } else {
+          file.bytes = await framePng(r, scratch);
+        }
         if (progress(f - range.start + 1, range.count) === false) return null;
       }
+      await Promise.all(inflight);
       return files;
     } finally {
       r.dispose();
+      pool?.close();
     }
   }
+  const files = await encodeVideo(doc, images, [job], job, progress);
+  return files && files.filter((f) => !f.name.endsWith('.wav'));
+}
+
+/**
+ * Renders several jobs (animations and skins) one after another into a single video named
+ * `name` (format, quality and settings from the first job), with their audio joined in the same
+ * order. Returns [{ name, bytes }]: the video, and a WAV of the joined audio when there is any.
+ * `progress(frame, frames, jobIndex)` returning false cancels (then null is returned).
+ */
+export function renderMerged(doc, images, jobs, name, progress = () => true) {
+  return encodeVideo(doc, images, jobs, { ...jobs[0], name }, progress);
+}
+
+/** The video encoder behind renderJob and renderMerged. */
+async function encodeVideo(doc, images, jobs, job, progress) {
+  const s = job.settings;
   if (!canEncodeVideo()) throw new Error('video encoding (WebCodecs) is not available here; render a PNG sequence instead');
   const mp4 = job.format === 'mp4';
+  const segments = jobs.map((j) => ({ job: j, range: frameRange(doc, j.animation, s.fps, j.start, j.end) }));
+  const total = segments.reduce((n, g) => n + g.range.count, 0);
   // H.264 needs even dimensions.
   const width = mp4 ? s.width + (s.width % 2) : s.width;
   const height = mp4 ? s.height + (s.height % 2) : s.height;
@@ -249,55 +337,71 @@ export async function renderJob(doc, images, job, progress = () => true) {
       })
     : null;
   alphaEncoder?.configure(config);
-  const r = new FrameRenderer(doc, images, { ...job, width, height });
   const keyEvery = Math.max(1, Math.round(s.fps * 2));
   const scratch = {};
   const cw = Math.ceil(width / 2);
   const ch = Math.ceil(height / 2);
   const planes = transparent ? new Uint8Array(width * height + 2 * cw * ch).fill(128) : null;
   const encoders = [encoder, alphaEncoder].filter(Boolean);
+  let i = 0;
+  let r = null;
   try {
-    for (let f = range.start; f <= range.end; f++) {
-      if (failure) throw failure;
-      const i = f - range.start;
-      r.render(f);
-      const rgba = readFrame(r.gl, width, height, scratch);
-      const timestamp = Math.round((i * 1e6) / s.fps);
-      const timing = { timestamp, duration: Math.round(1e6 / s.fps) };
-      const key = { keyFrame: i % keyEvery === 0 };
-      const frame = new VideoFrame(rgba, { format: transparent ? 'RGBA' : 'RGBX', codedWidth: width, codedHeight: height, ...timing });
-      encoder.encode(frame, key);
-      frame.close();
-      if (alphaEncoder) {
-        for (let k = 0, n = width * height; k < n; k++) planes[k] = rgba[4 * k + 3];
-        const a = new VideoFrame(planes, { format: 'I420', codedWidth: width, codedHeight: height, ...timing });
-        alphaEncoder.encode(a, key);
-        a.close();
+    for (const [k, { job: segment, range }] of segments.entries()) {
+      // Each animation (and skin) gets its own renderer: framing and physics start fresh.
+      r = new FrameRenderer(doc, images, { ...segment, settings: s, width, height });
+      for (let f = range.start; f <= range.end; f++, i++) {
+        if (failure) throw failure;
+        r.render(f);
+        const timestamp = Math.round((i * 1e6) / s.fps);
+        const timing = { timestamp, duration: Math.round(1e6 / s.fps) };
+        // A key frame starts every animation, so players can seek to each one.
+        const key = { keyFrame: f === range.start || (f - range.start) % keyEvery === 0 };
+        // Opaque video takes the frame straight from the WebGL canvas: no copy to the CPU, and soft
+        // edges blend over the background (black for MP4 without one) exactly as drawn.
+        // Transparent WebM needs straight color and a separate alpha plane, read back here.
+        const rgba = transparent ? readFrame(r.gl, width, height, scratch) : null;
+        const frame = transparent ? new VideoFrame(rgba, { format: 'RGBA', codedWidth: width, codedHeight: height, ...timing }) : new VideoFrame(r.canvas, { ...timing, alpha: 'discard' });
+        encoder.encode(frame, key);
+        frame.close();
+        if (alphaEncoder) {
+          for (let p = 0, n = width * height; p < n; p++) planes[p] = rgba[4 * p + 3];
+          const a = new VideoFrame(planes, { format: 'I420', codedWidth: width, codedHeight: height, ...timing });
+          alphaEncoder.encode(a, key);
+          a.close();
+        }
+        for (const e of encoders) while (e.encodeQueueSize > 8 && !failure) await drained(e);
+        if (progress(i + 1, total, k) === false) return null;
       }
-      while (encoders.some((e) => e.encodeQueueSize > 4)) await new Promise((resolve) => setTimeout(resolve, 1));
-      if (progress(i + 1, range.count) === false) return null;
+      r.dispose();
+      r = null;
     }
     await Promise.all(encoders.map((e) => e.flush()));
     if (failure) throw failure;
   } finally {
-    r.dispose();
+    r?.dispose();
     for (const e of encoders) if (e.state !== 'closed') e.close();
   }
   color.sort((x, y) => x.time - y.time);
   // The animation's audio tracks, mixed: AAC in MP4 for the widest player support (Opus where the
   // system has no AAC encoder), Opus in WebM. Left out when neither encoder is available.
-  const name = doc.animations[job.animation]?.name;
+  // Several animations: their mixes are joined in render order.
+  const parts = [];
+  for (const { job: segment, range } of segments) {
+    const name = doc.animations[segment.animation]?.name;
+    parts.push({ buffer: name ? await mixBuffer(doc, name, range.count / s.fps).catch(() => null) : null, seconds: range.count / s.fps });
+  }
+  const mixed = segments.length === 1 ? parts[0].buffer : joinBuffers(parts);
   let audio = null;
-  if (name) {
-    const mixed = await mixBuffer(doc, name, range.count / s.fps).catch(() => null);
+  if (mixed) {
     if (mp4) audio = await encodeAac(mixed).catch(() => null);
     audio ??= await encodeOpus(mixed).catch(() => null);
   }
+  const wav = mixed ? [{ name: `${job.name}.wav`, bytes: wavOf(mixed) }] : [];
   if (mp4) {
     if (!description) throw new Error('the H.264 encoder gave no decoder configuration');
-    return [{ name: `${job.name}.mp4`, bytes: writeMp4({ width, height, fps: s.fps, avcC: description, frames: color, audio }) }];
+    return [{ name: `${job.name}.mp4`, bytes: writeMp4({ width, height, fps: s.fps, avcC: description, frames: color, audio }) }, ...wav];
   }
   if (transparent) for (const c of color) c.alpha = alpha.get(Math.round(c.time * 1000)) ?? null;
   const codec = config.codec.startsWith('vp09') ? 'V_VP9' : 'V_VP8';
-  return [{ name: `${job.name}.webm`, bytes: writeWebm({ width, height, fps: s.fps, codec, alpha: transparent, frames: color, audio }) }];
+  return [{ name: `${job.name}.webm`, bytes: writeWebm({ width, height, fps: s.fps, codec, alpha: transparent, frames: color, audio }) }, ...wav];
 }

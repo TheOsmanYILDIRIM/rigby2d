@@ -54,7 +54,12 @@ section sets:
 | MP4, H.264 | No | Uses the background color (black when transparent). 23.976 and 29.97 fps are exact. Audio: AAC (Opus on systems without an AAC encoder). |
 
 Tick several animations (and skins) to **batch render** them in one go: each combination becomes
-its own file or sequence. With one animation you can render a frame range.
+its own file or sequence. For WebM and MP4, tick **Merge into one video** to put them back to
+back in a single file instead, with their audio joined in the same order; each animation starts on
+a key frame, so players seek to it cleanly. With one animation you can render a frame range.
+
+Rendering is fast: at 1080p an MP4 frame takes about 12 ms and a PNG frame about 20 ms on a desktop
+PC (PNG frames are encoded on several threads at once).
 
 Renders are deterministic: physics and other time-dependent effects are simulated frame by frame
 from the start of the animation. Video encoding uses the system's encoders through WebCodecs.
