@@ -675,7 +675,7 @@ export function readSettings(o) {
   const color = (c) => (Array.isArray(c) && c.length === 4 && c.every((v) => typeof v === 'number' && v >= 0 && v <= 1) ? c.slice() : null);
   const f = o.frame;
   const frame =
-    f && typeof f === 'object' && [f.x, f.y].every((v) => typeof v === 'number' && Number.isFinite(v)) && positive(f.scale, 0, 1e6) > 0 ? { x: f.x, y: f.y, scale: f.scale } : null;
+    f && typeof f === 'object' && [f.x, f.y].every((v) => typeof v === 'number' && Number.isFinite(v)) && positive(f.scale, 0, 1e6) > 0 ? { x: f.x, y: f.y, scale: f.scale, ...(f.camera ? { camera: true } : {}) } : null;
   return {
     fps: positive(o.fps, d.fps, 240),
     width: Math.round(positive(o.width, d.width, 16384)),

@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import { readSkeletonBinary } from '../src/core/binary.js';
 import { readSkeletonJson } from '../src/core/interop.js';
 import { timing, writeMp4 } from '../src/editor/render/mp4.js';
-import { frameRange } from '../src/editor/render/offline.js';
+import { cameraFor, frameRange } from '../src/editor/render/offline.js';
 import { writeWebm } from '../src/editor/render/webm.js';
 
 const frames = (n, size = 10) => Array.from({ length: n }, (_, i) => ({ data: new Uint8Array(size).fill(i + 1), key: i % 4 === 0, time: (i * 1000) / 24 }));
@@ -112,4 +112,25 @@ test('frame ranges', () => {
   assert.deepEqual(frameRange(sk, release, 24), { start: 0, end: 38, count: 39, last: 38 });
   assert.deepEqual(frameRange(sk, release, 24, 10, 500), { start: 10, end: 38, count: 29, last: 38 });
   assert.deepEqual(frameRange(sk, release, 30, 20, 5), { start: 20, end: 20, count: 1, last: 48 });
+});
+
+test('video renders carry an Opus audio track', () => {
+  const head = new Uint8Array(19);
+  head.set(new TextEncoder().encode('OpusHead'));
+  const audio = { rate: 48000, channels: 2, preSkip: 312, head, frames: [0, 20, 40].map((time) => ({ data: new Uint8Array([1, 2, 3]), time, samples: 960 })) };
+  const frames = [{ data: new Uint8Array([9, 9]), key: true, time: 0 }];
+  const text = (b) => new TextDecoder('latin1').decode(b);
+  const mp4 = text(writeMp4({ width: 16, height: 16, fps: 30, avcC: new Uint8Array(4), frames, audio }));
+  assert.ok(mp4.includes('soun') && mp4.includes('dOps'));
+  assert.equal(mp4.split('trak').length - 1, 2);
+  const webm = text(writeWebm({ width: 16, height: 16, fps: 30, codec: 'V_VP9', alpha: false, frames, audio }));
+  assert.ok(webm.includes('A_OPUS') && webm.includes('OpusHead'));
+});
+
+test('the camera bone frames the shot when the framing follows it', () => {
+  const doc = { bones: [{ name: 'root' }, { name: 'camera' }] };
+  const pose = { world: [{}, { a: 2, b: 0, tx: 50, ty: -20 }] };
+  const base = { x: 0, y: 0, zoom: 1 };
+  assert.deepEqual(cameraFor({ frame: { x: 0, y: 0, scale: 1, camera: true } }, doc, pose, base), { x: 50, y: -20, zoom: 2 });
+  assert.equal(cameraFor({ frame: { x: 0, y: 0, scale: 1 } }, doc, pose, base), base);
 });

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-// Minimal MP4 writer for one H.264 video track (length-prefixed NAL units from WebCodecs with
+// Minimal MP4 writer for one H.264 video track and an optional Opus audio track (length-prefixed NAL units from WebCodecs with
 // their avcC configuration). The movie header comes first ("fast start"), so playback can begin
 // while the file loads.
 
@@ -52,7 +52,7 @@ export function timing(fps) {
  * Builds an MP4 file. `frames` are { data: Uint8Array (AVC length-prefixed), key: boolean };
  * `avcC` is the decoder configuration record from the encoder.
  */
-export function writeMp4({ width, height, fps, avcC, frames }) {
+export function writeMp4({ width, height, fps, avcC, frames, audio = null }) {
   const { timescale, delta } = timing(fps);
   const duration = frames.length * delta;
   const ftyp = box('ftyp', enc.encode('isom'), fields([32, 0x200]), enc.encode('isomiso2avc1mp41'));
@@ -90,13 +90,17 @@ export function writeMp4({ width, height, fps, avcC, frames }) {
       minf,
     );
     const tkhd = fullBox('tkhd', 0, 3, fields([32, 0], [32, 0], [32, 1], [32, 0], [32, duration]), new Uint8Array(8), fields([16, 0], [16, 0], [16, 0], [16, 0]), MATRIX, fields([32, width * 65536], [32, height * 65536]));
-    const mvhd = fullBox('mvhd', 0, 0, fields([32, 0], [32, 0], [32, timescale], [32, duration], [32, 0x00010000], [16, 0x0100], [16, 0]), new Uint8Array(8), MATRIX, new Uint8Array(24), fields([32, 2]));
-    return box('moov', mvhd, box('trak', tkhd, mdia));
+    const mvhd = fullBox('mvhd', 0, 0, fields([32, 0], [32, 0], [32, timescale], [32, duration], [32, 0x00010000], [16, 0x0100], [16, 0]), new Uint8Array(8), MATRIX, new Uint8Array(24), fields([32, audio ? 3 : 2]));
+    const traks = [box('trak', tkhd, mdia)];
+    if (audio) traks.push(audioTrak(audio, dataOffset + videoSize, duration));
+    return box('moov', mvhd, ...traks);
   };
+  const videoSize = frames.reduce((s, f) => s + f.data.length, 0);
   // The sample offsets depend on the movie header's size, which does not depend on them.
   const size = moovFor(0).length;
   const moov = moovFor(ftyp.length + size + 8);
-  const dataSize = frames.reduce((s, f) => s + f.data.length, 0);
+  const audioFrames = audio?.frames ?? [];
+  const dataSize = videoSize + audioFrames.reduce((s, f) => s + f.data.length, 0);
   const out = new Uint8Array(ftyp.length + moov.length + 8 + dataSize);
   out.set(ftyp, 0);
   out.set(moov, ftyp.length);
@@ -105,9 +109,41 @@ export function writeMp4({ width, height, fps, avcC, frames }) {
   v.setUint32(o, 8 + dataSize);
   out.set(enc.encode('mdat'), o + 4);
   o += 8;
-  for (const f of frames) {
+  for (const f of [...frames, ...audioFrames]) {
     out.set(f.data, o);
     o += f.data.length;
   }
   return out;
+}
+
+/** Track 2: Opus audio, all samples in one chunk at `offset`. */
+function audioTrak(audio, offset, movieDuration) {
+  const rate = audio.rate;
+  const n = audio.frames.length;
+  const samples = audio.frames.reduce((s, f) => s + f.samples, 0);
+  const dOps = box('dOps', fields([8, 0], [8, audio.channels], [16, audio.preSkip], [32, rate], [16, 0], [8, 0]));
+  const entry = box('Opus', fields([32, 0], [16, 0], [16, 1]), new Uint8Array(8), fields([16, audio.channels], [16, 16], [16, 0], [16, 0], [32, rate * 65536]), dOps);
+  const runs = [];
+  for (const f of audio.frames) {
+    const last = runs[runs.length - 1];
+    if (last && last[1] === f.samples) last[0]++;
+    else runs.push([1, f.samples]);
+  }
+  const stbl = box(
+    'stbl',
+    fullBox('stsd', 0, 0, fields([32, 1]), entry),
+    fullBox('stts', 0, 0, fields([32, runs.length]), ...runs.map(([c, d]) => fields([32, c], [32, d]))),
+    fullBox('stsc', 0, 0, fields([32, 1], [32, 1], [32, n], [32, 1])),
+    fullBox('stsz', 0, 0, fields([32, 0], [32, n]), ...audio.frames.map((f) => fields([32, f.data.length]))),
+    fullBox('stco', 0, 0, fields([32, 1], [32, offset])),
+  );
+  const minf = box('minf', fullBox('smhd', 0, 0, fields([16, 0], [16, 0])), box('dinf', fullBox('dref', 0, 0, fields([32, 1]), fullBox('url ', 0, 1))), stbl);
+  const mdia = box(
+    'mdia',
+    fullBox('mdhd', 0, 0, fields([32, 0], [32, 0], [32, rate], [32, samples], [16, 0x55c4], [16, 0])),
+    fullBox('hdlr', 0, 0, fields([32, 0]), new TextEncoder().encode('soun'), new Uint8Array(12), new TextEncoder().encode('Rigby2D audio\0')),
+    minf,
+  );
+  const tkhd = fullBox('tkhd', 0, 3, fields([32, 0], [32, 0], [32, 2], [32, 0], [32, movieDuration]), new Uint8Array(8), fields([16, 0], [16, 1], [16, 0x0100], [16, 0]), MATRIX, fields([32, 0], [32, 0]));
+  return box('trak', tkhd, mdia);
 }

@@ -124,6 +124,14 @@ export class Viewport {
   outputFrame() {
     const app = this.app;
     const s = app.doc.settings;
+    if (s.frame?.camera) {
+      const i = app.doc.bones.findIndex((b) => b.name === 'camera');
+      const pose = app.pose();
+      if (i >= 0) {
+        const m = pose.world[i];
+        return outputFrame({ ...s, frame: { x: m.tx, y: m.ty, scale: s.frame.scale / (Math.hypot(m.a, m.b) || 1) } }, null);
+      }
+    }
     if (s.frame) return outputFrame(s, null);
     const key = `${app.mode}:${app.anim}`;
     const now = performance.now();

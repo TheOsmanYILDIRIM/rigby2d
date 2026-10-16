@@ -84,8 +84,8 @@ export function frameLevels(track, fps, frames) {
   return smooth.map((v) => (v < 0.08 ? 0 : Math.min(1, v * 1.2)));
 }
 
-/** The tracks of `animation` mixed over `duration` seconds as a 16-bit stereo WAV, or null. */
-export async function mixWav(doc, animation, duration) {
+/** The tracks of `animation` mixed over `duration` seconds (48 kHz stereo AudioBuffer), or null. */
+export async function mixBuffer(doc, animation, duration) {
   const tracks = tracksOf(doc, animation);
   if (!tracks.length || duration <= 0) return null;
   const rate = 48000;
@@ -99,7 +99,14 @@ export async function mixWav(doc, animation, duration) {
     if (t.offset >= 0) src.start(t.offset);
     else src.start(0, -t.offset);
   }
-  const out = await ctx.startRendering();
+  return ctx.startRendering();
+}
+
+/** The tracks of `animation` mixed over `duration` seconds as a 16-bit stereo WAV, or null. */
+export async function mixWav(doc, animation, duration) {
+  const out = await mixBuffer(doc, animation, duration);
+  if (!out) return null;
+  const rate = out.sampleRate;
   const n = out.length;
   const bytes = new Uint8Array(44 + n * 4);
   const v = new DataView(bytes.buffer);
@@ -123,4 +130,52 @@ export async function mixWav(doc, animation, duration) {
     v.setInt16(46 + i * 4, Math.max(-1, Math.min(1, r[i])) * 32767, true);
   }
   return bytes;
+}
+
+/**
+ * Encodes an AudioBuffer as Opus with WebCodecs. Returns { rate, channels, preSkip, head (OpusHead),
+ * frames: [{ data, time (ms), samples }] }, or null when Opus encoding is not available.
+ */
+export async function encodeOpus(buffer) {
+  if (typeof AudioEncoder !== 'function' || !buffer) return null;
+  const config = { codec: 'opus', sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 };
+  if (!(await AudioEncoder.isConfigSupported(config).catch(() => ({ supported: false }))).supported) return null;
+  const frames = [];
+  let head = null;
+  let failure = null;
+  const encoder = new AudioEncoder({
+    output: (chunk, meta) => {
+      const data = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(data);
+      const d = meta?.decoderConfig?.description;
+      if (d && !head) head = new Uint8Array(d instanceof ArrayBuffer ? d : d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength));
+      frames.push({ data, time: chunk.timestamp / 1000, samples: Math.round(((chunk.duration ?? 20000) * 48000) / 1e6) });
+    },
+    error: (e) => (failure = e),
+  });
+  encoder.configure(config);
+  const block = 4800;
+  const planes = new Float32Array(block * 2);
+  for (let i = 0; i < buffer.length; i += block) {
+    const n = Math.min(block, buffer.length - i);
+    planes.set(buffer.getChannelData(0).subarray(i, i + n), 0);
+    planes.set(buffer.getChannelData(1).subarray(i, i + n), n);
+    const data = new AudioData({ format: 'f32-planar', sampleRate: 48000, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round((i / 48000) * 1e6), data: planes.subarray(0, n * 2) });
+    encoder.encode(data);
+    data.close();
+  }
+  await encoder.flush();
+  encoder.close();
+  if (failure) throw failure;
+  const preSkip = 312;
+  if (!head) {
+    head = new Uint8Array(19);
+    head.set(new TextEncoder().encode('OpusHead'));
+    const v = new DataView(head.buffer);
+    v.setUint8(8, 1);
+    v.setUint8(9, 2);
+    v.setUint16(10, preSkip, true);
+    v.setUint32(12, 48000, true);
+  }
+  return { rate: 48000, channels: 2, preSkip: new DataView(head.buffer, head.byteOffset).getUint16(10, true), head, frames };
 }

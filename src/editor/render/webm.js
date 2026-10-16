@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-// Minimal WebM (Matroska) writer for one video track of encoded frames (VP8 or VP9), with
+// Minimal WebM (Matroska) writer for one video track of encoded frames (VP8 or VP9) and an optional Opus audio track, with
 // optional alpha (VP9 alpha side data stored as block additions, as browsers expect).
 
 const enc = new TextEncoder();
@@ -62,9 +62,9 @@ function float(id, v) {
 const str = (id, s) => el(id, enc.encode(s));
 
 /** Block header: track 1, timecode relative to the cluster, flags. */
-function blockHeader(relative, flags) {
+function blockHeader(relative, flags, track = 0x81) {
   const b = new Uint8Array(4);
-  b[0] = 0x81;
+  b[0] = track;
   new DataView(b.buffer).setInt16(1, relative);
   b[3] = flags;
   return b;
@@ -74,16 +74,16 @@ function blockHeader(relative, flags) {
  * Builds a WebM file. `frames` are { data: Uint8Array, alpha: Uint8Array | null, key: boolean,
  * time: milliseconds }. `codec` is 'V_VP9' or 'V_VP8'.
  */
-export function writeWebm({ width, height, fps, codec, alpha, frames, app = 'Rigby2D' }) {
+export function writeWebm({ width, height, fps, codec, alpha, frames, audio = null, app = 'Rigby2D' }) {
   const frameMs = 1000 / fps;
   const duration = frames.length * frameMs;
   const header = el(0x1a45dfa3, uint(0x4286, 1), uint(0x42f7, 1), uint(0x42f2, 4), uint(0x42f3, 8), str(0x4282, 'webm'), uint(0x4287, 4), uint(0x4285, 2));
   const info = el(0x1549a966, uint(0x2ad7b1, 1_000_000), float(0x4489, duration), str(0x4d80, app), str(0x5741, app));
   const video = el(0xe0, uint(0xb0, width), uint(0xba, height), ...(alpha ? [uint(0x53c0, 1)] : []));
-  const tracks = el(
-    0x1654ae6b,
-    el(0xae, uint(0xd7, 1), uint(0x73c5, 1), uint(0x83, 1), uint(0x9c, 0), str(0x86, codec), uint(0x23e383, Math.round(1e9 / fps)), video),
-  );
+  const audioTrack = audio
+    ? [el(0xae, uint(0xd7, 2), uint(0x73c5, 2), uint(0x83, 2), uint(0x9c, 0), str(0x86, 'A_OPUS'), el(0x63a2, audio.head), uint(0x56aa, Math.round((audio.preSkip / audio.rate) * 1e9)), uint(0x56bb, 80_000_000), el(0xe1, float(0xb5, audio.rate), uint(0x9f, audio.channels)))]
+    : [];
+  const tracks = el(0x1654ae6b, el(0xae, uint(0xd7, 1), uint(0x73c5, 1), uint(0x83, 1), uint(0x9c, 0), str(0x86, codec), uint(0x23e383, Math.round(1e9 / fps)), video), ...audioTrack);
   // Clusters: a new one at a key frame once the current one is long, and before relative
   // timestamps outgrow 16 bits.
   const clusters = [];
@@ -94,7 +94,18 @@ export function writeWebm({ width, height, fps, codec, alpha, frames, app = 'Rig
     blocks = [];
   };
   let previous = null;
-  for (const f of frames) {
+  // Video and audio blocks interleaved by time.
+  const all = [...frames.map((f) => ({ ...f, track: 1 })), ...(audio?.frames ?? []).map((f) => ({ ...f, key: true, track: 2 }))].sort((a, b) => a.time - b.time || a.track - b.track);
+  for (const f of all) {
+    if (f.track === 2) {
+      const t = Math.round(f.time);
+      if (start === null || t - start > 30000) {
+        flush();
+        start = t;
+      }
+      blocks.push(el(0xa3, blockHeader(t - start, 0x80, 0x82), f.data));
+      continue;
+    }
     const t = Math.round(f.time);
     if (start === null || (f.key && t - start >= 5000) || t - start > 30000) {
       flush();

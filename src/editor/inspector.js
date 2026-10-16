@@ -2,7 +2,7 @@
 // Right panel: properties of the current selection.
 
 import { identityTransform, transformEquals } from '../core/math.js';
-import { BLEND_MODES, INHERIT_MODES, findAttachment, makeAttachment, uniqueName, vertexCount } from '../core/model.js';
+import { BLEND_MODES, INHERIT_MODES, findAttachment, makeAttachment, makeBone, uniqueName, vertexCount } from '../core/model.js';
 import { FPS, Mode, selBone, selSlot } from './app.js';
 import * as edit from './edit.js';
 import { renameBoneRefs, renameSlotRefs } from '../core/constraintdata.js';
@@ -518,10 +518,17 @@ function outputUi(app) {
           [
             ['auto', 'Fit the animation'],
             ['fixed', 'Fixed'],
+            ['camera', "Follow the 'camera' bone"],
           ],
-          s.frame ? 'fixed' : 'auto',
+          s.frame?.camera ? 'camera' : s.frame ? 'fixed' : 'auto',
           (v) => {
             if (v === 'auto') set({ frame: null });
+            else if (v === 'camera') {
+              // A root-level bone named camera; its rest position is the current frame center.
+              const f = app.viewport?.outputFrame() ?? { cx: 0, cy: 0, scale: 1 };
+              if (!app.doc.bones.some((b) => b.name === 'camera')) app.doc.bones.push(makeBone('camera', 0, { ...identityTransform(), x: f.cx, y: f.cy }, 100));
+              set({ frame: { x: f.cx, y: f.cy, scale: f.scale, camera: true } });
+            }
             else {
               const f = app.viewport?.outputFrame();
               set({ frame: f ? { x: f.cx, y: f.cy, scale: f.scale } : { x: 0, y: 0, scale: 1 } });

@@ -10,6 +10,7 @@ import { WebGLRenderer } from '../../webgl/renderer.js';
 import { animationBounds, outputFrame } from '../output.js';
 import { writeMp4 } from './mp4.js';
 import { writeWebm } from './webm.js';
+import { encodeOpus, mixBuffer } from '../audio.js';
 
 export const FORMATS = [
   ['png', 'PNG sequence (transparent)'],
@@ -79,7 +80,7 @@ export class FrameRenderer {
     if (bg) gl.clearColor(bg[0] * bg[3], bg[1] * bg[3], bg[2] * bg[3], bg[3]);
     else gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    this.renderer.begin(this.width, this.height, this.camera);
+    this.renderer.begin(this.width, this.height, cameraFor(job.settings, doc, this.pose, this.camera));
     this.renderer.drawSkeleton(doc, this.pose, (name) => this.lookup(name));
     this.renderer.end();
     gl.finish();
@@ -91,6 +92,19 @@ export class FrameRenderer {
     this.textures.clear();
     this.doc.skin = this.previousSkin;
   }
+}
+
+/**
+ * Camera for a frame: when the framing follows the camera bone, that bone's world position is the
+ * frame center and its scale zooms in (scale 2 shows half as much); otherwise `base`.
+ */
+export function cameraFor(settings, doc, pose, base) {
+  if (!settings.frame?.camera) return base;
+  const i = doc.bones.findIndex((b) => b.name === 'camera');
+  if (i < 0) return base;
+  const m = pose.world[i];
+  const zoom = Math.hypot(m.a, m.b) || 1;
+  return { x: m.tx, y: m.ty, zoom: base.zoom * zoom };
 }
 
 /** Frame numbers of a job: start..end inclusive, defaulting to the whole animation. */
@@ -270,11 +284,14 @@ export async function renderJob(doc, images, job, progress = () => true) {
     for (const e of encoders) if (e.state !== 'closed') e.close();
   }
   color.sort((x, y) => x.time - y.time);
+  // The animation's audio tracks, mixed and encoded as Opus (left out where Opus is unavailable).
+  const name = doc.animations[job.animation]?.name;
+  const audio = name ? await encodeOpus(await mixBuffer(doc, name, range.count / s.fps)).catch(() => null) : null;
   if (mp4) {
     if (!description) throw new Error('the H.264 encoder gave no decoder configuration');
-    return [{ name: `${job.name}.mp4`, bytes: writeMp4({ width, height, fps: s.fps, avcC: description, frames: color }) }];
+    return [{ name: `${job.name}.mp4`, bytes: writeMp4({ width, height, fps: s.fps, avcC: description, frames: color, audio }) }];
   }
   if (transparent) for (const c of color) c.alpha = alpha.get(Math.round(c.time * 1000)) ?? null;
   const codec = config.codec.startsWith('vp09') ? 'V_VP9' : 'V_VP8';
-  return [{ name: `${job.name}.webm`, bytes: writeWebm({ width, height, fps: s.fps, codec, alpha: transparent, frames: color }) }];
+  return [{ name: `${job.name}.webm`, bytes: writeWebm({ width, height, fps: s.fps, codec, alpha: transparent, frames: color, audio }) }];
 }

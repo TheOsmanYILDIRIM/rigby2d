@@ -37,7 +37,9 @@ section sets:
 - **Background**: transparent, or a color.
 - **Framing**: *Fit the animation* frames everything visible during the animation with a small
   margin; *Fixed* sets the frame's center and scale (world units per output pixel), or takes them
-  from the viewport with *Use the current view*.
+  from the viewport with *Use the current view*; *Follow the 'camera' bone* adds a bone named
+  `camera` (if there is none) that moves the frame: key its position to pan and its scale to zoom
+  in (scale 2 shows half as much). The output frame overlay follows it.
 
 *View ▸ Show output frame* outlines the framed area in the viewport.
 
@@ -48,8 +50,8 @@ section sets:
 | Format | Transparency | Notes |
 | --- | --- | --- |
 | PNG sequence | Yes | One numbered PNG per frame (`name_0000.png`, …). |
-| WebM, VP9 | Yes | Alpha is stored as the format expects; plays with transparency in browsers. |
-| MP4, H.264 | No | Uses the background color (black when transparent). 23.976 and 29.97 fps are exact. |
+| WebM, VP9 | Yes | Alpha is stored as the format expects; plays with transparency in browsers. Audio: Opus. |
+| MP4, H.264 | No | Uses the background color (black when transparent). 23.976 and 29.97 fps are exact. Audio: Opus. |
 
 Tick several animations (and skins) to **batch render** them in one go: each combination becomes
 its own file or sequence. With one animation you can render a frame range.
@@ -79,9 +81,9 @@ the timeline and are stored inside the `.rigby` file.
 loudness of the animation's first audio track: a "mouth open" control opens on speech and closes in
 silence. (It follows loudness, not individual phonemes.)
 
-Renders write the animation's audio, mixed, as `<name>.wav` next to the frames or video, ready for
-your video editor.
+WebM and MP4 renders include the animation's audio, mixed. Every render also writes it as
+`<name>.wav` next to the frames or video, ready for your video editor.
 
 ## Coming next
 
-Cameras and scene composition, and audio inside WebM and MP4 renders.
+Scene composition: several characters in one shot.

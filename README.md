@@ -78,11 +78,11 @@ Rigby2D is in early alpha. Work under way:
 - **Godot and Unity runtimes**: a Rust runtime with full feature support. The Rust core and the
   Godot 4 node (`RigbySkeleton2D`) are available in preview ([`runtimes/`](runtimes/), Windows x64
   download on Releases); Unity is next.
-- **Cameras and scene composition** (Film workspace).
+- **Scene composition** (Film workspace): several characters in one shot.
 
 Done in this cycle: the offline renderer (PNG sequences, WebM, MP4), resolution and frame-rate
 controls, the batch renderer, the pose library and face controls, and audio tracks with
-loudness-driven lip-sync.
+loudness-driven lip-sync (mixed into WebM and MP4 renders), and an animatable camera.
 
 ## Getting started
 
