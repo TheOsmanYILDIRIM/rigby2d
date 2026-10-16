@@ -162,8 +162,22 @@ function guessByPosition(parts) {
     else if (Math.abs(x - tcx) > tw * 0.4) p.role = 'arm';
     else p.role = 'extra';
   }
-  // Paired parts without a side: the figure faces the viewer, so its left is on the image's right.
-  for (const p of all) if (PAIRED.has(p.role) && !p.side) p.side = p.g.c[0] >= tcx ? 'l' : 'r';
+  // Limb parts without a side follow the limb they hang from: an upper arm (or leg) takes its side
+  // from its position, then the forearm and hand take the side of the nearest arm part above them,
+  // so a hand raised across the body stays on its own arm.
+  const sideFromPosition = (p) => (p.g.c[0] >= tcx ? 'l' : 'r');
+  for (const chain of [['upperarm', 'arm', 'forearm', 'hand'], ['thigh', 'leg', 'shin', 'foot']]) {
+    chain.forEach((role, level) => {
+      for (const p of all) {
+        if (p.role !== role || p.side) continue;
+        const above = all.filter((q) => q.side && chain.indexOf(q.role) >= 0 && chain.indexOf(q.role) < Math.max(level, 2) && q !== p);
+        const nearest = level >= 2 ? above.sort((a, b) => dist(a.g.c, p.g.c) - dist(b.g.c, p.g.c))[0] : null;
+        p.side = nearest ? nearest.side : sideFromPosition(p);
+      }
+    });
+  }
+  // Other paired parts without a side: the figure faces the viewer, so its left is on the image's right.
+  for (const p of all) if (PAIRED.has(p.role) && !p.side) p.side = sideFromPosition(p);
 }
 
 // ---- rig --------------------------------------------------------------------------------------

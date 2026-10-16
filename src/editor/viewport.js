@@ -538,7 +538,11 @@ export class Viewport {
   }
 
   onPointerDown(e) {
-    this.canvas.setPointerCapture(e.pointerId);
+    try {
+      this.canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // The pointer is already gone (a very quick tap): handle the press without capture.
+    }
     document.activeElement?.blur?.();
     const pos = this.eventPos(e);
     const editTool = this.meshTool.active ? this.meshTool : this.shapeTool.active ? this.shapeTool : null;

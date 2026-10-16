@@ -1026,3 +1026,128 @@ div.log-entry {
 .script-item.unsaved > span:first-child {
   font-style: italic;
 }
+
+/* ---- tutorials ---- */
+.coach {
+  left: 16px;
+  bottom: calc(var(--bottom) + 40px);
+  width: min(360px, calc(100vw - 32px));
+  min-height: 0;
+  resize: none;
+  z-index: 180;
+}
+.coach-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+.coach-progress {
+  height: 4px;
+  background: var(--bg);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.coach-progress .bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.coach-text {
+  line-height: 1.5;
+}
+.coach-text kbd {
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--widget);
+  font: 12px ui-monospace, Consolas, monospace;
+}
+.coach-action {
+  align-self: flex-start;
+}
+.coach-done {
+  color: #7ee08a;
+  font-weight: 600;
+}
+.coach-wait::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: coach-blink 1.2s ease-in-out infinite;
+}
+.coach-buttons {
+  display: flex;
+  gap: 8px;
+}
+.coach button.primary,
+.tutorials button.primary {
+  background: var(--accent);
+  color: white;
+}
+.coach-spot {
+  position: fixed;
+  z-index: 170;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 4px rgba(90, 143, 214, 0.25), 0 0 18px rgba(90, 143, 214, 0.55);
+  animation: coach-pulse 1.4s ease-in-out infinite;
+  transition: left 0.15s ease, top 0.15s ease, width 0.15s ease, height 0.15s ease;
+}
+.coach-spot[hidden] {
+  display: none;
+}
+@keyframes coach-pulse {
+  50% {
+    box-shadow: 0 0 0 8px rgba(90, 143, 214, 0.12), 0 0 26px rgba(90, 143, 214, 0.7);
+  }
+}
+@keyframes coach-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .coach-spot,
+  .coach-wait::before {
+    animation: none;
+  }
+}
+.lesson-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lesson {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.lesson.suggested {
+  border-color: var(--accent);
+  background: rgba(90, 143, 214, 0.08);
+}
+.lesson-mark {
+  width: 16px;
+  color: #7ee08a;
+  font-weight: 700;
+}
+.lesson-text {
+  flex: 1;
+  min-width: 0;
+}
+.lesson-title {
+  font-weight: 600;
+}
+.coach.at-top {
+  top: 64px;
+  bottom: auto;
+}

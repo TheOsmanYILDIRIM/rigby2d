@@ -346,11 +346,16 @@ export class App {
    * Opens Rigbytron, the demo project bundled with the editor, playing its animation. It is not
    * tied to a file: Save asks where to keep a copy. `ask` confirms discarding unsaved changes.
    */
+  /** The demo project (Rigbytron) with its images loaded; the open document is not replaced. */
+  async demoDocument() {
+    const blob = await (await fetch(demoUrl)).blob();
+    return io.openProject(DEMO_FILE, platform.memoryFs([new File([blob], DEMO_FILE)]), this.images);
+  }
+
   async openDemo(ask = true) {
     if (ask && !(await this.confirmDiscard())) return;
     try {
-      const blob = await (await fetch(demoUrl)).blob();
-      const { doc, warnings } = await io.openProject(DEMO_FILE, platform.memoryFs([new File([blob], DEMO_FILE)]), this.images);
+      const { doc, warnings } = await this.demoDocument();
       this.loadDocument(doc, DEMO_FILE);
       this.saveTarget = null;
       this.anim = Math.max(0, doc.animations.findIndex((a) => a.name === 'release'));

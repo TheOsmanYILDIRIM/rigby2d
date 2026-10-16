@@ -207,3 +207,17 @@ test('automatic weights pick the nearest bone even far from every bone', () => {
   assert.equal(nearest.bone, 2);
   assert.ok(nearest.weight > 0.95, `weight ${nearest.weight}`);
 });
+
+test('autorig: a hand without a side follows its arm, even across the body', () => {
+  // Layers with no side in their names; the right arm (image left) reaches across the body.
+  const { doc, alphaOf } = figure([
+    ['torso', 0, 230, 110, 170],
+    ['head', 0, 370, 100, 100],
+    ['upperarm', -70, 270, 24, 70, -60],
+    ['forearm', -20, 300, 22, 80, -90],
+    ['hand', 30, 300, 30, 30],
+  ]);
+  const parts = findParts(doc, alphaOf);
+  const side = (n) => parts.find((p) => p.name === n).side;
+  assert.deepEqual([side('upperarm'), side('forearm'), side('hand')], ['r', 'r', 'r']);
+});

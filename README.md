@@ -112,6 +112,7 @@ the [scripting guide](docs/scripting.md).
 - **`.rigby` work file**: one self-contained file with the whole project and its images (like a `.blend`).
 - **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, constraints, events, deform and draw-order keys round-trip losslessly.
 - **Runtimes included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, image sequences, IK, transform, path, physics and slider constraints, plus a reference WebGL renderer (`src/webgl`). A Rust port of it, 3 to 4× faster, powers the Godot runtime (preview, [`runtimes/`](runtimes/)).
+- **Built-in tutorials**: interactive lessons in *Help ▸ Tutorials*, with a practice character included, so beginners learn by doing.
 - **Demo project**: the editor opens with Rigbytron, the Rigby2D mascot, rigged and animated, so you can explore a real rig right away (*File ▸ Open demo (Rigbytron)* reopens it). *File ▸ New sample (robot)* gives a simpler character drawn by the editor.
 
 ## In progress
@@ -183,6 +184,8 @@ npm test
 ```
 
 ## Using Rigby2D
+
+**New to animation tools? Start with the built-in tutorials:** *Help ▸ Tutorials*. They are short, hands-on lessons that point at the buttons to use and move on as you go. They take you from finding your way around to rigging a character with AutoRig, drawing bones by hand, and making your first animation. The first time the editor opens, it offers the tour.
 
 The editor opens with the Rigbytron demo; *File ▸ New game project* or *New film project* starts an empty one.
 

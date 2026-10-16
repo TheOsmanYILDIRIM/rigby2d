@@ -23,6 +23,7 @@ import { closeMenu, h, isMenuOpen, popupMenu, widgetState } from './widgets.js';
 import * as log from './log.js';
 import { toggleLogWindow, windowOpen as logOpen } from './logwindow.js';
 import { Scripts } from './scripting/scriptui.js';
+import { createTutorials } from './tutorials/index.js';
 
 const app = new App();
 // Errors anywhere in the editor, and status messages, go to the log (View ▸ Log).
@@ -137,6 +138,8 @@ function menus() {
     ],
     Scripts: scripts.menu(),
     Help: [
+      { label: 'Tutorials…', action: () => tutorials.open() },
+      'separator',
       h(
         'div',
         { class: 'help' },
@@ -316,6 +319,7 @@ app.viewport = viewport;
 const dopesheet = new Dopesheet(app, $('#dopesheet'), $('#dopesheet canvas'));
 const graph = new GraphEditor(app, $('#graph'), $('#graph canvas'));
 const renderMenuBar = buildMenuBar();
+const tutorials = createTutorials(app, viewport);
 
 let pointersDown = 0;
 let audioPlaying = false;
@@ -415,15 +419,15 @@ function frame(now) {
 
 requestAnimationFrame(frame);
 
-// New users start in the demo project.
-app.openDemo(false);
+// New users start in the demo project, and are offered the tour once.
+app.openDemo(false).then(() => setTimeout(() => tutorials.welcome(), 1200));
 
 // The window starts hidden while the splash screen plays; the splash opens it when done. Show it
 // anyway if the splash never does.
 if (inTauri) setTimeout(() => getCurrentWindow().show().catch(() => {}), 10000);
 
 // Development builds expose the editor for debugging from the console.
-if (import.meta.env.DEV) window.rigby = { app, memoryFs, dopesheet, graph, viewport, scripts, log };
+if (import.meta.env.DEV) window.rigby = { app, memoryFs, dopesheet, graph, viewport, scripts, log, tutorials };
 
 // Scripts in the library load in the background, adding their tools to the Scripts menu.
 if (scripts.library.length) setTimeout(() => scripts.loadAll({ quiet: true }), 1500);
