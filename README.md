@@ -56,6 +56,18 @@ claude mcp add rigby2d -- node /path/to/rigby2d/src/mcp/server.js --root /path/t
 - **Runtime included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, image sequences, IK, transform, path, physics and slider constraints, plus a reference WebGL renderer (`src/webgl`).
 - **Demo project**: the editor opens with Rigbytron, the Rigby2D mascot, rigged and animated, so you can explore a real rig right away (*File ▸ Open demo (Rigbytron)* reopens it). *File ▸ New sample (robot)* gives a simpler character drawn by the editor.
 
+## In progress
+
+Rigby2D is in early alpha. Work under way:
+
+- **Godot and Unity runtimes**: a Rust runtime with full feature support, starting with Godot.
+- **Offline renderer**: export transparent PNG sequences, WebM and MP4.
+- **Audio tracks and lip-sync.**
+- **Cameras and scene composition.**
+- **Facial controllers and pose libraries.**
+- **Resolution and frame-rate controls.**
+- **Animation batch renderer.**
+
 ## Getting started
 
 ### Download
