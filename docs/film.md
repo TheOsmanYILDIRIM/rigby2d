@@ -51,7 +51,7 @@ section sets:
 | --- | --- | --- |
 | PNG sequence | Yes | One numbered PNG per frame (`name_0000.png`, …). |
 | WebM, VP9 | Yes | Alpha is stored as the format expects; plays with transparency in browsers. Audio: Opus. |
-| MP4, H.264 | No | Uses the background color (black when transparent). 23.976 and 29.97 fps are exact. Audio: Opus. |
+| MP4, H.264 | No | Uses the background color (black when transparent). 23.976 and 29.97 fps are exact. Audio: AAC (Opus on systems without an AAC encoder). |
 
 Tick several animations (and skins) to **batch render** them in one go: each combination becomes
 its own file or sequence. With one animation you can render a frame range.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-// Minimal MP4 writer for one H.264 video track and an optional Opus audio track (length-prefixed NAL units from WebCodecs with
+// Minimal MP4 writer for one H.264 video track and an optional AAC (or Opus) audio track (length-prefixed NAL units from WebCodecs with
 // their avcC configuration). The movie header comes first ("fast start"), so playback can begin
 // while the file loads.
 
@@ -116,13 +116,38 @@ export function writeMp4({ width, height, fps, avcC, frames, audio = null }) {
   return out;
 }
 
-/** Track 2: Opus audio, all samples in one chunk at `offset`. */
+/** MPEG-4 descriptor: tag, size (one byte; these are small), body. */
+const descriptor = (tag, ...parts) => {
+  const body = parts.reduce((s, p) => s + p.length, 0);
+  const out = new Uint8Array(2 + body);
+  out[0] = tag;
+  out[1] = body;
+  let o = 2;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
+};
+
+/** esds box for AAC: ES descriptor > decoder config (MPEG-4 audio) > AudioSpecificConfig. */
+function esds(config, bitrate) {
+  const decoderConfig = descriptor(0x04, fields([8, 0x40], [8, 0x15], [24, 0], [32, bitrate], [32, bitrate]), descriptor(0x05, config));
+  return fullBox('esds', 0, 0, descriptor(0x03, fields([16, 0], [8, 0]), decoderConfig, descriptor(0x06, Uint8Array.of(0x02))));
+}
+
+/** Track 2: AAC or Opus audio, all samples in one chunk at `offset`. */
 function audioTrak(audio, offset, movieDuration) {
   const rate = audio.rate;
   const n = audio.frames.length;
   const samples = audio.frames.reduce((s, f) => s + f.samples, 0);
-  const dOps = box('dOps', fields([8, 0], [8, audio.channels], [16, audio.preSkip], [32, rate], [16, 0], [8, 0]));
-  const entry = box('Opus', fields([32, 0], [16, 0], [16, 1]), new Uint8Array(8), fields([16, audio.channels], [16, 16], [16, 0], [16, 0], [32, rate * 65536]), dOps);
+  const seconds = samples / rate;
+  const bytes = audio.frames.reduce((s, f) => s + f.data.length, 0);
+  const codecBox =
+    audio.codec === 'aac'
+      ? esds(audio.config, Math.round((bytes * 8) / Math.max(seconds, 1e-3)))
+      : box('dOps', fields([8, 0], [8, audio.channels], [16, audio.preSkip], [32, rate], [16, 0], [8, 0]));
+  const entry = box(audio.codec === 'aac' ? 'mp4a' : 'Opus', fields([32, 0], [16, 0], [16, 1]), new Uint8Array(8), fields([16, audio.channels], [16, 16], [16, 0], [16, 0], [32, rate * 65536]), codecBox);
   const runs = [];
   for (const f of audio.frames) {
     const last = runs[runs.length - 1];

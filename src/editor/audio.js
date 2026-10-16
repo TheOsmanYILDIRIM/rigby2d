@@ -132,13 +132,21 @@ export async function mixWav(doc, animation, duration) {
   return bytes;
 }
 
+/** Encodes an AudioBuffer as AAC-LC (for MP4), or null when the system has no AAC encoder. */
+export const encodeAac = (buffer) => encodeAudio(buffer, 'aac');
+
+/** Encodes an AudioBuffer as Opus (for WebM), or null when Opus encoding is not available. */
+export const encodeOpus = (buffer) => encodeAudio(buffer, 'opus');
+
 /**
- * Encodes an AudioBuffer as Opus with WebCodecs. Returns { rate, channels, preSkip, head (OpusHead),
- * frames: [{ data, time (ms), samples }] }, or null when Opus encoding is not available.
+ * Encodes an AudioBuffer (48 kHz stereo) with WebCodecs. Returns { codec ('aac' or 'opus'), rate,
+ * channels, preSkip, head (Opus: OpusHead), config (AAC: AudioSpecificConfig),
+ * frames: [{ data, time (ms), samples }] }, or null when the codec is not available.
  */
-export async function encodeOpus(buffer) {
+async function encodeAudio(buffer, codec) {
   if (typeof AudioEncoder !== 'function' || !buffer) return null;
-  const config = { codec: 'opus', sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 };
+  const aac = codec === 'aac';
+  const config = aac ? { codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 192000, aac: { format: 'aac' } } : { codec: 'opus', sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 };
   if (!(await AudioEncoder.isConfigSupported(config).catch(() => ({ supported: false }))).supported) return null;
   const frames = [];
   let head = null;
@@ -149,7 +157,7 @@ export async function encodeOpus(buffer) {
       chunk.copyTo(data);
       const d = meta?.decoderConfig?.description;
       if (d && !head) head = new Uint8Array(d instanceof ArrayBuffer ? d : d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength));
-      frames.push({ data, time: chunk.timestamp / 1000, samples: Math.round(((chunk.duration ?? 20000) * 48000) / 1e6) });
+      frames.push({ data, time: chunk.timestamp / 1000, samples: aac ? 1024 : Math.round(((chunk.duration ?? 20000) * 48000) / 1e6) });
     },
     error: (e) => (failure = e),
   });
@@ -167,6 +175,10 @@ export async function encodeOpus(buffer) {
   await encoder.flush();
   encoder.close();
   if (failure) throw failure;
+  if (aac) {
+    // AudioSpecificConfig: AAC-LC (2), 48 kHz (index 3), 2 channels, when the encoder gives none.
+    return { codec: 'aac', rate: 48000, channels: 2, preSkip: 0, config: head ?? Uint8Array.of(0x11, 0x90), frames };
+  }
   const preSkip = 312;
   if (!head) {
     head = new Uint8Array(19);
@@ -177,5 +189,5 @@ export async function encodeOpus(buffer) {
     v.setUint16(10, preSkip, true);
     v.setUint32(12, 48000, true);
   }
-  return { rate: 48000, channels: 2, preSkip: new DataView(head.buffer, head.byteOffset).getUint16(10, true), head, frames };
+  return { codec: 'opus', rate: 48000, channels: 2, preSkip: new DataView(head.buffer, head.byteOffset).getUint16(10, true), head, frames };
 }

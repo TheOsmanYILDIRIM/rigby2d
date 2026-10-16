@@ -10,7 +10,7 @@ import { WebGLRenderer } from '../../webgl/renderer.js';
 import { animationBounds, outputFrame } from '../output.js';
 import { writeMp4 } from './mp4.js';
 import { writeWebm } from './webm.js';
-import { encodeOpus, mixBuffer } from '../audio.js';
+import { encodeAac, encodeOpus, mixBuffer } from '../audio.js';
 
 export const FORMATS = [
   ['png', 'PNG sequence (transparent)'],
@@ -284,9 +284,15 @@ export async function renderJob(doc, images, job, progress = () => true) {
     for (const e of encoders) if (e.state !== 'closed') e.close();
   }
   color.sort((x, y) => x.time - y.time);
-  // The animation's audio tracks, mixed and encoded as Opus (left out where Opus is unavailable).
+  // The animation's audio tracks, mixed: AAC in MP4 for the widest player support (Opus where the
+  // system has no AAC encoder), Opus in WebM. Left out when neither encoder is available.
   const name = doc.animations[job.animation]?.name;
-  const audio = name ? await encodeOpus(await mixBuffer(doc, name, range.count / s.fps)).catch(() => null) : null;
+  let audio = null;
+  if (name) {
+    const mixed = await mixBuffer(doc, name, range.count / s.fps).catch(() => null);
+    if (mp4) audio = await encodeAac(mixed).catch(() => null);
+    audio ??= await encodeOpus(mixed).catch(() => null);
+  }
   if (mp4) {
     if (!description) throw new Error('the H.264 encoder gave no decoder configuration');
     return [{ name: `${job.name}.mp4`, bytes: writeMp4({ width, height, fps: s.fps, avcC: description, frames: color, audio }) }];

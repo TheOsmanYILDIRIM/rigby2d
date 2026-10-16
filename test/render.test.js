@@ -134,3 +134,16 @@ test('the camera bone frames the shot when the framing follows it', () => {
   assert.deepEqual(cameraFor({ frame: { x: 0, y: 0, scale: 1, camera: true } }, doc, pose, base), { x: 50, y: -20, zoom: 2 });
   assert.equal(cameraFor({ frame: { x: 0, y: 0, scale: 1 } }, doc, pose, base), base);
 });
+
+test('MP4 renders carry AAC audio in an mp4a/esds sample entry', () => {
+  const audio = { codec: 'aac', rate: 48000, channels: 2, preSkip: 0, config: Uint8Array.of(0x11, 0x90), frames: [0, 21.333, 42.667].map((time) => ({ data: new Uint8Array([1, 2, 3]), time, samples: 1024 })) };
+  const frames = [{ data: new Uint8Array([9, 9]), key: true, time: 0 }];
+  const bytes = writeMp4({ width: 16, height: 16, fps: 30, avcC: new Uint8Array(4), frames, audio });
+  const text = new TextDecoder('latin1').decode(bytes);
+  assert.ok(text.includes('mp4a') && text.includes('esds') && !text.includes('dOps'));
+  // The AudioSpecificConfig sits in the decoder-specific descriptor (tag 5, length 2).
+  const at = text.indexOf('\x05\x02\x11\x90');
+  assert.ok(at > text.indexOf('esds'));
+  // Sample table: 3 samples of 1024 at 48 kHz.
+  assert.ok(text.includes('\x00\x00\x00\x03\x00\x00\x04\x00'));
+});
