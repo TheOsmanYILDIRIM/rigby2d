@@ -58,6 +58,24 @@ Rigby2D has two workspaces, switched at the top right of the editor:
 A workspace only changes which tools are shown. Film settings never reach skeleton exports, so game
 files are identical whichever workspace you use. See the [film guide](docs/film.md).
 
+## Python scripting and custom tools
+
+Write Python scripts that edit the open project, and turn them into **custom tools** in the
+**Scripts** menu. Python 3 is built in (Pyodide), so there is nothing to install, and scripts work offline.
+
+```python
+import rigby
+
+@rigby.tool("Mirror selected bones")
+def mirror():
+    for bone in rigby.selected_bones():
+        bone.set(x=-bone.x, rotation=180 - bone.rotation)
+```
+
+Each run is one undo step. A script that fails leaves the project untouched, and its traceback goes
+to the **Log** window (*View ▸ Log*), which also collects the editor's own warnings and errors. See
+the [scripting guide](docs/scripting.md).
+
 ## Features
 
 - **AI assistant support (MCP)**: a built-in [Model Context Protocol](https://modelcontextprotocol.io) server lets assistants such as Claude inspect, validate, sample, edit and convert projects. See [Built for AI assistants](#built-for-ai-assistants-mcp).
@@ -66,6 +84,7 @@ files are identical whichever workspace you use. See the [film guide](docs/film.
 - **Constraints, skins and events**: create IK, transform, path, physics and slider constraints from the selected bones and edit every setting; key their mixes and values in Animate mode; key mesh deformation and image sequence frames; create skins (with skin bones and constraints) and events with keyed values; add bounding box, clipping, point and path attachments.
 - **Animation**: Setup and Animate modes, pose / rotate / translate / scale / shear tools, key buttons and optional auto key, switchable shortcut presets.
 - **Film output** (Film workspace): resolution and frame rate presets (23.976, 24, 25 fps; 4K, 2K Scope and Flat, Full HD, vertical, square), transparent or colored background, automatic or fixed framing, timecode, audio tracks with lip-sync; render transparent PNG sequences, WebM (with alpha) and MP4, one animation or a batch of animations and skins. See the [film guide](docs/film.md).
+- **Python scripting**: custom tools in the Scripts menu, a script editor, and a log window with tracebacks. See the [scripting guide](docs/scripting.md).
 - **Pose library and face controls**: save poses (with mouth-shape image swaps), apply them at any amount or as keys, and drive faces with sliders that blend between poses.
 - **Dopesheet and graph editor**: multi-key selection, moving and retiming keys, curve presets, bezier handle editing, image-swap keys.
 - **WebGL viewport** with a Canvas 2D fallback (*View* menu).
@@ -253,12 +272,13 @@ src/editor/     Editor UI: viewport, tree, properties, dopesheet, graph editor, 
 src/webgl/      Reference WebGL renderer for the runtime
 src/splash/     Splash screen (plays the Rigbytron animation with the runtime)
 src/mcp/        Model Context Protocol server for AI assistants
+src/editor/scripting/  Python scripting: the rigby module, script host and script editor
 runtimes/       Rust runtime and the Godot 4 node (preview); see runtimes/README.md
 branding/       Logo, lockups, icons and Rigbytron (proprietary, see TRADEMARKS.md)
 examples/       WebGL player example
 src-tauri/      Native desktop shell (editor and splash windows, file dialog/fs plugins only)
 test/           node:test suites
-docs/           Screenshot, the film guide and the MCP server guide
+docs/           Screenshot and the film, scripting and MCP server guides
 ```
 
 ## Contributing
@@ -278,6 +298,9 @@ at your option. © 2026 [jaisurya-dev-art](https://github.com/jaisurya-dev-art)
 Unless you state otherwise, any contribution you submit for inclusion in Rigby2D is licensed under
 both licenses as above, without any additional terms or conditions.
 
+The editor distributes Pyodide and CPython for Python scripting under their own licenses; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Trademarks
 
 **Rigby2D**, **Hoverlabs** and **Rigbytron**, and the Rigby2D logo, lockups, icons and the Rigbytron
@@ -293,4 +316,4 @@ Rigby2D reads and writes the skeleton JSON, binary `.skel` and texture atlas fil
 - **JSON and atlas formats:** implemented from publicly available documentation.
 - **Binary `.skel` format:** implemented from the publicly documented binary layout of earlier versions and by comparing JSON and binary exports of the same skeleton (black-box observation of exported data).
 
-No third-party source code, runtimes, editor files or assets are used or distributed with Rigby2D. Compatibility with files from any particular editor or runtime version is provided as-is and is not guaranteed.
+No source code, runtimes, editor files or assets of other animation software are used or distributed with Rigby2D. Compatibility with files from any particular editor or runtime version is provided as-is and is not guaranteed.

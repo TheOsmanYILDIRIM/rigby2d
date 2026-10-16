@@ -148,6 +148,7 @@ export function popupMenu(x, y, items) {
         'button',
         {
           class: 'item',
+          title: it.title ?? null,
           disabled: !!it.disabled,
           onclick: () => {
             closeMenu();

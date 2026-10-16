@@ -762,3 +762,219 @@ details > summary {
   color: white;
   background: var(--selected);
 }
+
+/* ---- status bar log button ---- */
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+#status-log {
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--weak);
+  background: none;
+  border: 1px solid transparent;
+}
+#status-log:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+#status-log.has-errors {
+  color: #ff8a80;
+  border-color: #6b2b27;
+  background: #3a1d1b;
+}
+
+/* ---- floating windows (log, script editor) ---- */
+.float-window {
+  position: fixed;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  min-width: 320px;
+  min-height: 160px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  resize: both;
+  overflow: hidden;
+  user-select: text;
+}
+.float-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 10px;
+  background: var(--widget);
+  cursor: move;
+  user-select: none;
+}
+.float-header button {
+  padding: 0 6px;
+  background: none;
+}
+.float-spacer {
+  flex: 1;
+}
+
+/* ---- log ---- */
+.log-window {
+  right: 16px;
+  bottom: 40px;
+  width: min(760px, calc(100vw - 32px));
+  height: min(360px, calc(100vh - 120px));
+}
+.log-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.log-toolbar input[type='search'] {
+  width: 160px;
+}
+.log-list {
+  flex: 1;
+  overflow: auto;
+  padding: 2px 0;
+  font: 12px ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+.log-entry {
+  padding: 1px 8px;
+  border-left: 3px solid transparent;
+}
+.log-entry > summary {
+  cursor: pointer;
+}
+.log-entry > summary,
+div.log-entry {
+  display: flex;
+  gap: 8px;
+}
+.log-entry > summary::before {
+  content: '▸';
+  color: var(--weak);
+}
+.log-entry[open] > summary::before {
+  content: '▾';
+}
+.log-time,
+.log-source {
+  color: var(--weak);
+  flex: none;
+}
+.log-source {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.log-message {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.log-debug .log-message {
+  color: var(--weak);
+}
+.log-warn {
+  border-left-color: #c9a227;
+  background: rgba(201, 162, 39, 0.07);
+}
+.log-error {
+  border-left-color: #e05a4f;
+  background: rgba(224, 90, 79, 0.09);
+}
+.log-error .log-message {
+  color: #ffb4ad;
+}
+.log-trace {
+  margin: 2px 0 4px 18px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--text);
+}
+.log-filter.log-warn,
+.log-filter.log-error {
+  background: none;
+}
+
+/* ---- script editor ---- */
+.script-window {
+  left: calc(50% - 380px);
+  top: 70px;
+  width: min(760px, calc(100vw - 32px));
+  height: min(520px, calc(100vh - 120px));
+}
+.script-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.script-list {
+  width: 170px;
+  flex: none;
+  overflow: auto;
+  padding: 6px;
+  border-right: 1px solid var(--border);
+}
+.script-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.script-item:hover {
+  background: var(--widget);
+}
+.script-item.selected {
+  background: var(--selected);
+}
+.script-new {
+  width: 100%;
+  margin-top: 6px;
+}
+.script-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.script-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+}
+.script-bar a {
+  color: var(--accent);
+}
+.script-name {
+  width: 220px;
+}
+.script-code {
+  flex: 1;
+  margin: 0 8px;
+  padding: 8px;
+  resize: none;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: 13px/1.45 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  tab-size: 4;
+}
+.script-window button.primary {
+  background: var(--accent);
+  color: white;
+}

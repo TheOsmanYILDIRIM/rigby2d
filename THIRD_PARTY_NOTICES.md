@@ -1,0 +1,22 @@
+# Third-party notices
+
+Rigby2D's own code is MIT OR Apache-2.0. The desktop editor and the web build also distribute the
+components below, unmodified, under their own licenses.
+
+## Pyodide (Python scripting)
+
+The editor ships Pyodide to run Python scripts: the files in `pyodide/` of the build come from the
+[`pyodide`](https://www.npmjs.com/package/pyodide) npm package.
+
+- **Pyodide**: Mozilla Public License 2.0. Source: <https://github.com/pyodide/pyodide>.
+  License text: <https://www.mozilla.org/MPL/2.0/>.
+- **CPython** (compiled to WebAssembly in `pyodide.asm.wasm`, standard library in
+  `python_stdlib.zip`): Python Software Foundation License Version 2. Source:
+  <https://github.com/python/cpython>. License text: <https://docs.python.org/3/license.html>.
+
+The source code of these components, as distributed, is available from the links above and from
+the npm package.
+
+## Godot runtime
+
+The Godot addon includes godot-rust (MPL-2.0); see `THIRD_PARTY_NOTICES.md` inside the addon.

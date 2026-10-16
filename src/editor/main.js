@@ -19,8 +19,14 @@ import { GraphEditor } from './graph.js';
 import { Dopesheet, deleteSelectedKeys, renderControls } from './timeline.js';
 import { Viewport } from './viewport.js';
 import { closeMenu, h, isMenuOpen, popupMenu, widgetState } from './widgets.js';
+import * as log from './log.js';
+import { toggleLogWindow, windowOpen as logOpen } from './logwindow.js';
+import { Scripts } from './scripting/scriptui.js';
 
 const app = new App();
+// Errors anywhere in the editor, and status messages, go to the log (View ▸ Log).
+log.installCapture(app);
+const scripts = new Scripts(app);
 const inTauri = '__TAURI_INTERNALS__' in window;
 const $ = (sel) => document.querySelector(sel);
 
@@ -100,6 +106,8 @@ function menus() {
         }),
         ' Show output frame',
       ),
+      { label: logOpen() ? 'Hide log' : 'Log', action: () => toggleLogWindow() },
+      'separator',
       { label: 'Fit the skeleton in view', shortcut: sc('view.fit'), action: () => (app.frameRequest = true) },
       { label: 'Zoom to 100%', shortcut: sc('view.actual'), action: () => zoomActual() },
       'separator',
@@ -124,6 +132,7 @@ function menus() {
         },
       })),
     ],
+    Scripts: scripts.menu(),
     Help: [
       h(
         'div',
@@ -367,6 +376,10 @@ function frame(now) {
   }
   renderMenuBar();
   $('#status-text').textContent = app.status;
+  const errors = log.unreadErrors;
+  const badge = $('#status-log');
+  badge.textContent = errors ? `⚠ ${errors} error${errors === 1 ? '' : 's'}` : 'Log';
+  badge.classList.toggle('has-errors', errors > 0);
   $('#status-info').textContent = `${app.doc.bones.length} bones · ${app.doc.slots.length} slots · ${Math.round(app.view.zoom * 100)}%`;
 
   app.commitHistory(pointersDown > 0 || isTyping(document.activeElement));
@@ -389,4 +402,9 @@ app.openDemo(false);
 if (inTauri) setTimeout(() => getCurrentWindow().show().catch(() => {}), 10000);
 
 // Development builds expose the editor for debugging from the console.
-if (import.meta.env.DEV) window.rigby = { app, memoryFs, dopesheet, graph, viewport };
+if (import.meta.env.DEV) window.rigby = { app, memoryFs, dopesheet, graph, viewport, scripts, log };
+
+// Scripts in the library load in the background, adding their tools to the Scripts menu.
+if (scripts.library.length) setTimeout(() => scripts.loadAll({ quiet: true }), 1500);
+
+$('#status-log').addEventListener('click', () => toggleLogWindow());
