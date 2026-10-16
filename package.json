@@ -1,7 +1,7 @@
 {
   "name": "rigby2d",
   "version": "0.1.0",
-  "description": "Rigby2D: open-source 2D skeletal animation editor.",
+  "description": "Rigby2D: open-source 2D skeletal animation for games, films and interactive experiences. Built-in MCP server for AI assistants.",
   "license": "MIT OR Apache-2.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
   "bin": {
     "rigby2d-mcp": "src/mcp/server.js"
   },
-  "keywords": ["animation", "skeletal-animation", "2d", "rigging", "gamedev", "tauri", "editor", "mcp"],
+  "keywords": ["animation", "skeletal-animation", "2d", "rigging", "gamedev", "film", "interactive", "tauri", "editor", "mcp", "ai"],
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",

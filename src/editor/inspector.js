@@ -419,10 +419,10 @@ function projectUi(app) {
       'ol',
       null,
       h('li', null, "Import your character's art (PSD layers or PNG parts)."),
-      h('li', null, 'Press B and drag in the canvas to draw bones (select a bone first to chain children).'),
+      h('li', null, 'Pick the Create tool and drag in the canvas to draw bones (select a bone first to chain children).'),
       h('li', null, 'Select an image and set its Bone in the inspector.'),
-      h('li', null, 'Press Tab for Animate mode, move the time cursor, pose bones; keys are set automatically.'),
-      h('li', null, 'File ▸ Save writes skeleton JSON + images; File ▸ Export writes JSON + a packed atlas for game runtimes.'),
+      h('li', null, 'Press Tab for Animate mode, move the time cursor, pose bones and set keys with the key buttons (or turn on Auto key).'),
+      h('li', null, 'File ▸ Save writes the .rigby work file; File ▸ Export writes skeleton JSON or .skel + a packed atlas for runtimes.'),
     ),
   ];
 }

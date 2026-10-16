@@ -3,12 +3,14 @@
 </p>
 
 <p align="center">
-  <strong>Open-source 2D skeletal animation editor for games.</strong><br>
-  Import your art, draw bones, keyframe animations, export JSON + a texture atlas.
+  <strong>Open-source 2D skeletal animation for games, films and interactive experiences.</strong><br>
+  Rig your art with bones and meshes, animate it, and play it anywhere with the included runtime.<br>
+  Built-in <a href="docs/mcp.md">MCP server</a>: AI assistants can inspect, validate and animate your projects.
 </p>
 
 <p align="center">
   <img alt="Status: early alpha" src="https://img.shields.io/badge/status-early%20alpha-orange">
+  <a href="docs/mcp.md"><img alt="MCP server built in" src="https://img.shields.io/badge/MCP-server%20built%20in-7c3aed"></a>
   <a href="#license"><img alt="License: MIT or Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey">
   <img alt="Built with Tauri" src="https://img.shields.io/badge/built%20with-Tauri%202-24c8db">
@@ -20,8 +22,28 @@
   <img src="docs/screenshot.jpg" alt="Rigby2D editor with the Rigbytron demo: viewport, bone hierarchy, inspector and dopesheet" width="800">
 </p>
 
+## Built for AI assistants (MCP)
+
+Rigby2D ships a [Model Context Protocol](https://modelcontextprotocol.io) server, so assistants such
+as Claude can work directly on your animation projects, not just talk about them:
+
+- **Understand a rig**: list bones, slots, skins, constraints and animations with their keys.
+- **Check it**: evaluate any pose with the real runtime, find missing images and export problems.
+- **Animate it**: add bones and animations, set eased keys, image swaps and events.
+- **Ship it**: convert between skeleton JSON 3.8 / 4.2 / 4.3 and binary `.skel`.
+
+Ask things like *"Which images are missing from hero.skel?"* or *"Add a 1-second wave animation to
+rigbytron.rigby that raises the right arm and fires a 'hi' event at the end."* Edits save in the
+file's own format and stay inside the folders you allow. Setup is one line, no packages to install
+([details](docs/mcp.md)):
+
+```bash
+claude mcp add rigby2d -- node /path/to/rigby2d/src/mcp/server.js --root /path/to/your/projects
+```
+
 ## Features
 
+- **AI assistant support (MCP)**: a built-in [Model Context Protocol](https://modelcontextprotocol.io) server lets assistants such as Claude inspect, validate, sample, edit and convert projects. See [Built for AI assistants](#built-for-ai-assistants-mcp).
 - **Art import**: PSD files (every pixel layer becomes a part, layout preserved) or individual PNGs.
 - **Rigging**: draw bone chains directly in the viewport, reparent, attach images to bones, reorder draw order, turn images into meshes (add, move and delete vertices), bind meshes to bones and paint weights, create linked meshes, set up image sequences, and edit bounding box, clipping and path shapes.
 - **Constraints, skins and events**: create IK, transform, path, physics and slider constraints from the selected bones and edit every setting; key their mixes and values in Animate mode; key mesh deformation and image sequence frames; create skins (with skin bones and constraints) and events with keyed values; add bounding box, clipping, point and path attachments.
@@ -32,7 +54,6 @@
 - **`.rigby` work file**: one self-contained file with the whole project and its images (like a `.blend`).
 - **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, constraints, events, deform and draw-order keys round-trip losslessly.
 - **Runtime included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, image sequences, IK, transform, path, physics and slider constraints, plus a reference WebGL renderer (`src/webgl`).
-- **AI assistant support (MCP)**: a built-in [Model Context Protocol](https://modelcontextprotocol.io) server lets assistants such as Claude inspect, validate, sample, edit and convert projects. See [AI assistants (MCP)](#ai-assistants-mcp).
 - **Demo project**: the editor opens with Rigbytron, the Rigby2D mascot, rigged and animated, so you can explore a real rig right away (*File ▸ Open demo (Rigbytron)* reopens it). *File ▸ New sample (robot)* gives a simpler character drawn by the editor.
 
 ## Getting started
@@ -91,11 +112,12 @@ The editor opens with the Rigbytron demo; *File ▸ New* starts an empty project
 3. **Attach images:** select an image and choose its *Bone* in the inspector.
 4. **Animate:** switch to Animate mode, move the time cursor and pose bones, then set keys with the key buttons (or turn on *Auto key*). The *Help* menu lists the keyboard shortcuts.
 5. **Save:** *File ▸ Save* writes your work file `name.rigby`. Reopen it any time with *File ▸ Open*.
-6. **Export:** *File ▸ Export JSON + atlas…* or *Export .skel + atlas* writes the skeleton plus `name.atlas` and `name.png` for game runtimes. *File ▸ Open* also imports existing `.json` / `.skel` exports.
+6. **Export:** *File ▸ Export JSON + atlas…* or *Export .skel + atlas* writes the skeleton plus `name.atlas` and `name.png` for runtimes. *File ▸ Open* also imports existing `.json` / `.skel` exports.
 
-## Playing animations in your game
+## Playing animations in your game or app
 
-Copy `src/core/` into your project (no dependencies). With WebGL, also copy `src/webgl/` for a
+The runtime plays Rigby2D animations in games, interactive web pages, apps and kiosks, anywhere
+JavaScript runs. Copy `src/core/` into your project (no dependencies). With WebGL, also copy `src/webgl/` for a
 ready-made renderer (one batched draw call per texture and blend mode, two-color tint, clipping):
 
 ```js
@@ -130,7 +152,7 @@ blend mode for every visible region and mesh. `examples/webgl.html` is a small p
 
 - **`.rigby`**: Rigby2D's work file: a ZIP holding `project.json` (the complete document) and
   `images/*.png`. Use it for saving work in progress.
-- **Skeleton `.json` / `.skel`**: the interchange formats game runtimes load. Bones are listed so
+- **Skeleton `.json` / `.skel`**: the interchange formats runtimes load. Bones are listed so
   parents come first, slots are in draw order, attachments live in skins, and animations hold bone,
   slot, deform, draw-order, IK and event timelines with keys relative to the setup pose. Images
   come from a `.atlas` texture atlas or loose files in the skeleton's `images` folder.
@@ -145,22 +167,14 @@ blend mode for every visible region and mesh. `examples/webgl.html` is a small p
   limit, mix), so motion can differ slightly from other tools. It simulates while animations play
   (`AnimationState` passes the elapsed time); `pose.resetPhysics()` starts it over.
 
-## AI assistants (MCP)
+## MCP server reference
 
-Rigby2D ships a Model Context Protocol server, so AI assistants can work with your projects: list
-bones and animations, evaluate poses with the runtime, find missing images and other problems, add
-bones and animations, set keys and events, and convert between skeleton formats. It needs only
-Node.js 20+, no extra packages. For Claude Code:
-
-```bash
-claude mcp add rigby2d -- node /path/to/rigby2d/src/mcp/server.js --root /path/to/your/projects
-```
-
-The server only reads and writes inside the `--root` folders, and edits save atomically in the
-file's own format (or to a copy). Tools: `inspect_project`, `describe_rig`, `describe_animation`,
-`sample_pose`, `validate_project`, `convert_project`, `add_bone`, `set_bone_setup`, `add_animation`,
-`set_bone_key`, `delete_bone_key`, `set_attachment_key` and `set_event_key`.
-See [docs/mcp.md](docs/mcp.md) for other clients, the tools and the security model.
+Tools: `inspect_project`, `describe_rig`, `describe_animation`, `sample_pose`, `validate_project`
+and `convert_project` read and convert; `add_bone`, `set_bone_setup`, `add_animation`,
+`set_bone_key`, `delete_bone_key`, `set_attachment_key` and `set_event_key` edit. The server only
+reads and writes inside the `--root` folders, and edits save atomically in the file's own format
+(or to a copy). See [docs/mcp.md](docs/mcp.md) for Claude Desktop and other clients, every tool
+and the security model.
 
 ## Performance benchmark (0.1.0)
 

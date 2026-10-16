@@ -3,7 +3,7 @@
 [package]
 name = "rigby2d"
 version = "0.1.0"
-description = "Rigby2D: open-source 2D skeletal animation editor."
+description = "Rigby2D: open-source 2D skeletal animation for games, films and interactive experiences."
 license = "MIT OR Apache-2.0"
 authors = ["jaisurya-dev-art"]
 repository = "https://github.com/jaisurya-dev-art/rigby2d"

@@ -45,8 +45,8 @@
     "publisher": "jaisurya-dev-art",
     "copyright": "Copyright (c) 2026 jaisurya-dev-art. Code licensed MIT OR Apache-2.0. Rigby2D and Hoverlabs names and logos are trademarks of Hoverlabs.",
     "category": "GraphicsAndDesign",
-    "shortDescription": "2D skeletal animation editor",
-    "longDescription": "Rigby2D by Hoverlabs: open-source 2D skeletal animation editor.",
+    "shortDescription": "2D skeletal animation for games, films and interactive experiences",
+    "longDescription": "Rigby2D by Hoverlabs: open-source 2D skeletal animation for games, films and interactive experiences.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

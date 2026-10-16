@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-// Rigby2D: open-source 2D skeletal animation editor.
+// Rigby2D: open-source 2D skeletal animation for games, films and interactive experiences.
 // Copyright (c) 2026 jaisurya-dev-art and Rigby2D contributors
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
