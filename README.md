@@ -20,6 +20,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/jaisurya-dev-art/rigby2d/releases/latest/download/Rigby2D_x64_portable.exe"><b>Download (portable)</b></a>: the latest portable editor for Windows, no install needed
+</p>
+
+<p align="center">
   <img src="docs/screenshot.jpg" alt="Rigby2D editor with the Rigbytron demo: viewport, bone hierarchy, inspector and dopesheet" width="800">
 </p>
 
@@ -88,7 +92,9 @@ loudness-driven lip-sync (mixed into WebM and MP4 renders), and an animatable ca
 
 ### Download
 
-From the [Releases](https://github.com/jaisurya-dev-art/rigby2d/releases) page:
+**[Download (portable)](https://github.com/jaisurya-dev-art/rigby2d/releases/latest/download/Rigby2D_x64_portable.exe)**: the latest portable editor for Windows, a single `.exe`: download and open, no install.
+
+All files are on the [Releases](https://github.com/jaisurya-dev-art/rigby2d/releases) page:
 
 - **Windows editor**: an installer (MSI or setup `.exe`), or the portable `.exe` that runs without
   installing (needs WebView2, included in Windows 10 and 11).
