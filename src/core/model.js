@@ -9,10 +9,9 @@ import { pruneConstraints } from './constraintdata.js';
 import { Animation, BONE_CHANNELS, SLOT_CHANNELS, emptyBoneTimeline, emptySlotTimeline, makeKey } from './animation.js';
 import { LINEAR, cloneCurve } from './curve.js';
 import { identityTransform } from './math.js';
-
-/** Version tag of the internal snapshot format. */
 import { readControllers, readPoses } from './poses.js';
 
+/** Version tag of the internal snapshot format. */
 export const FORMAT = 'rigby-snapshot/1';
 
 /** How a bone inherits its parent's transform. */
