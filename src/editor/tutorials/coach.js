@@ -12,7 +12,8 @@ import { h } from '../widgets.js';
 import { lintLesson } from './lint.js';
 import { overlaps, resolve } from './targets.js';
 
-const PROGRESS = 'rigby.tutorials';
+// Versioned: when lessons are rebuilt, progress from their old versions no longer counts.
+const PROGRESS = 'rigby.tutorials.v2';
 
 /** Finished lesson ids. */
 export function finishedLessons() {
@@ -20,6 +21,16 @@ export function finishedLessons() {
     return new Set(JSON.parse(localStorage.getItem(PROGRESS) ?? '[]'));
   } catch {
     return new Set();
+  }
+}
+
+/** Forgets which lessons were finished (and that the welcome was shown). */
+export function resetProgress() {
+  try {
+    localStorage.removeItem(PROGRESS);
+    localStorage.removeItem('rigby.welcomed.v2');
+  } catch {
+    // nothing stored
   }
 }
 

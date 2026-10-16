@@ -3,10 +3,10 @@
 
 import { h } from '../widgets.js';
 import { runArena } from './arena.js';
-import { Coach, finishedLessons } from './coach.js';
+import { Coach, finishedLessons, resetProgress } from './coach.js';
 import { LESSONS } from './lessons.js';
 
-const WELCOMED = 'rigby.welcomed';
+const WELCOMED = 'rigby.welcomed.v2';
 
 function modal(build) {
   const overlay = h('div', { class: 'modal-backdrop' });
@@ -81,7 +81,26 @@ export function createTutorials(app, viewport, { refresh = () => {} } = {}) {
         ),
       ),
       h('p', { class: 'small weak' }, 'More lessons are coming: smooth motion and curves, meshes, IK, faces and lip-sync, film rendering, game export, retargeting and scripting.'),
-      h('div', { class: 'modal-buttons' }, h('button', { onclick: close }, 'Close')),
+      h(
+        'div',
+        { class: 'modal-buttons' },
+        done.size
+          ? h(
+              'button',
+              {
+                title: 'Mark every lesson as not done, to take the course again',
+                onclick: () => {
+                  resetProgress();
+                  close();
+                  open();
+                },
+              },
+              'Reset progress',
+            )
+          : null,
+        h('span', { class: 'float-spacer' }),
+        h('button', { onclick: close }, 'Close'),
+      ),
     ]);
   }
 
