@@ -1023,3 +1023,6 @@ div.log-entry {
 .script-reference[hidden] {
   display: none;
 }
+.script-item.unsaved > span:first-child {
+  font-style: italic;
+}

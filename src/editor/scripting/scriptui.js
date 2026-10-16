@@ -11,6 +11,13 @@ import moduleSource from './rigby.py?raw';
 
 const STORAGE = 'rigby.scripts';
 
+/** What ＋ New script starts with. */
+const NEW_SCRIPT = `import rigby
+
+# Run with Ctrl+Enter. Save to library keeps it and loads it with the editor.
+# @rigby.tool("Label") turns a function into a Scripts menu item. See API reference.
+`;
+
 const EXAMPLE = `import rigby
 
 # Scripts edit the open project. A run is one undo step; errors roll it back (see View > Log).
@@ -180,18 +187,34 @@ export class Scripts {
 
 /** The script editor: library on the left, code on the right, Run and Save. */
 function scriptEditor(scripts) {
-  let current = scripts.library[0]?.name ?? null;
+  /** Scripts made with ＋ New that are not saved yet (in memory only, so nothing half-written loads at startup). */
+  const unsaved = [];
+  /** Edited text not saved yet, by script name: switching scripts keeps it. */
+  const drafts = new Map();
+  let current = null;
   const name = h('input', { type: 'text', class: 'script-name', spellcheck: false, placeholder: 'script.py' });
   const code = h('textarea', { class: 'script-code', spellcheck: false, wrap: 'off' });
   const list = h('div', { class: 'script-list' });
   const state = h('span', { class: 'weak' });
   const reference = h('pre', { class: 'script-reference', hidden: true }, REFERENCE);
 
-  const load = (entry) => {
-    current = entry?.name ?? null;
-    name.value = entry?.name ?? 'new_script.py';
-    code.value = entry?.source ?? EXAMPLE;
+  const saved = (n) => scripts.library.find((x) => x.name === n);
+  const names = () => [...scripts.library.map((x) => x.name), ...unsaved];
+  const load = (n) => {
+    current = n;
+    name.value = n ?? '';
+    code.value = drafts.get(n) ?? saved(n)?.source ?? '';
     draw();
+  };
+  /** ＋ New script: a new entry in the list, selected, with its name ready to type over. */
+  const newScript = (source = NEW_SCRIPT) => {
+    let n = 'new_script.py';
+    for (let i = 2; names().includes(n); i++) n = `new_script_${i}.py`;
+    unsaved.push(n);
+    drafts.set(n, source);
+    load(n);
+    name.focus();
+    name.setSelectionRange(0, n.length - 3);
   };
   const fileName = () => {
     const n = name.value.trim() || 'script.py';
@@ -205,9 +228,22 @@ function scriptEditor(scripts) {
     state.textContent = scripts.host.state === 'ready' ? 'Running…' : 'Starting Python…';
     try {
       const n = fileName();
-      if (save && current && current !== n) scripts.remove(current);
+      if (save && n !== current && names().includes(n)) {
+        state.textContent = `A script named ${n} already exists`;
+        return;
+      }
       const r = save ? await scripts.save(n, code.value) : await scripts.run(n, code.value);
-      if (save) current = n;
+      if (save) {
+        // Saved under its (possibly new) name: the old entry or draft goes.
+        if (current && current !== n) {
+          if (saved(current)) scripts.remove(current);
+          drafts.delete(current);
+        }
+        const i = unsaved.indexOf(current);
+        if (i >= 0) unsaved.splice(i, 1);
+        drafts.delete(n);
+        current = n;
+      }
       if (r.ok && !save) scripts.app.setStatus(`Ran ${n}${r.value.length ? `; tools: ${r.value.join(', ')}` : ''}`);
       state.textContent = r.ok ? 'Done' : `Failed: ${r.error}`;
       if (!r.ok) openLogWindow();
@@ -216,6 +252,22 @@ function scriptEditor(scripts) {
       draw();
     }
   };
+  const remove = () => {
+    if (current === null) return;
+    const i = unsaved.indexOf(current);
+    if (i >= 0) unsaved.splice(i, 1);
+    else if (saved(current)) scripts.remove(current);
+    drafts.delete(current);
+    const next = names()[0];
+    if (next) load(next);
+    else newScript();
+  };
+  code.addEventListener('input', () => {
+    if (current === null) return;
+    const before = drafts.has(current);
+    drafts.set(current, code.value);
+    if (!before) draw();
+  });
   code.addEventListener('keydown', (e) => {
     // The editor's shortcuts stay out of the code; Tab indents, Ctrl+Enter runs.
     e.stopPropagation();
@@ -226,22 +278,27 @@ function scriptEditor(scripts) {
       e.preventDefault();
       const { selectionStart: a, selectionEnd: b } = code;
       code.setRangeText('    ', a, b, 'end');
+      drafts.set(current, code.value);
     }
   });
   name.addEventListener('keydown', (e) => e.stopPropagation());
 
   const draw = () => {
-    list.replaceChildren(
-      ...scripts.library.map((s) =>
-        h(
-          'div',
-          { class: `script-item${s.name === current ? ' selected' : ''}`, title: s.path ?? 'Stored in the editor', onclick: () => load(s) },
-          h('span', null, s.name),
-          h('span', { class: 'weak' }, ` ${[...scripts.host.tools.values()].filter((t) => t.script === s.name).length || ''}`),
-        ),
-      ),
-      h('button', { class: 'script-new', onclick: () => load(null) }, '＋ New script'),
-    );
+    const item = (n) => {
+      const tools = [...scripts.host.tools.values()].filter((t) => t.script === n).length;
+      const isNew = unsaved.includes(n);
+      return h(
+        'div',
+        {
+          class: `script-item${n === current ? ' selected' : ''}${isNew ? ' unsaved' : ''}`,
+          title: isNew ? 'New: not saved yet' : (saved(n)?.path ?? 'Stored in the editor') + (drafts.has(n) ? ' (unsaved changes)' : ''),
+          onclick: () => n !== current && load(n),
+        },
+        h('span', null, `${n}${drafts.has(n) ? ' •' : ''}`),
+        h('span', { class: 'weak' }, tools ? ` ${tools}` : ''),
+      );
+    };
+    list.replaceChildren(...names().map(item), h('button', { class: 'script-new', onclick: () => newScript() }, '＋ New script'));
     if (!state.textContent) state.textContent = { idle: 'Python starts on first run', loading: 'Starting Python…', ready: 'Python ready', failed: 'Python failed to start (see Log)' }[scripts.host.state];
   };
 
@@ -274,11 +331,7 @@ function scriptEditor(scripts) {
             {
               'data-run': '',
               title: 'Remove from the library',
-              onclick: () => {
-                if (!current) return;
-                scripts.remove(current);
-                load(scripts.library[0] ?? null);
-              },
+              onclick: remove,
             },
             'Remove',
           ),
@@ -291,7 +344,9 @@ function scriptEditor(scripts) {
   );
   makeDraggable(el, header);
   document.body.append(el);
-  load(scripts.library.find((s) => s.name === current) ?? null);
+  // The first script, or the example when the library is empty.
+  if (scripts.library.length) load(scripts.library[0].name);
+  else newScript(EXAMPLE);
   code.focus();
   return {
     el,
