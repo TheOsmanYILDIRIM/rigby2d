@@ -7,6 +7,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import './style.css';
 import { App, Mode, saveSetting } from './app.js';
 import { ACTIONS, PRESETS, REPEATING, actionFor, actionsFor, comboOf, shortcutLabel } from './keymap.js';
+import { openRenderDialog } from './renderui.js';
 import { memoryFs } from './platform.js';
 import * as edit from './edit.js';
 import * as toolbar from './toolbar.js';
@@ -50,6 +51,8 @@ function menus() {
       { label: 'Export as format 4.2…', action: () => app.exportSkeletonJson('4.2') },
       { label: 'Export as format 4.3…', action: () => app.exportSkeletonJson('4.3') },
       { label: 'Export .skel + atlas (4.3)…', action: () => app.exportSkeletonBinary() },
+      'separator',
+      { label: 'Render animation… (PNG, WebM, MP4)', action: () => openRenderDialog(app) },
       'separator',
       { label: 'Quit', action: () => (inTauri ? getCurrentWindow().close() : window.close()) },
     ],
