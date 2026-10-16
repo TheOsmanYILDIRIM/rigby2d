@@ -6,8 +6,8 @@ assistants such as Claude can inspect, validate, sample, edit and convert Rigby2
 build pose libraries and face controls, add audio and lip-sync, and run Python scripts.
 
 It uses the same runtime as the editor and games (`src/core`) and runs on Node.js 20 or newer. A
-clone of the repository is enough for every tool except `run_script`, which needs Pyodide: run
-`npm install` once in the Rigby2D folder to use it.
+clone of the repository is enough for every tool except `run_script` (Pyodide) and reading PSD
+files (ag-psd): run `npm install` once in the Rigby2D folder to use them.
 
 ## Setup
 
@@ -108,6 +108,17 @@ Times can be given in seconds (`time`) or as a `frame` at the project's frame ra
 | `delete_animation` | Deletes an animation and its audio tracks. |
 | `set_slot` | Sets a slot's setup attachment (or hides it) and color. |
 
+### AutoRig and retargeting
+
+| Tool | What it does |
+| --- | --- |
+| `detect_parts` | Previews AutoRig on a PSD (`psd_file`) or an unrigged `.rigby` (`path`): each layer's body part, its side, and whether that came from the name or the position. Read-only. |
+| `autorig` | Rigs layered artwork: bones, joints where parts meet, weighted meshes for parts that bend, and IK for arms and legs. From `psd_file`, it writes a new `.rigby` to `output`. `roles` and `sides` correct the detection, `meshes` is `deforming`, `all` or `none`, and `ik` turns IK on or off. |
+| `map_bones` | Previews how bones of a `source` character match a target (`path`): by name, similar name, body part, or your `mapping`. Read-only. |
+| `retarget_animation` | Copies one animation (`animation`) or several (`animations`) from `source` to the target. Movement is scaled to the target's size (or `scale`); `mode` is `relative` or `world`. Curves are kept, and slot, event and IK keys follow by name. |
+
+Reading PSD files needs `npm install`. See the [AutoRig and retargeting guide](autorig.md).
+
 ### Python scripts
 
 `run_script` runs a Python script against a project with the same `rigby` module as the editor's
@@ -180,5 +191,5 @@ structured content and as JSON text.
 
 The implementation is in `src/mcp/` (`protocol.js`: protocol handling and transport; `tools.js`:
 reading, validation and conversion; `edits.js`: editing; `film.js`: film, poses and audio;
-`scripting.js`: Python scripts; `server.js`: command line) and is covered by `test/mcp.test.js` and
-`test/mcpfilm.test.js`.
+`rigging.js`: AutoRig and retargeting; `scripting.js`: Python scripts; `server.js`: command line)
+and is covered by `test/mcp.test.js`, `test/mcpfilm.test.js` and `test/mcprig.test.js`.

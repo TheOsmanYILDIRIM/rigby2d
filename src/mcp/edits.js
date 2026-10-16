@@ -54,7 +54,7 @@ function serialize(p) {
   return new TextEncoder().encode(JSON.stringify(json, null, 2));
 }
 
-async function save(ws, p, { output, overwrite = false }) {
+export async function save(ws, p, { output, overwrite = false }) {
   let target = p.file;
   if (output !== undefined) {
     target = await ws.writable(output);

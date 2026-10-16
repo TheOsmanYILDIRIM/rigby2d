@@ -9,6 +9,7 @@ import './style.css';
 import { App, Mode, saveSetting } from './app.js';
 import { ACTIONS, PRESETS, REPEATING, actionFor, actionsFor, comboOf, shortcutLabel } from './keymap.js';
 import { openRenderDialog } from './renderui.js';
+import { openAutoRig, openRetarget } from './rigui.js';
 import { startAudio, stopAudio } from './audio.js';
 import { memoryFs } from './platform.js';
 import * as edit from './edit.js';
@@ -55,6 +56,8 @@ function menus() {
       'separator',
       { label: 'Import PSD…', action: () => app.importPsd() },
       { label: 'Import PNG images…', action: () => app.importImages() },
+      { label: 'AutoRig artwork…', action: () => openAutoRig(app) },
+      { label: 'Retarget animations from another character…', action: () => openRetarget(app) },
       ...(has(app, 'audio') ? [{ label: 'Import audio…', action: () => app.importAudio() }] : []),
       // Film renders first; skeleton exports (for game engines) follow in both workspaces.
       ...(has(app, 'render') ? ['separator', { label: 'Render animation… (PNG, WebM, MP4)', action: () => openRenderDialog(app) }, 'separator'] : []),

@@ -189,7 +189,10 @@ function distanceToSegment(p, a, b) {
 export function autoWeights(points, bones) {
   return points.map((p) => {
     const raw = bones.map(({ bone, from, to }) => ({ bone, weight: 1 / Math.pow(distanceToSegment(p, from, to) + 1, 4) }));
-    return normalizeWeights(raw);
+    // Relative weights first: far from every bone the raw values are tiny, and dropping small
+    // weights before scaling would hand the vertex to the first bone instead of the nearest.
+    const total = raw.reduce((s, w) => s + w.weight, 0);
+    return normalizeWeights(total > 0 ? raw.map((w) => ({ bone: w.bone, weight: w.weight / total })) : raw);
   });
 }
 

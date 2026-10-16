@@ -37,6 +37,8 @@ as Claude can work directly on your animation projects, not just talk about them
 - **Animate it**: add bones and animations, set eased keys, image swaps and events.
 - **Direct it**: set film output and camera framing, build pose libraries and face controls, add
   audio tracks and lip-sync a mouth to dialogue.
+- **Rig it**: AutoRig a layered PSD into an editable rig, and retarget animations between
+  characters.
 - **Script it**: run Python scripts with the editor's `rigby` API for anything else, with
   tracebacks when something goes wrong.
 - **Ship it**: convert between skeleton JSON 3.8 / 4.2 / 4.3 and binary `.skel`.
@@ -62,6 +64,19 @@ Rigby2D has two workspaces, switched at the top right of the editor:
 A workspace only changes which tools are shown. Film settings never reach skeleton exports, so game
 files are identical whichever workspace you use. See the [film guide](docs/film.md).
 
+## Rigby AutoRig and animation retargeting
+
+- **AutoRig**: import a layered PSD and get an editable rig in one step. Rigby2D identifies the
+  body parts from the layer names (or their positions), places joints where the parts meet,
+  builds the skeleton, turns bending parts into weighted meshes (a single arm layer gets an elbow)
+  and adds IK for arms and legs.
+- **Retargeting**: make an animation once and reuse it on other characters. Bones are matched
+  automatically (`L_UpperArm` finds `upperarm_l`), and movement is scaled to each character's
+  size. Different rest poses can be compensated.
+
+Both are in the *File* menu, and the MCP server exposes them too. See the
+[AutoRig and retargeting guide](docs/autorig.md).
+
 ## Python scripting and custom tools
 
 Write Python scripts that edit the open project, and turn them into **custom tools** in the
@@ -84,6 +99,7 @@ the [scripting guide](docs/scripting.md).
 
 - **AI assistant support (MCP)**: a built-in [Model Context Protocol](https://modelcontextprotocol.io) server lets assistants such as Claude inspect, validate, sample, edit and convert projects. See [Built for AI assistants](#built-for-ai-assistants-mcp).
 - **Art import**: PSD files (every pixel layer becomes a part, layout preserved) or individual PNGs.
+- **Rigby AutoRig and retargeting**: rig layered artwork in one step (bones, joints, meshes, IK), and reuse animations across characters with automatic bone mapping and proportion compensation. See the [guide](docs/autorig.md).
 - **Rigging**: draw bone chains directly in the viewport, reparent, attach images to bones, reorder draw order, turn images into meshes (add, move and delete vertices), bind meshes to bones and paint weights, create linked meshes, set up image sequences, and edit bounding box, clipping and path shapes.
 - **Constraints, skins and events**: create IK, transform, path, physics and slider constraints from the selected bones and edit every setting; key their mixes and values in Animate mode; key mesh deformation and image sequence frames; create skins (with skin bones and constraints) and events with keyed values; add bounding box, clipping, point and path attachments.
 - **Animation**: Setup and Animate modes, pose / rotate / translate / scale / shear tools, key buttons and optional auto key, switchable shortcut presets.
@@ -232,13 +248,14 @@ blend mode for every visible region and mesh. `examples/webgl.html` is a small p
 
 ## MCP server reference
 
-30 tools. Read and convert: `inspect_project`, `describe_rig`, `describe_animation`, `sample_pose`,
+34 tools. Read and convert: `inspect_project`, `describe_rig`, `describe_animation`, `sample_pose`,
 `validate_project`, `convert_project`. Edit: `add_bone`, `set_bone_setup`, `rename_bone`,
 `add_animation`, `rename_animation`, `delete_animation`, `set_bone_key`, `delete_bone_key`,
 `set_attachment_key`, `set_event_key`, `set_slot`. Film, poses and audio (`.rigby`): `set_workspace`,
 `set_output`, `save_pose`, `apply_pose`, `delete_pose`, `add_face_control`, `set_face_control`,
 `delete_face_control`, `add_audio_track`, `set_audio_track`, `remove_audio_track`, `lip_sync`.
-Scripts: `run_script` (Python; needs `npm install` once). The server only
+Rigging: `detect_parts`, `autorig`, `map_bones`, `retarget_animation`. Scripts: `run_script`
+(Python; needs `npm install` once, as does reading PSD files). The server only
 reads and writes inside the `--root` folders, and edits save atomically in the file's own format
 (or to a copy). See [docs/mcp.md](docs/mcp.md) for Claude Desktop and other clients, every tool
 and the security model.
@@ -286,7 +303,7 @@ branding/       Logo, lockups, icons and Rigbytron (proprietary, see TRADEMARKS.
 examples/       WebGL player example
 src-tauri/      Native desktop shell (editor and splash windows, file dialog/fs plugins only)
 test/           node:test suites
-docs/           Screenshot and the film, scripting and MCP server guides
+docs/           Screenshot and the film, AutoRig, scripting and MCP server guides
 ```
 
 ## Contributing

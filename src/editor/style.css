@@ -978,3 +978,33 @@ div.log-entry {
   background: var(--accent);
   color: white;
 }
+
+/* ---- AutoRig and retarget dialogs ---- */
+.modal.modal-wide {
+  width: min(720px, calc(100vw - 32px));
+}
+.autorig-table {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.autorig-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.autorig-table th {
+  position: sticky;
+  top: 0;
+  background: var(--widget);
+  text-align: left;
+  font-weight: 600;
+}
+.autorig-table th,
+.autorig-table td {
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+.autorig-table tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02);
+}

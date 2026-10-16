@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import { createServer, serveStdio } from './protocol.js';
 import { createEditTools } from './edits.js';
 import { createFilmTools } from './film.js';
+import { createRiggingTools } from './rigging.js';
 import { createScriptTools } from './scripting.js';
 import { Workspace, createTools } from './tools.js';
 
@@ -75,9 +76,10 @@ async function main() {
       '.rigby work files also hold the workspace (set_workspace), film output settings (set_output), the pose library (save_pose, apply_pose), ' +
       'face controls (add_face_control, set_face_control), and audio tracks with lip-sync (add_audio_track, lip_sync); inspect_project lists them. ' +
       'run_script runs a Python script with the rigby scripting API for anything the other tools do not cover (dry_run: true for queries). ' +
+      'autorig rigs layered artwork (a PSD or an unrigged .rigby) in one step; detect_parts previews it. retarget_animation copies animations between characters (map_bones previews the bone matching). ' +
       'Rendering video is done in the editor (File > Render animation). ' +
       `Files must be inside the workspace: ${workspace.roots.join(', ')}.`,
-    tools: [...createTools(workspace), ...createEditTools(workspace), ...createFilmTools(workspace), ...createScriptTools(workspace)],
+    tools: [...createTools(workspace), ...createEditTools(workspace), ...createFilmTools(workspace), ...createRiggingTools(workspace), ...createScriptTools(workspace)],
     log,
   });
   log(`ready (workspace: ${workspace.roots.join(', ')})`);
