@@ -13,6 +13,7 @@ import { eventUi, skinUi } from './skineventui.js';
 import { dragValue, h, select, textField } from './widgets.js';
 import { FPS_PRESETS, SIZE_PRESETS, formatFps, hexToRgba, rgbaToHex } from './output.js';
 import { posesUi } from './poseui.js';
+import { has } from './workspaces.js';
 
 export function render(app, el) {
   const b = selBone(app.sel);
@@ -405,7 +406,7 @@ function projectUi(app) {
       ? h('div', { class: 'small weak' }, `Imported from skeleton JSON ${app.doc.header.version ?? ''}. Export again with File ▸ Export skeleton JSON.`)
       : null,
     h('hr'),
-    outputUi(app),
+    has(app, 'output') ? outputUi(app) : frameRateUi(app),
     h('hr'),
     h('strong', null, 'Rig'),
     h('div', null, `${app.doc.bones.length} bones · ${app.doc.slots.length} slots · ${app.doc.skins.length + 1} skins`),
@@ -426,6 +427,27 @@ function projectUi(app) {
       h('li', null, 'File ▸ Save writes the .rigby work file; File ▸ Export writes skeleton JSON or .skel + a packed atlas for runtimes.'),
     ),
   ];
+}
+
+/** Game workspace: the animation frame rate (also written to skeleton exports). */
+function frameRateUi(app) {
+  const s = app.doc.settings;
+  const options = FPS_PRESETS.includes(s.fps) ? FPS_PRESETS : [...FPS_PRESETS, s.fps];
+  return h(
+    'div',
+    { class: 'grid' },
+    row(
+      'Frame rate',
+      select(
+        options.map((f) => [f, `${formatFps(f)} fps`]),
+        s.fps,
+        (v) => {
+          s.fps = v;
+          app.changed();
+        },
+      ),
+    ),
+  );
 }
 
 /** Output settings: frame rate, frame size, background and framing for rendering. */

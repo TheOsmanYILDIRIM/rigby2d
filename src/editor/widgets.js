@@ -141,7 +141,7 @@ export function popupMenu(x, y, items) {
   const menu = h(
     'div',
     { class: 'popup' },
-    items.map((it) => {
+    items.filter(Boolean).map((it) => {
       if (it === 'separator') return h('div', { class: 'sep' });
       if (it instanceof Node) return it;
       return h(

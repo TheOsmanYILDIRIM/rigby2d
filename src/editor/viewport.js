@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // The canvas: draws the rig and handles pan/zoom, selection and the transform tools.
 
+import { has, timecode } from './workspaces.js';
 import { animationBounds, describeOutput, outputFrame } from './output.js';
 import { Affine, toAffine, transform, wrapDegrees } from '../core/math.js';
 import { makeBone } from '../core/model.js';
@@ -115,7 +116,7 @@ export class Viewport {
     if (this.drag?.kind === 'create') {
       this.line(this.toScreen(this.drag.start), this.toScreen(this.drag.last), SELECTED, 2);
     }
-    if (app.showFrame) this.drawFrameGate();
+    if (app.showFrame && has(app, 'outputFrame')) this.drawFrameGate();
     this.drawOverlay();
   }
 
@@ -445,7 +446,8 @@ export class Viewport {
     const app = this.app;
     let text = 'SETUP';
     if (app.mode === Mode.Animate) {
-      text = `ANIMATE · ${app.currentAnimation()?.name ?? ''} · frame ${Math.round(app.time * FPS)}`;
+      const at = has(app, 'timecode') ? timecode(app.time, FPS) : `frame ${Math.round(app.time * FPS)}`;
+      text = `ANIMATE · ${app.currentAnimation()?.name ?? ''} · ${at}`;
     }
     text += `   ${TOOLS.find((t) => t.id === app.tool)?.label ?? ''}`;
     const ctx = this.ctx;

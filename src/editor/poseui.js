@@ -7,6 +7,7 @@ import { applyAmount, blendPoses, capturePose } from '../core/poses.js';
 import { Mode } from './app.js';
 import * as edit from './edit.js';
 import { h, select, textField } from './widgets.js';
+import { has } from './workspaces.js';
 
 /** Section state that survives panel rebuilds. */
 const ui = { open: false, name: '', amount: 1, controllerName: '', controllerTo: '' };
@@ -141,10 +142,11 @@ function controllerRow(app, c, index) {
 export function posesUi(app) {
   const doc = app.doc;
   const selected = app.selectedBones().length;
+  const faces = has(app, 'faceControls');
   const details = h(
     'details',
     { class: 'poses', open: ui.open, ontoggle: (e) => (ui.open = e.target.open) },
-    h('summary', null, h('strong', null, 'Poses & face controls'), h('span', { class: 'small weak' }, ` ${doc.poses.length} pose${doc.poses.length === 1 ? '' : 's'}, ${doc.controllers.length} control${doc.controllers.length === 1 ? '' : 's'}`)),
+    h('summary', null, h('strong', null, faces ? 'Poses & face controls' : 'Poses'), h('span', { class: 'small weak' }, ` ${doc.poses.length} pose${doc.poses.length === 1 ? '' : 's'}${faces ? `, ${doc.controllers.length} control${doc.controllers.length === 1 ? '' : 's'}` : ''}`)),
     h(
       'div',
       { class: 'pose-save' },
@@ -163,9 +165,11 @@ export function posesUi(app) {
           doc.poses.map((p, i) => poseRow(app, p, i)),
         ]
       : h('div', { class: 'small weak' }, 'Pose bones (select some to save only those), name the pose and save it. Mouth shapes and other image swaps are saved with it.'),
-    h('div', { class: 'section-title' }, 'Face controls'),
-    doc.controllers.map((c, i) => controllerRow(app, c, i)),
-    doc.poses.length
+    faces && h('div', { class: 'section-title' }, 'Face controls'),
+    faces && doc.controllers.map((c, i) => controllerRow(app, c, i)),
+    !faces
+      ? null
+      : doc.poses.length
       ? h(
           'div',
           { class: 'pose-save' },

@@ -735,3 +735,30 @@ details > summary {
   margin-top: 8px;
   font-weight: 600;
 }
+
+/* Workspace switcher */
+#menubar .spacer {
+  flex: 1;
+}
+#menubar .workspaces {
+  display: flex;
+  margin-right: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+#menubar .workspace-tab {
+  padding: 2px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--weak);
+}
+#menubar .workspace-tab:hover {
+  color: var(--text);
+  background: var(--widget-hover);
+}
+#menubar .workspace-tab.active {
+  color: white;
+  background: var(--selected);
+}

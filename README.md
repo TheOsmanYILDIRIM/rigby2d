@@ -42,6 +42,18 @@ file's own format and stay inside the folders you allow. Setup is one line, no p
 claude mcp add rigby2d -- node /path/to/rigby2d/src/mcp/server.js --root /path/to/your/projects
 ```
 
+## Workspaces: game and film
+
+Rigby2D has two workspaces, switched at the top right of the editor:
+
+- **Game**: rig and animate for game engines and apps, and export skeleton JSON or `.skel` with a
+  texture atlas for the runtimes. The game workflow is unchanged.
+- **Film**: animate for film, video and motion graphics: output resolution and frame rate,
+  timecode, rendering to transparent PNG sequences, WebM and MP4, batch renders, and face controls.
+
+A workspace only changes which tools are shown. Film settings never reach skeleton exports, so game
+files are identical whichever workspace you use. See the [film guide](docs/film.md).
+
 ## Features
 
 - **AI assistant support (MCP)**: a built-in [Model Context Protocol](https://modelcontextprotocol.io) server lets assistants such as Claude inspect, validate, sample, edit and convert projects. See [Built for AI assistants](#built-for-ai-assistants-mcp).
@@ -49,6 +61,8 @@ claude mcp add rigby2d -- node /path/to/rigby2d/src/mcp/server.js --root /path/t
 - **Rigging**: draw bone chains directly in the viewport, reparent, attach images to bones, reorder draw order, turn images into meshes (add, move and delete vertices), bind meshes to bones and paint weights, create linked meshes, set up image sequences, and edit bounding box, clipping and path shapes.
 - **Constraints, skins and events**: create IK, transform, path, physics and slider constraints from the selected bones and edit every setting; key their mixes and values in Animate mode; key mesh deformation and image sequence frames; create skins (with skin bones and constraints) and events with keyed values; add bounding box, clipping, point and path attachments.
 - **Animation**: Setup and Animate modes, pose / rotate / translate / scale / shear tools, key buttons and optional auto key, switchable shortcut presets.
+- **Film output** (Film workspace): resolution and frame rate presets (23.976, 24, 25 fps; 4K, 2K Scope and Flat, Full HD, vertical, square), transparent or colored background, automatic or fixed framing, timecode; render transparent PNG sequences, WebM (with alpha) and MP4, one animation or a batch of animations and skins. See the [film guide](docs/film.md).
+- **Pose library and face controls**: save poses (with mouth-shape image swaps), apply them at any amount or as keys, and drive faces with sliders that blend between poses.
 - **Dopesheet and graph editor**: multi-key selection, moving and retiming keys, curve presets, bezier handle editing, image-swap keys.
 - **WebGL viewport** with a Canvas 2D fallback (*View* menu).
 - **Undo / redo** for every edit, with unsaved-change tracking.
@@ -64,12 +78,11 @@ Rigby2D is in early alpha. Work under way:
 - **Godot and Unity runtimes**: a Rust runtime with full feature support. The Rust core and the
   Godot 4 node (`RigbySkeleton2D`) are available in preview ([`runtimes/`](runtimes/), Windows x64
   download on Releases); Unity is next.
-- **Offline renderer**: export transparent PNG sequences, WebM and MP4.
-- **Audio tracks and lip-sync.**
-- **Cameras and scene composition.**
-- **Facial controllers and pose libraries.**
-- **Resolution and frame-rate controls.**
-- **Animation batch renderer.**
+- **Audio tracks and lip-sync** (Film workspace).
+- **Cameras and scene composition** (Film workspace).
+
+Done in this cycle: the offline renderer (PNG sequences, WebM, MP4), resolution and frame-rate
+controls, the batch renderer, the pose library and face controls.
 
 ## Getting started
 
@@ -126,7 +139,7 @@ npm test
 
 ## Using Rigby2D
 
-The editor opens with the Rigbytron demo; *File ▸ New* starts an empty project.
+The editor opens with the Rigbytron demo; *File ▸ New game project* or *New film project* starts an empty one.
 
 1. **Import art:** *File ▸ Import PSD…* or *File ▸ Import PNG images…*
 2. **Draw bones:** pick the *Create* tool in the viewport toolbar and drag. Select a bone first to chain children from it.
@@ -239,7 +252,7 @@ branding/       Logo, lockups, icons and Rigbytron (proprietary, see TRADEMARKS.
 examples/       WebGL player example
 src-tauri/      Native desktop shell (editor and splash windows, file dialog/fs plugins only)
 test/           node:test suites
-docs/           Screenshot and the MCP server guide
+docs/           Screenshot, the film guide and the MCP server guide
 ```
 
 ## Contributing

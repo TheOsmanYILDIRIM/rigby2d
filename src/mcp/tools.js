@@ -192,6 +192,7 @@ function summary(p) {
     format: p.format,
     version: p.version,
     name: doc.name,
+    workspace: doc.workspace ?? (p.format === 'rigby' ? 'default' : 'game'),
     counts: {
       bones: doc.bones.length,
       slots: doc.slots.length,
@@ -320,6 +321,7 @@ function roundTripData(doc) {
   delete o.settings;
   delete o.poses;
   delete o.controllers;
+  delete o.workspace;
   return normalize(o);
 }
 

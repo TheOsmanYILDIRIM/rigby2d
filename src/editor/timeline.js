@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Bottom panel: animation list, transport controls and the dopesheet (the graph editor is graph.js).
 
+import { has, timecode } from './workspaces.js';
 import { Animation, BONE_CHANNELS, SLOT_CHANNELS } from '../core/animation.js';
 import { listConstraints } from '../core/constraintdata.js';
 import { channelKeys, keyedChannels, setConstraintCurve } from '../core/constraintkeys.js';
@@ -105,7 +106,11 @@ export function renderControls(app, el) {
         }),
         ' Loop',
       ),
-      h('span', { class: 'mono' }, `frame ${String(Math.round(app.time * FPS)).padStart(3, ' ')}  ${app.time.toFixed(2)}s`),
+      h(
+        'span',
+        { class: 'mono', title: has(app, 'timecode') ? 'Timecode (hours:minutes:seconds:frames) and frame' : 'Frame and seconds' },
+        has(app, 'timecode') ? `${timecode(app.time, FPS)}  frame ${Math.round(app.time * FPS)}` : `frame ${String(Math.round(app.time * FPS)).padStart(3, ' ')}  ${app.time.toFixed(2)}s`,
+      ),
       h('span', { class: 'vsep' }),
       h('button', { disabled: app.mode !== Mode.Animate, onclick: () => edit.keySelection(app) }, '◆ Key (K)'),
       h('span', { class: 'vsep' }),

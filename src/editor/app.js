@@ -11,6 +11,7 @@ import { Images } from './images.js';
 import * as io from './io.js';
 import * as platform from './platform.js';
 import * as sample from './sample.js';
+import { WORKSPACES, workspace as workspaceDef } from './workspaces.js';
 import demoUrl from '../../branding/rigbytron/rigbytron.rigby?url&no-inline';
 
 /** The bundled demo project: Rigbytron, the Rigby2D mascot. */
@@ -134,6 +135,20 @@ export class App {
     this.changed();
   }
 
+  /** Workspace of the open project: its own, or the user's default for projects without one. */
+  get workspace() {
+    return this.doc.workspace ?? workspaceDef(loadSetting('rigby.workspace', 'game')).id;
+  }
+
+  /** Switches the project's workspace (which tools are shown; the animation data is untouched). */
+  setWorkspace(id) {
+    const ws = workspaceDef(id);
+    this.doc.workspace = ws.id;
+    saveSetting('rigby.workspace', ws.id);
+    this.showFrame = ws.features.has('outputFrame');
+    this.setStatus(`${ws.label} workspace: ${ws.description}`);
+  }
+
   /** Replaces the document (new/open/sample) and resets editor state. */
   loadDocument(doc, path) {
     this.meshEdit = null;
@@ -141,6 +156,7 @@ export class App {
     this.anim = doc.animations.length ? 0 : null;
     this.doc = doc;
     FPS = doc.settings?.fps ?? 30;
+    this.showFrame = workspaceDef(this.workspace).features.has('outputFrame');
     this.path = path;
     this.sel = null;
     this.multi.clear();
@@ -288,6 +304,8 @@ export class App {
   async openFrom(path, fs) {
     try {
       const { doc, warnings, imported } = await io.openProject(path, fs, this.images);
+      // Skeleton exports come from game workflows: open them in the game workspace.
+      if (imported) doc.workspace = WORKSPACES.game.id;
       // Imported files are not work files: the first Save asks where to put the .rigby file.
       this.loadDocument(doc, imported ? null : path);
       this.saveTarget = !imported && fs.reusable ? { path, fs } : null;
@@ -304,12 +322,18 @@ export class App {
     return platform.confirmDialog('Discard unsaved changes?', 'Unsaved changes');
   }
 
-  async newDocument() {
+  /** Starts an empty project in workspace `id` (default: the last one used). */
+  async newDocument(id) {
     if (!(await this.confirmDiscard())) return;
+    const ws = workspaceDef(id ?? this.workspace);
+    const doc = new Skeleton();
+    doc.workspace = ws.id;
+    doc.settings.fps = ws.fps;
+    saveSetting('rigby.workspace', ws.id);
     this.images.clear();
-    this.loadDocument(new Skeleton(), null);
+    this.loadDocument(doc, null);
     this.saveTarget = null;
-    this.setStatus('New project');
+    this.setStatus(`New ${ws.label.toLowerCase()} project`);
   }
 
   /**

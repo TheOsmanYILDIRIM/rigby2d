@@ -102,6 +102,8 @@ export class Skeleton {
     this.poses = [];
     /** Facial controllers: { name, from (pose name or null = setup pose), to (pose name), value }. */
     this.controllers = [];
+    /** Editor workspace the project is set up for ('game' or 'film'); null = the user's default. */
+    this.workspace = null;
   }
 
   static fromJson(json) {
@@ -656,6 +658,7 @@ function readSkeleton(o) {
   sk.settings = readSettings(o.settings);
   sk.poses = readPoses(o.poses);
   sk.controllers = readControllers(o.controllers);
+  sk.workspace = oneOf(o.workspace, ['game', 'film'], null);
   return sk;
 }
 
@@ -759,5 +762,6 @@ function writeSkeleton(sk) {
   out.settings = raw(sk.settings);
   if (sk.poses.length) out.poses = raw(sk.poses);
   if (sk.controllers.length) out.controllers = raw(sk.controllers);
+  if (sk.workspace) out.workspace = sk.workspace;
   return out;
 }

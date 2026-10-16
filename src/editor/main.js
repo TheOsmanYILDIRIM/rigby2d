@@ -2,6 +2,7 @@
 // Rigby2D: open-source 2D skeletal animation for games, films and interactive experiences.
 // Copyright (c) 2026 jaisurya-dev-art and Rigby2D contributors
 
+import { WORKSPACES, has } from './workspaces.js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import './style.css';
@@ -36,7 +37,8 @@ function zoomActual() {
 function menus() {
   return {
     File: [
-      { label: 'New', action: () => app.newDocument() },
+      { label: 'New game project', action: () => app.newDocument('game') },
+      { label: 'New film project', action: () => app.newDocument('film') },
       { label: 'Open demo (Rigbytron)', action: () => app.openDemo() },
       { label: 'New sample (robot)', action: () => app.newSample() },
       { label: 'Open… (.rigby, or import .json / .skel)', shortcut: 'Ctrl+O', action: () => app.openDialog() },
@@ -46,13 +48,13 @@ function menus() {
       'separator',
       { label: 'Import PSD…', action: () => app.importPsd() },
       { label: 'Import PNG images…', action: () => app.importImages() },
+      // Film renders first; skeleton exports (for game engines) follow in both workspaces.
+      ...(has(app, 'render') ? ['separator', { label: 'Render animation… (PNG, WebM, MP4)', action: () => openRenderDialog(app) }, 'separator'] : []),
       { label: 'Export JSON + atlas…', shortcut: 'Ctrl+E', action: () => app.exportSkeletonJson(app.saveVersion()) },
       { label: 'Export as format 3.8…', action: () => app.exportSkeletonJson('3.8') },
       { label: 'Export as format 4.2…', action: () => app.exportSkeletonJson('4.2') },
       { label: 'Export as format 4.3…', action: () => app.exportSkeletonJson('4.3') },
       { label: 'Export .skel + atlas (4.3)…', action: () => app.exportSkeletonBinary() },
-      'separator',
-      { label: 'Render animation… (PNG, WebM, MP4)', action: () => openRenderDialog(app) },
       'separator',
       { label: 'Quit', action: () => (inTauri ? getCurrentWindow().close() : window.close()) },
     ],
@@ -82,6 +84,7 @@ function menus() {
         }),
         ' Show bones',
       ),
+      has(app, 'outputFrame') &&
       h(
         'label',
         { class: 'item' },
@@ -164,11 +167,18 @@ function buildMenuBar() {
     return btn;
   });
   const mode = h('button', { class: 'mode', onclick: () => app.toggleMode() });
-  bar.replaceChildren(...titles, h('span', { class: 'vsep' }), mode);
+  // Workspace switcher: which tools the editor shows for this project.
+  const tabs = Object.values(WORKSPACES).map((ws) => h('button', { class: 'workspace-tab', title: ws.description, onclick: () => app.workspace !== ws.id && app.setWorkspace(ws.id) }, ws.label));
+  const switcher = h('div', { class: 'workspaces', role: 'tablist', title: 'Workspace' }, tabs);
+  bar.replaceChildren(...titles, h('span', { class: 'vsep' }), mode, h('span', { class: 'spacer' }), switcher);
   return () => {
     mode.textContent = app.mode === Mode.Setup ? 'SETUP' : 'ANIMATE';
     mode.className = `mode ${app.mode}`;
     mode.title = `Switch Setup / Animate${sc('mode.toggle') ? ` (${sc('mode.toggle')})` : ''}`;
+    Object.keys(WORKSPACES).forEach((id, i) => {
+      tabs[i].className = `workspace-tab${app.workspace === id ? ' active' : ''}`;
+      tabs[i].setAttribute('aria-selected', String(app.workspace === id));
+    });
   };
 }
 
