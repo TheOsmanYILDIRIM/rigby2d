@@ -61,7 +61,8 @@ claude mcp add rigby2d -- node /path/to/rigby2d/src/mcp/server.js --root /path/t
 Rigby2D is in early alpha. Work under way:
 
 - **Godot and Unity runtimes**: a Rust runtime with full feature support. The Rust core and the
-  Godot 4 node (`RigbySkeleton2D`) are available in preview in [`runtimes/`](runtimes/); Unity is next.
+  Godot 4 node (`RigbySkeleton2D`) are available in preview ([`runtimes/`](runtimes/), Windows x64
+  download on Releases); Unity is next.
 - **Offline renderer**: export transparent PNG sequences, WebM and MP4.
 - **Audio tracks and lip-sync.**
 - **Cameras and scene composition.**
@@ -73,13 +74,19 @@ Rigby2D is in early alpha. Work under way:
 
 ### Download
 
-Windows installers (MSI and setup `.exe`) are on the
-[Releases](https://github.com/jaisurya-dev-art/rigby2d/releases) page. They are **not code-signed**
-yet, so Windows SmartScreen may warn before running them (*More info ▸ Run anyway*). Each release
-lists the SHA-256 checksums of its files; compare them before installing:
+From the [Releases](https://github.com/jaisurya-dev-art/rigby2d/releases) page:
+
+- **Windows editor**: an installer (MSI or setup `.exe`), or the portable `.exe` that runs without
+  installing (needs WebView2, included in Windows 10 and 11).
+- **Godot runtime** (preview, Windows x64): the `rigby2d-godot-addon` zip for your project, or the
+  `rigby2d-godot-demo` project. See the [Godot guide](runtimes/godot/addons/rigby2d/README.md).
+
+The files are **not code-signed** yet, so Windows SmartScreen may warn before running them
+(*More info ▸ Run anyway*). Each release lists the SHA-256 checksums of its files; compare them
+before running anything:
 
 ```powershell
-Get-FileHash .Rigby2D_0.1.0_x64_en-US.msi -Algorithm SHA256
+Get-FileHash .\Rigby2D_0.2.0_x64_en-US.msi -Algorithm SHA256
 ```
 
 To build from source instead, follow the steps below.
@@ -189,7 +196,7 @@ reads and writes inside the `--root` folders, and edits save atomically in the f
 (or to a copy). See [docs/mcp.md](docs/mcp.md) for Claude Desktop and other clients, every tool
 and the security model.
 
-## Performance benchmark (0.1.0)
+## Performance benchmark (0.2.0)
 
 Measured on a desktop PC in Chromium, Node 22 and Rust (release build); numbers vary with hardware.
 Rigs are described by size: **M** has 67 bones and 276 mesh vertices, **L** 76 bones and 667

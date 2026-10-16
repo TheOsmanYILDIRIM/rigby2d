@@ -6,23 +6,32 @@ them with the Rigby2D runtime written in Rust: meshes and weights, IK, transform
 slider constraints, skins, image sequences, clipping, draw order, events, two-color tint and blend
 modes, with layered tracks, crossfades and queued animations.
 
-> **Preview.** The Godot runtime is new. Prebuilt libraries are not published yet: build the
-> library from source (below) until they are.
+> **Preview.** The Godot runtime is new: try it and report issues. The prebuilt library is for
+> Windows x64; on Linux and macOS, build it from source (below).
 
 ## Install
 
-1. Build the library (needs [Rust](https://rustup.rs)):
+**Download** (Windows x64) from the [Releases](https://github.com/jaisurya-dev-art/rigby2d/releases)
+page:
 
-   ```bash
-   cd runtimes/rust
-   cargo build --release -p rigby-godot
-   ```
+- `rigby2d-godot-addon-<version>-windows-x64.zip`: extract it into your Godot project folder (it
+  contains `addons/rigby2d`), then restart the Godot editor. `RigbySkeleton2D` appears in the
+  *Create New Node* dialog.
+- `rigby2d-godot-demo-<version>-windows-x64.zip`: a ready-to-run project with the addon and
+  Rigbytron, the Rigby2D mascot. Open its folder in Godot and press *Run*.
 
-   This writes `target/release/rigby_godot.dll` (Windows), `librigby_godot.so` (Linux) or
-   `librigby_godot.dylib` (macOS).
-2. Copy the `addons/rigby2d` folder into your Godot project, and the library into
-   `addons/rigby2d/bin/`.
-3. Restart the Godot editor. `RigbySkeleton2D` appears in the *Create New Node* dialog.
+The library is not code-signed yet; compare the SHA-256 checksum listed with the release.
+
+**Build from source** (any platform; needs [Rust](https://rustup.rs)):
+
+```bash
+cd runtimes/rust
+cargo build --release -p rigby-godot
+```
+
+This writes `target/release/rigby_godot.dll` (Windows), `librigby_godot.so` (Linux) or
+`librigby_godot.dylib` (macOS). Copy `runtimes/godot/addons/rigby2d` into your project and the
+library into `addons/rigby2d/bin/`.
 
 ## Use
 

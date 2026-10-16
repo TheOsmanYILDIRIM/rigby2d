@@ -5,7 +5,7 @@ Engine runtimes for Rigby2D animations, built on one Rust core.
 | Folder | What it is | Status |
 | --- | --- | --- |
 | [`rust/rigby-runtime`](rust/rigby-runtime) | The runtime in Rust: loads skeleton `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3) with `.atlas`, evaluates poses, constraints and playback, and builds textured, clipped draw batches. No dependencies. | Complete |
-| [`rust/rigby-godot`](rust/rigby-godot) | Godot 4.3+ GDExtension: the `RigbySkeleton2D` node. | Preview |
+| [`rust/rigby-godot`](rust/rigby-godot) | Godot 4.3+ GDExtension: the `RigbySkeleton2D` node. | Preview: Windows x64 download on [Releases](https://github.com/jaisurya-dev-art/rigby2d/releases); build from source elsewhere |
 | [`godot`](godot) | Godot addon (`addons/rigby2d`, with [user guide](godot/addons/rigby2d/README.md)), demo scene and tests. | Preview |
 | Unity | Planned, on the same Rust core. | Next |
 
@@ -86,3 +86,10 @@ JavaScript runtime (`tests/expected.json`, made by `tests/make_expected.mjs`): b
 several frames of an animation, event and completion timing, tracks, queues and error handling.
 `tests/capture.gd` renders the demo at fixed times into `tests/output/` (run it without
 `--headless`).
+
+### Packaging
+
+`node runtimes/godot/package.mjs windows-x64` (or `linux-x64`, `macos`, after building the library
+on that platform) writes the download zips to `runtimes/godot/dist/`: the addon alone, and the demo
+project with the addon. Test a package by extracting the demo, copying `tests/` into it and running
+the headless tests there.

@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "rigby-godot"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "godot",
  "rigby-runtime",
@@ -143,7 +143,7 @@ dependencies = [
 
 [[package]]
 name = "rigby-runtime"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "unicode-ident"
