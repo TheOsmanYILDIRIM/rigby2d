@@ -21,7 +21,7 @@ export const SIZE_PRESETS = [
 const AUTO_MARGIN = 0.05;
 
 /**
- * World bounds [x0, y0, x1, y1] of everything drawn while animation `anim` (an index, or null for
+ * World bounds [x0, y0, x1, y1] of everything visible while animation `anim` (an index, or null for
  * the setup pose) plays, sampled at `fps`. Null when nothing is drawn.
  */
 export function animationBounds(doc, anim, fps) {
@@ -34,6 +34,7 @@ export function animationBounds(doc, anim, fps) {
     if (a) pose.apply(doc, a, Math.min(a.duration, f / fps), 1);
     pose.updateWorld(doc);
     for (const q of pose.quads(doc)) {
+      if (q.color[3] <= 0) continue; // invisible: does not need to be in frame
       for (const [x, y] of q.positions) {
         if (!b) b = [x, y, x, y];
         else {
