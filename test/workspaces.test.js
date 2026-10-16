@@ -48,3 +48,12 @@ test('workspaces: stored in the work file, invisible to exports', () => {
   rig.settings = { ...rig.settings, width: 2048, height: 858, background: [0, 0, 0, 1] };
   assert.equal(JSON.stringify(writeSkeletonJson(rig, { version: '4.3' }).json), game, 'film project data is never exported');
 });
+
+test('audio tracks: stored in the work file, never exported', () => {
+  const sk = new Skeleton();
+  sk.audio = [{ sound: 'line.wav', animation: 'talk', offset: 0.5, volume: 0.8 }];
+  assert.deepEqual(Skeleton.fromJson(sk.toJson()).audio, sk.audio);
+  const o = sk.toObject();
+  o.audio = [{ sound: 1 }, { sound: 'a.wav', animation: 'x', offset: 'bad' }];
+  assert.deepEqual(Skeleton.fromObject(o).audio, [{ sound: 'a.wav', animation: 'x', offset: 0, volume: 1 }]);
+});

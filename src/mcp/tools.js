@@ -322,6 +322,7 @@ function roundTripData(doc) {
   delete o.poses;
   delete o.controllers;
   delete o.workspace;
+  delete o.audio;
   return normalize(o);
 }
 

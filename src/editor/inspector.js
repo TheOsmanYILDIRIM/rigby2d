@@ -14,6 +14,7 @@ import { dragValue, h, select, textField } from './widgets.js';
 import { FPS_PRESETS, SIZE_PRESETS, formatFps, hexToRgba, rgbaToHex } from './output.js';
 import { posesUi } from './poseui.js';
 import { has } from './workspaces.js';
+import { sounds } from './audio.js';
 
 export function render(app, el) {
   const b = selBone(app.sel);
@@ -407,6 +408,7 @@ function projectUi(app) {
       : null,
     h('hr'),
     has(app, 'output') ? outputUi(app) : frameRateUi(app),
+    has(app, 'audio') ? audioUi(app) : null,
     h('hr'),
     h('strong', null, 'Rig'),
     h('div', null, `${app.doc.bones.length} bones · ${app.doc.slots.length} slots · ${app.doc.skins.length + 1} skins`),
@@ -426,6 +428,27 @@ function projectUi(app) {
       h('li', null, 'Press Tab for Animate mode, move the time cursor, pose bones and set keys with the key buttons (or turn on Auto key).'),
       h('li', null, 'File ▸ Save writes the .rigby work file; File ▸ Export writes skeleton JSON or .skel + a packed atlas for runtimes.'),
     ),
+  ];
+}
+
+/** Film: audio tracks of the current animation (offset and volume). */
+function audioUi(app) {
+  const anim = app.currentAnimation();
+  const tracks = anim ? app.doc.audio.filter((t) => t.animation === anim.name) : [];
+  return [
+    h('hr'),
+    h('strong', null, `Audio${anim ? ` · ${anim.name}` : ''}`),
+    tracks.map((t) =>
+      h(
+        'div',
+        { class: 'grid' },
+        row(t.sound + (sounds.get(t.sound) ? '' : ' (missing)'), h('button', { class: 'small', title: 'Remove this track', onclick: () => ((app.doc.audio = app.doc.audio.filter((x) => x !== t)), app.changed()) }, '✕')),
+        row('Starts at', dragValue(t.offset, (v) => ((t.offset = v), app.changed()), { speed: 0.01, decimals: 3, suffix: ' s' })),
+        row('Volume', dragValue(t.volume * 100, (v) => ((t.volume = Math.max(0, v) / 100), app.changed()), { speed: 1, min: 0, max: 400, decimals: 0, suffix: ' %' })),
+      ),
+    ),
+    h('button', { disabled: !anim, onclick: () => app.importAudio() }, 'Import audio…'),
+    h('div', { class: 'small weak' }, 'Tracks play with the timeline. Face controls can be keyed from their loudness (Lip-sync).'),
   ];
 }
 

@@ -7,6 +7,7 @@ import { describeOutput } from './output.js';
 import * as platform from './platform.js';
 import { FORMATS, canEncodeVideo, frameRange, renderJob } from './render/offline.js';
 import { h, select } from './widgets.js';
+import { mixWav } from './audio.js';
 
 const QUALITIES = [
   ['high', 'High'],
@@ -193,6 +194,13 @@ export function openRenderDialog(app) {
           // A single file goes where it was saved; sequences and batches go next to it.
           const path = list.length === 1 && files.length === 1 ? target.path : pathFor(f.name);
           await target.fs.writeFile(path, f.bytes);
+          written++;
+        }
+        // The animation's audio, mixed, for the editing software.
+        const range = frameRange(doc, job.animation, s.fps, job.start, job.end);
+        const wav = await mixWav(doc, doc.animations[job.animation].name, (range.last + 1) / s.fps);
+        if (wav) {
+          await target.fs.writeFile(pathFor(`${job.name}.wav`), wav);
           written++;
         }
       }

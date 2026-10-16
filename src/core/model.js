@@ -104,6 +104,8 @@ export class Skeleton {
     this.controllers = [];
     /** Editor workspace the project is set up for ('game' or 'film'); null = the user's default. */
     this.workspace = null;
+    /** Audio tracks: { sound (file in the work file), animation (name), offset (s), volume }. */
+    this.audio = [];
   }
 
   static fromJson(json) {
@@ -659,6 +661,9 @@ function readSkeleton(o) {
   sk.poses = readPoses(o.poses);
   sk.controllers = readControllers(o.controllers);
   sk.workspace = oneOf(o.workspace, ['game', 'film'], null);
+  sk.audio = arr(o.audio, 'audio')
+    .filter((t) => t && typeof t.sound === 'string' && typeof t.animation === 'string')
+    .map((t) => ({ sound: t.sound, animation: t.animation, offset: Number.isFinite(t.offset) ? t.offset : 0, volume: Number.isFinite(t.volume) ? Math.max(0, t.volume) : 1 }));
   return sk;
 }
 
@@ -763,5 +768,6 @@ function writeSkeleton(sk) {
   if (sk.poses.length) out.poses = raw(sk.poses);
   if (sk.controllers.length) out.controllers = raw(sk.controllers);
   if (sk.workspace) out.workspace = sk.workspace;
+  if (sk.audio.length) out.audio = raw(sk.audio);
   return out;
 }

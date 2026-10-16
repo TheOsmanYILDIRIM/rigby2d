@@ -8,6 +8,8 @@ import { Mode } from './app.js';
 import * as edit from './edit.js';
 import { h, select, textField } from './widgets.js';
 import { has } from './workspaces.js';
+import { frameLevels, tracksOf } from './audio.js';
+import { FPS } from './app.js';
 
 /** Section state that survives panel rebuilds. */
 const ui = { open: false, name: '', amount: 1, controllerName: '', controllerTo: '' };
@@ -126,7 +128,7 @@ function controllerRow(app, c, index) {
   return h(
     'div',
     { class: 'controller' },
-    h('div', { class: 'controller-head' }, h('strong', null, c.name), h('span', { class: 'small weak' }, ` ${Math.round(c.value * 100)}%`), h('button', { class: 'small', title: 'Delete this controller', onclick: () => (app.doc.controllers.splice(index, 1), app.changed()) }, '✕')),
+    h('div', { class: 'controller-head' }, h('strong', null, c.name), h('span', { class: 'small weak' }, ` ${Math.round(c.value * 100)}%`), h('button', { class: 'small', title: 'Key this control from the loudness of the animation\'s audio (mouth open on speech)', onclick: () => lipSync(app, c) }, 'Lip-sync'), h('button', { class: 'small', title: 'Delete this controller', onclick: () => (app.doc.controllers.splice(index, 1), app.changed()) }, '✕')),
     slider,
     h(
       'div',
@@ -136,6 +138,25 @@ function controllerRow(app, c, index) {
       select(options.slice(1), c.to, (v) => ((c.to = v), app.changed())),
     ),
   );
+}
+
+/** Keys control `c` on every frame of the current animation from its audio's loudness. */
+function lipSync(app, c) {
+  const anim = app.currentAnimation();
+  const track = anim && tracksOf(app.doc, anim.name)[0];
+  if (app.mode !== Mode.Animate || !track) return app.setStatus('Lip-sync needs Animate mode and an audio track on this animation (Import audio)');
+  const to = app.doc.poses.find((p) => p.name === c.to);
+  const from = c.from ? app.doc.poses.find((p) => p.name === c.from) : null;
+  if (!to) return app.setStatus(`Pose '${c.to}' not found`);
+  const frames = Math.max(1, Math.round(anim.duration * FPS)) + 1;
+  const levels = frameLevels(track, FPS, frames);
+  const time = app.time;
+  for (let f = 0; f < frames; f++) {
+    app.time = f / FPS;
+    write(app, blendPoses(app.doc, app.pose(), from, to, levels[f]));
+  }
+  app.time = time;
+  app.setStatus(`Lip-sync: keyed '${c.name}' on ${frames} frames from ${track.sound}`);
 }
 
 /** The inspector section. */

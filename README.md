@@ -61,7 +61,7 @@ files are identical whichever workspace you use. See the [film guide](docs/film.
 - **Rigging**: draw bone chains directly in the viewport, reparent, attach images to bones, reorder draw order, turn images into meshes (add, move and delete vertices), bind meshes to bones and paint weights, create linked meshes, set up image sequences, and edit bounding box, clipping and path shapes.
 - **Constraints, skins and events**: create IK, transform, path, physics and slider constraints from the selected bones and edit every setting; key their mixes and values in Animate mode; key mesh deformation and image sequence frames; create skins (with skin bones and constraints) and events with keyed values; add bounding box, clipping, point and path attachments.
 - **Animation**: Setup and Animate modes, pose / rotate / translate / scale / shear tools, key buttons and optional auto key, switchable shortcut presets.
-- **Film output** (Film workspace): resolution and frame rate presets (23.976, 24, 25 fps; 4K, 2K Scope and Flat, Full HD, vertical, square), transparent or colored background, automatic or fixed framing, timecode; render transparent PNG sequences, WebM (with alpha) and MP4, one animation or a batch of animations and skins. See the [film guide](docs/film.md).
+- **Film output** (Film workspace): resolution and frame rate presets (23.976, 24, 25 fps; 4K, 2K Scope and Flat, Full HD, vertical, square), transparent or colored background, automatic or fixed framing, timecode, audio tracks with lip-sync; render transparent PNG sequences, WebM (with alpha) and MP4, one animation or a batch of animations and skins. See the [film guide](docs/film.md).
 - **Pose library and face controls**: save poses (with mouth-shape image swaps), apply them at any amount or as keys, and drive faces with sliders that blend between poses.
 - **Dopesheet and graph editor**: multi-key selection, moving and retiming keys, curve presets, bezier handle editing, image-swap keys.
 - **WebGL viewport** with a Canvas 2D fallback (*View* menu).
@@ -78,11 +78,11 @@ Rigby2D is in early alpha. Work under way:
 - **Godot and Unity runtimes**: a Rust runtime with full feature support. The Rust core and the
   Godot 4 node (`RigbySkeleton2D`) are available in preview ([`runtimes/`](runtimes/), Windows x64
   download on Releases); Unity is next.
-- **Audio tracks and lip-sync** (Film workspace).
 - **Cameras and scene composition** (Film workspace).
 
 Done in this cycle: the offline renderer (PNG sequences, WebM, MP4), resolution and frame-rate
-controls, the batch renderer, the pose library and face controls.
+controls, the batch renderer, the pose library and face controls, and audio tracks with
+loudness-driven lip-sync.
 
 ## Getting started
 

@@ -69,7 +69,19 @@ The **Poses & face controls** section at the bottom of the inspector:
   up, eyes closed, mouth open. Rotations take the short way round, and image swaps switch at the
   halfway point. In Animate mode, dragging a slider keys the face at the current frame.
 
+## Audio and lip-sync
+
+*File ▸ Import audio* (or *Import audio* in the project panel) adds WAV, MP3, OGG, M4A or FLAC files
+as audio tracks of the current animation. Each track has a start time and volume; tracks play with
+the timeline and are stored inside the `.rigby` file.
+
+**Lip-sync**: the *Lip-sync* button of a face control keys that control on every frame from the
+loudness of the animation's first audio track: a "mouth open" control opens on speech and closes in
+silence. (It follows loudness, not individual phonemes.)
+
+Renders write the animation's audio, mixed, as `<name>.wav` next to the frames or video, ready for
+your video editor.
+
 ## Coming next
 
-Audio tracks with lip-sync, cameras and scene composition. See the README's *In progress*
-section.
+Cameras and scene composition, and audio inside WebM and MP4 renders.

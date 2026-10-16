@@ -11,6 +11,7 @@ import { Images } from './images.js';
 import * as io from './io.js';
 import * as platform from './platform.js';
 import * as sample from './sample.js';
+import { addSound, sounds, stopAudio } from './audio.js';
 import { WORKSPACES, workspace as workspaceDef } from './workspaces.js';
 import demoUrl from '../../branding/rigbytron/rigbytron.rigby?url&no-inline';
 
@@ -303,7 +304,10 @@ export class App {
   /** Opens a .rigby work file, or imports skeleton JSON, from `path` on the file system `fs`. */
   async openFrom(path, fs) {
     try {
-      const { doc, warnings, imported } = await io.openProject(path, fs, this.images);
+      const { doc, warnings, imported, audio } = await io.openProject(path, fs, this.images);
+      stopAudio();
+      sounds.clear();
+      for (const [name, bytes] of audio ?? []) await addSound(name, bytes).catch(() => warnings.push(`sound '${name}' cannot be decoded`));
       // Skeleton exports come from game workflows: open them in the game workspace.
       if (imported) doc.workspace = WORKSPACES.game.id;
       // Imported files are not work files: the first Save asks where to put the .rigby file.
@@ -390,7 +394,9 @@ export class App {
       if (!target) return;
     }
     try {
-      const { warnings } = await io.saveWorkfile(target.path, target.fs, this.doc, this.images);
+      const used = new Set(this.doc.audio.map((t) => t.sound));
+      const audioFiles = [...sounds].filter(([name]) => used.has(name)).map(([name, s]) => ({ path: `audio/${name}`, bytes: s.bytes }));
+      const { warnings } = await io.saveWorkfile(target.path, target.fs, this.doc, this.images, audioFiles);
       await target.fs.finish();
       this.path = target.path;
       this.saveTarget = target.fs.reusable ? target : null;
@@ -441,6 +447,25 @@ export class App {
     } catch (e) {
       this.setStatus(`PSD import failed: ${errorText(e)}`);
     }
+  }
+
+  /** Film: adds sound files as audio tracks of the current animation, starting at frame 0. */
+  async importAudio() {
+    const anim = this.currentAnimation();
+    if (!anim) return this.setStatus('Select an animation first: audio tracks belong to an animation');
+    const files = await this.guard(() => platform.pickImportFiles('Audio', ['wav', 'mp3', 'ogg', 'm4a', 'aac', 'flac'], true));
+    if (!files?.length) return;
+    for (const f of files) {
+      const name = io.basename(f.name);
+      try {
+        await addSound(name, f.bytes);
+        this.doc.audio.push({ sound: name, animation: anim.name, offset: 0, volume: 1 });
+      } catch (e) {
+        this.setStatus(`Cannot decode ${name}: ${errorText(e)}`);
+        return;
+      }
+    }
+    this.setStatus(`Added ${files.length} audio track(s) to '${anim.name}'`);
   }
 
   async importImages() {

@@ -9,6 +9,7 @@ import './style.css';
 import { App, Mode, saveSetting } from './app.js';
 import { ACTIONS, PRESETS, REPEATING, actionFor, actionsFor, comboOf, shortcutLabel } from './keymap.js';
 import { openRenderDialog } from './renderui.js';
+import { startAudio, stopAudio } from './audio.js';
 import { memoryFs } from './platform.js';
 import * as edit from './edit.js';
 import * as toolbar from './toolbar.js';
@@ -48,6 +49,7 @@ function menus() {
       'separator',
       { label: 'Import PSD…', action: () => app.importPsd() },
       { label: 'Import PNG images…', action: () => app.importImages() },
+      ...(has(app, 'audio') ? [{ label: 'Import audio…', action: () => app.importAudio() }] : []),
       // Film renders first; skeleton exports (for game engines) follow in both workspaces.
       ...(has(app, 'render') ? ['separator', { label: 'Render animation… (PNG, WebM, MP4)', action: () => openRenderDialog(app) }, 'separator'] : []),
       { label: 'Export JSON + atlas…', shortcut: 'Ctrl+E', action: () => app.exportSkeletonJson(app.saveVersion()) },
@@ -299,6 +301,7 @@ const graph = new GraphEditor(app, $('#graph'), $('#graph canvas'));
 const renderMenuBar = buildMenuBar();
 
 let pointersDown = 0;
+let audioPlaying = false;
 /** Element under the last press: its panel must not be rebuilt before the release, or the click is lost. */
 let pressTarget = null;
 window.addEventListener('pointerdown', (e) => {
@@ -335,6 +338,11 @@ function frame(now) {
   lastFrame = now;
   app.advancePlayback(dt);
   app.sanitize();
+  // Audio tracks (Film) start with playback, and restart when the time jumps or loops.
+  const jumped = app.playing && (!audioPlaying || app.anim !== lastAnim || app.time < lastTime || app.time - lastTime > 0.25);
+  if (jumped && has(app, 'audio') && app.playDirection > 0) startAudio(app.doc, app.currentAnimation()?.name, app.time);
+  if (!app.playing && audioPlaying) stopAudio();
+  audioPlaying = app.playing && app.playDirection > 0;
   if (app.time !== lastTime || app.anim !== lastAnim) {
     if (!app.playing) app.discardPending(app.anim !== lastAnim ? 'animation changed' : 'time changed');
     lastTime = app.time;

@@ -102,9 +102,10 @@ export async function openProject(path, fs, images) {
  * `.rigby` work file: a ZIP holding `project.json` (the complete editor document) and every image
  * as `images/<name>.png`. It keeps everything, including data the export formats cannot hold.
  */
-export async function saveWorkfile(path, fs, doc, images) {
+/** `extra`: more files to store, [{ path, bytes }] (sounds as audio/<name>). */
+export async function saveWorkfile(path, fs, doc, images, extra = []) {
   const enc = new TextEncoder();
-  const entries = [{ path: 'project.json', bytes: enc.encode(doc.toJson()) }];
+  const entries = [{ path: 'project.json', bytes: enc.encode(doc.toJson()) }, ...extra];
   const warnings = [];
   for (const name of new Set([...usedImages(doc), ...doc.images.map((i) => i.name)])) {
     const canvas = images.get(name);
@@ -135,7 +136,8 @@ async function openWorkfile(path, fs, images) {
   images.clear();
   for (const [name, canvas] of loaded) images.insert(name, canvas);
   for (const name of usedImages(doc)) if (!loaded.has(name)) warnings.push(`image '${name}' is missing`);
-  return { doc, warnings };
+  const audio = new Map([...files].filter(([k]) => k.startsWith('audio/')).map(([k, bytes]) => [k.slice('audio/'.length), bytes]));
+  return { doc, warnings, audio };
 }
 
 /** Every image referenced by an attachment in any skin. */
