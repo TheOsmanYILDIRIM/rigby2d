@@ -23,6 +23,30 @@ def mirror():
         bone.set(x=-bone.x, rotation=180 - bone.rotation)
 `;
 
+/** The scripting API at a glance, shown inside the script editor (the full guide is docs/scripting.md). */
+const REFERENCE = `import rigby
+
+PROJECT   rigby.info()  rigby.fps()  rigby.mode() / set_mode('setup'|'animate')
+          rigby.time() / set_time(seconds)
+BONES     rigby.bones()  rigby.bone(name)  rigby.selected_bones()  rigby.select(*bones)
+          rigby.add_bone(name, parent='root', x=0, y=0, rotation=0, length=0)
+  bone.x .y .rotation .scale_x .scale_y .shear_x .shear_y .length .name   (setup pose)
+  bone.set(x=.., rotation=..)   bone.parent   bone.children   bone.world
+  bone.key(channel, value, time=None, animation=None, curve='linear')
+  bone.keys(channel)   bone.delete_key(channel, time=None)
+  channels: 'rotate' (degrees added), 'translate' / 'shear' ((x, y) added), 'scale' ((x, y) factors)
+  curves: 'linear' 'stepped' 'ease_in' 'ease_out' 'ease_in_out'
+SLOTS     rigby.slots()  rigby.slot(name)   slot.bone  slot.attachments
+          slot.attachment = name | None     slot.color = (r, g, b, a)
+ANIMATION rigby.animations()  rigby.animation(name)  rigby.add_animation(name, duration=0)
+          rigby.current_animation()   anim.duration   anim.key(bone, channel, time, value)   anim.open()
+OUTPUT    print(...)  rigby.log / warn / error(...)  rigby.status(text)
+TOOLS     @rigby.tool("Label", description="...")  def fn(): ...   adds fn to the Scripts menu
+ERRORS    rigby.RigbyError: unknown names, invalid values
+
+One run (or one tool run) is one undo step; if it raises, the project is left as it was.
+Full guide: docs/scripting.md in the Rigby2D repository.`;
+
 /** Pyodide, bundled with the editor and loaded on first use. */
 async function loadRuntime() {
   const base = `${import.meta.env.BASE_URL}pyodide/`;
@@ -161,6 +185,7 @@ function scriptEditor(scripts) {
   const code = h('textarea', { class: 'script-code', spellcheck: false, wrap: 'off' });
   const list = h('div', { class: 'script-list' });
   const state = h('span', { class: 'weak' });
+  const reference = h('pre', { class: 'script-reference', hidden: true }, REFERENCE);
 
   const load = (entry) => {
     current = entry?.name ?? null;
@@ -238,6 +263,7 @@ function scriptEditor(scripts) {
         { class: 'script-main' },
         h('div', { class: 'script-bar' }, name, h('span', { class: 'float-spacer' }), state),
         code,
+        reference,
         h(
           'div',
           { class: 'script-bar' },
@@ -257,7 +283,8 @@ function scriptEditor(scripts) {
             'Remove',
           ),
           h('span', { class: 'float-spacer' }),
-          h('a', { href: 'https://github.com/jaisurya-dev-art/rigby2d/blob/main/docs/scripting.md', target: '_blank', rel: 'noopener' }, 'API reference'),
+          // Built in rather than a web link: the desktop app has no browser to open links in.
+          h('button', { title: 'Show or hide the scripting API', onclick: () => (reference.hidden = !reference.hidden) }, 'API reference'),
         ),
       ),
     ),

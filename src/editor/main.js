@@ -185,7 +185,12 @@ function buildMenuBar() {
   const tabs = Object.values(WORKSPACES).map((ws) => h('button', { class: 'workspace-tab', title: ws.description, onclick: () => app.workspace !== ws.id && app.setWorkspace(ws.id) }, ws.label));
   const switcher = h('div', { class: 'workspaces', role: 'tablist', title: 'Workspace' }, tabs);
   bar.replaceChildren(...titles, h('span', { class: 'vsep' }), mode, h('span', { class: 'spacer' }), switcher);
+  // Called every frame: touch the DOM only when something shown changed.
+  let shown = '';
   return () => {
+    const state = `${app.mode}|${app.workspace}|${app.keymap}`;
+    if (state === shown) return;
+    shown = state;
     mode.textContent = app.mode === Mode.Setup ? 'SETUP' : 'ANIMATE';
     mode.className = `mode ${app.mode}`;
     mode.title = `Switch Setup / Animate${sc('mode.toggle') ? ` (${sc('mode.toggle')})` : ''}`;
@@ -325,11 +330,15 @@ window.addEventListener('pointercancel', () => (pointersDown = Math.max(0, point
 window.addEventListener('blur', () => (pointersDown = 0));
 
 /** Panels are rebuilt when the app changes, except while the user is editing a field or pressing in them. */
+/**
+ * Panels are rebuilt when the app changes. While playing, the time moves every frame: panels that
+ * show it (`every`: at most every that many ms) follow it; the others wait for a real change.
+ */
 const panels = [
   { el: $('#tree'), render: tree.render, built: -1 },
-  { el: $('#properties .content'), render: inspector.render, built: -1 },
+  { el: $('#properties .content'), render: inspector.render, built: -1, every: 200 },
   { el: $('#viewbar'), render: toolbar.render, built: -1 },
-  { el: $('#controls'), render: renderControls, built: -1 },
+  { el: $('#controls'), render: renderControls, built: -1, every: 66 },
 ];
 
 function editingIn(el) {
@@ -344,6 +353,11 @@ let lastTitle = '';
 
 let lastTime = 0;
 let lastAnim = null;
+
+/** Sets an element's text only when it differs (the frame loop runs 60 times a second). */
+function setText(el, text) {
+  if (el.textContent !== text) el.textContent = text;
+}
 
 function frame(now) {
   const dt = (now - lastFrame) / 1000;
@@ -372,18 +386,22 @@ function frame(now) {
     dopesheet.draw();
   }
   for (const p of panels) {
-    if (p.built !== app.version && !editingIn(p.el)) {
+    const changed = p.built !== app.version;
+    const timeMoved = p.every && p.builtTime !== app.timeVersion && now - (p.builtAt ?? 0) >= p.every;
+    if ((changed || timeMoved) && !editingIn(p.el)) {
       p.built = app.version;
+      p.builtTime = app.timeVersion;
+      p.builtAt = now;
       p.render(app, p.el);
     }
   }
   renderMenuBar();
-  $('#status-text').textContent = app.status;
+  setText($('#status-text'), app.status);
   const errors = log.unreadErrors;
   const badge = $('#status-log');
-  badge.textContent = errors ? `⚠ ${errors} error${errors === 1 ? '' : 's'}` : 'Log';
+  setText(badge, errors ? `⚠ ${errors} error${errors === 1 ? '' : 's'}` : 'Log');
   badge.classList.toggle('has-errors', errors > 0);
-  $('#status-info').textContent = `${app.doc.bones.length} bones · ${app.doc.slots.length} slots · ${Math.round(app.view.zoom * 100)}%`;
+  setText($('#status-info'), `${app.doc.bones.length} bones · ${app.doc.slots.length} slots · ${Math.round(app.view.zoom * 100)}%`);
 
   app.commitHistory(pointersDown > 0 || isTyping(document.activeElement));
   const title = app.title();

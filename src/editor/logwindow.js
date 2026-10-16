@@ -44,10 +44,7 @@ export function openLogWindow() {
       }),
       ` ${level}`,
     );
-  const visible = () => {
-    const q = view.search.toLowerCase();
-    return entries.filter((e) => view.levels.has(e.level) && (!q || `${e.source} ${e.message} ${e.trace ?? ''}`.toLowerCase().includes(q)));
-  };
+  const visible = () => entries.filter(matches);
   const row = (e) =>
     e.trace
       ? h(
@@ -58,11 +55,30 @@ export function openLogWindow() {
         )
       : h('div', { class: `log-entry log-${e.level}` }, ...line(e));
   const line = (e) => [h('span', { class: 'log-time' }, stamp(e.time)), h('span', { class: 'log-source' }, e.source), h('span', { class: 'log-message' }, e.message)];
+  const matches = (e) => {
+    const q = view.search.toLowerCase();
+    return view.levels.has(e.level) && (!q || `${e.source} ${e.message} ${e.trace ?? ''}`.toLowerCase().includes(q));
+  };
+  let shownCount = 0;
   const redraw = () => {
     const shown = visible();
     list.replaceChildren(...shown.map(row));
-    count.textContent = `${shown.length} of ${entries.length}`;
+    shownCount = shown.length;
+    count.textContent = `${shownCount} of ${entries.length}`;
     if (view.follow) list.scrollTop = list.scrollHeight;
+  };
+  /** A new entry: one row added (the oldest dropped past the log's limit), nothing rebuilt. */
+  const append = (e) => {
+    if (matches(e)) {
+      list.append(row(e));
+      shownCount++;
+      while (list.childElementCount > entries.length) {
+        list.firstElementChild.remove();
+        shownCount--;
+      }
+      if (view.follow) list.scrollTop = list.scrollHeight;
+    }
+    count.textContent = `${shownCount} of ${entries.length}`;
   };
   list.addEventListener('scroll', () => (view.follow = list.scrollTop + list.clientHeight >= list.scrollHeight - 4));
 
@@ -112,30 +128,43 @@ export function openLogWindow() {
   document.body.append(el);
   win = {
     el,
-    unsubscribe: subscribe(() => redraw()),
+    // null means the log was cleared.
+    unsubscribe: subscribe((e) => (e ? append(e) : redraw())),
   };
   redraw();
 }
 
-/** Lets a floating window be moved by its header (it stays inside the editor window). */
+/**
+ * Lets a floating window be moved by its header (it stays inside the editor window). While
+ * dragging it moves with a transform on its own compositor layer, so neither the window nor its
+ * shadow is repainted on every pointer move; its position is written once when the drag ends.
+ */
 export function makeDraggable(el, handle) {
   handle.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('button, input, select')) return;
+    if (e.button !== 0 || e.target.closest('button, input, select, a')) return;
+    e.preventDefault();
     const r = el.getBoundingClientRect();
-    const dx = e.clientX - r.left;
-    const dy = e.clientY - r.top;
-    handle.setPointerCapture(e.pointerId);
+    Object.assign(el.style, { left: `${r.left}px`, top: `${r.top}px`, right: 'auto', bottom: 'auto', willChange: 'transform' });
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    let dx = 0;
+    let dy = 0;
     const move = (m) => {
-      el.style.left = `${Math.max(0, Math.min(window.innerWidth - 80, m.clientX - dx))}px`;
-      el.style.top = `${Math.max(0, Math.min(window.innerHeight - 30, m.clientY - dy))}px`;
-      el.style.right = 'auto';
-      el.style.bottom = 'auto';
+      dx = clamp(m.clientX - e.clientX, -r.left, window.innerWidth - 80 - r.left);
+      dy = clamp(m.clientY - e.clientY, -r.top, window.innerHeight - 30 - r.top);
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
     };
-    const up = () => {
+    const end = () => {
       handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', up);
+      for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.removeEventListener(type, end);
+      Object.assign(el.style, { left: `${r.left + dx}px`, top: `${r.top + dy}px`, transform: '', willChange: '' });
     };
+    try {
+      handle.setPointerCapture(e.pointerId);
+    } catch {
+      // The pointer is already gone (a very quick click): nothing to drag.
+      return end();
+    }
     handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', up);
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.addEventListener(type, end);
   });
 }

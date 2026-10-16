@@ -1008,3 +1008,18 @@ div.log-entry {
 .autorig-table tr:nth-child(even) td {
   background: rgba(255, 255, 255, 0.02);
 }
+.script-reference {
+  max-height: 45%;
+  overflow: auto;
+  margin: 6px 8px 0;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: 12px/1.45 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  white-space: pre;
+  user-select: text;
+}
+.script-reference[hidden] {
+  display: none;
+}

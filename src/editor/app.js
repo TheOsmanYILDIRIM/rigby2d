@@ -117,6 +117,8 @@ export class App {
     this.frameRequest = false;
     /** Bumped on every state change so panels know to refresh. */
     this.version = 0;
+    /** Bumped when playback moves the time: only time-dependent views need to follow it. */
+    this.timeVersion = 0;
     this.history = { undo: [], redo: [] };
     /** JSON of the last committed document state, used to coalesce edits into undo steps. */
     this.baseline = this.doc.toSnapshot();
@@ -589,7 +591,10 @@ export class App {
       for (const e of anim.events) if (crossed(e)) this.firedEvents.push({ name: e.name, at: now });
       this.firedEvents = this.firedEvents.filter((f) => now - f.at < 1200).slice(-6);
     }
-    this.changed();
+    // Only the time moved: the document is unchanged, so panels that do not show the time are
+    // not rebuilt (rebuilding them every frame made the editor lag while playing).
+    this.timeVersion++;
+    if (!this.playing) this.changed();
   }
 
   title() {
