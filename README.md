@@ -53,14 +53,15 @@ claude mcp add rigby2d -- node /path/to/rigby2d/src/mcp/server.js --root /path/t
 - **Undo / redo** for every edit, with unsaved-change tracking.
 - **`.rigby` work file**: one self-contained file with the whole project and its images (like a `.blend`).
 - **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, constraints, events, deform and draw-order keys round-trip losslessly.
-- **Runtime included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, image sequences, IK, transform, path, physics and slider constraints, plus a reference WebGL renderer (`src/webgl`).
+- **Runtimes included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, image sequences, IK, transform, path, physics and slider constraints, plus a reference WebGL renderer (`src/webgl`). A Rust port of it, about 4× faster, powers the Godot runtime (preview, [`runtimes/`](runtimes/)).
 - **Demo project**: the editor opens with Rigbytron, the Rigby2D mascot, rigged and animated, so you can explore a real rig right away (*File ▸ Open demo (Rigbytron)* reopens it). *File ▸ New sample (robot)* gives a simpler character drawn by the editor.
 
 ## In progress
 
 Rigby2D is in early alpha. Work under way:
 
-- **Godot and Unity runtimes**: a Rust runtime with full feature support, starting with Godot.
+- **Godot and Unity runtimes**: a Rust runtime with full feature support. The Rust core and the
+  Godot 4 node (`RigbySkeleton2D`) are available in preview in [`runtimes/`](runtimes/); Unity is next.
 - **Offline renderer**: export transparent PNG sequences, WebM and MP4.
 - **Audio tracks and lip-sync.**
 - **Cameras and scene composition.**
@@ -224,6 +225,7 @@ src/editor/     Editor UI: viewport, tree, properties, dopesheet, graph editor, 
 src/webgl/      Reference WebGL renderer for the runtime
 src/splash/     Splash screen (plays the Rigbytron animation with the runtime)
 src/mcp/        Model Context Protocol server for AI assistants
+runtimes/       Rust runtime and the Godot 4 node (preview); see runtimes/README.md
 branding/       Logo, lockups, icons and Rigbytron (proprietary, see TRADEMARKS.md)
 examples/       WebGL player example
 src-tauri/      Native desktop shell (editor and splash windows, file dialog/fs plugins only)

@@ -10,8 +10,8 @@ the Rigby2D or Hoverlabs names, logos or other brand assets.
 - The Rigby2D logo, logo mark, lockups and app icon (the files in [`branding/`](branding/), the
   application icons in `src-tauri/icons/` and `app-icon.png`).
 - **Rigbytron**, the Rigby2D mascot: its name, character design, artwork and animation (the files
-  in [`branding/rigbytron/`](branding/rigbytron/)), including the splash screen and the demo project
-  that show it.
+  in [`branding/rigbytron/`](branding/rigbytron/) and their copies in `runtimes/godot/demo/rigbytron/`),
+  including the splash screen and the demo projects that show it.
 - Any other branding that identifies Rigby2D or Hoverlabs as the source of a product.
 
 These are trademarks and brand assets of Hoverlabs. All rights reserved.

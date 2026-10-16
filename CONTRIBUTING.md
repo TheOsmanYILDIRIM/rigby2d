@@ -35,6 +35,8 @@ quick UI work. File dialogs and disk access only work in the desktop app (`npm r
 | `src/editor/` | Editor UI. Plain JavaScript modules, DOM, a WebGL viewport with a Canvas 2D fallback; no UI framework. |
 | `src/webgl/` | Reference WebGL renderer for the runtime, also used by the editor viewport. |
 | `src/splash/` | Splash screen window. |
+| `runtimes/rust/` | Rust runtime (`rigby-runtime`, no dependencies) and the Godot GDExtension (`rigby-godot`). The runtime must match `src/core`: change both together and keep the golden tests passing (see [runtimes/README.md](runtimes/README.md)). |
+| `runtimes/godot/` | Godot addon, demo and headless tests. |
 | `src/mcp/` | Model Context Protocol server ([docs/mcp.md](docs/mcp.md)). Node only, no dependencies; built on `src/core`. |
 | `branding/` | Proprietary brand assets and the Rigbytron demo project; see [TRADEMARKS.md](TRADEMARKS.md). |
 | `src-tauri/` | Native shell only. Keep app logic out of Rust; add permissions in `capabilities/` (`default.json` for the editor, `splash.json` for the splash) only when needed. |
@@ -54,7 +56,8 @@ quick UI work. File dialogs and disk access only work in the desktop app (`npm r
 
 1. Create a branch from `main` (`fix/…`, `feat/…`, `docs/…`).
 2. Keep each PR focused on one change; write a clear description of what and why.
-3. Make sure `npm test` passes and `npm run web:build` succeeds.
+3. Make sure `npm test` passes and `npm run web:build` succeeds; for runtime changes also
+   `cargo test --release --workspace` in `runtimes/rust`.
 4. Link the related issue (e.g. `Closes #12`).
 5. A maintainer will review; please respond to feedback with follow-up commits.
 

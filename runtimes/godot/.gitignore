@@ -1,0 +1,4 @@
+.godot/
+addons/rigby2d/bin/
+*.import
+tests/output/
