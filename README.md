@@ -145,7 +145,7 @@ The files are **not code-signed** yet, so Windows SmartScreen may warn before ru
 before running anything:
 
 ```powershell
-Get-FileHash .\Rigby2D_0.2.1_x64_en-US.msi -Algorithm SHA256
+Get-FileHash .\Rigby2D_0.2.2_x64_en-US.msi -Algorithm SHA256
 ```
 
 To build from source instead, follow the steps below.
