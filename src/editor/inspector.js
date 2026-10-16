@@ -11,6 +11,7 @@ import { constraintUi } from './constraintui.js';
 import { bindMesh, regionToMesh, unbindMesh } from './meshtool.js';
 import { eventUi, skinUi } from './skineventui.js';
 import { dragValue, h, select, textField } from './widgets.js';
+import { FPS_PRESETS, SIZE_PRESETS, formatFps, hexToRgba, rgbaToHex } from './output.js';
 
 export function render(app, el) {
   const b = selBone(app.sel);
@@ -403,12 +404,11 @@ function projectUi(app) {
       ? h('div', { class: 'small weak' }, `Imported from skeleton JSON ${app.doc.header.version ?? ''}. Export again with File ▸ Export skeleton JSON.`)
       : null,
     h('hr'),
+    outputUi(app),
+    h('hr'),
     h('strong', null, 'Rig'),
     h('div', null, `${app.doc.bones.length} bones · ${app.doc.slots.length} slots · ${app.doc.skins.length + 1} skins`),
     h('div', null, `${app.doc.ik.length} IK constraints · ${app.doc.events.length} events · ${app.doc.animations.length} animations`),
-    ['transform', 'path', 'physics']
-      .filter((k) => app.doc.extra[k]?.length)
-      .map((k) => h('div', { class: 'small weak' }, `${app.doc.extra[k].length} ${k} constraint(s): kept, not evaluated yet`)),
     h('hr'),
     h('strong', null, `Images (${app.doc.images.length})`),
     app.doc.images.length ? null : h('p', null, 'Use File ▸ Import PSD or Import PNG images to add art.'),
@@ -425,6 +425,92 @@ function projectUi(app) {
       h('li', null, 'File ▸ Save writes the .rigby work file; File ▸ Export writes skeleton JSON or .skel + a packed atlas for runtimes.'),
     ),
   ];
+}
+
+/** Output settings: frame rate, frame size, background and framing for rendering. */
+function outputUi(app) {
+  const s = app.doc.settings;
+  const set = (change) => {
+    Object.assign(s, change);
+    app.changed();
+  };
+  const fpsValue = FPS_PRESETS.includes(s.fps) ? s.fps : 'custom';
+  const sizeValue = SIZE_PRESETS.find(([w, hgt]) => w === s.width && hgt === s.height) ? `${s.width}x${s.height}` : 'custom';
+  return h(
+    'div',
+    null,
+    h('strong', null, 'Output'),
+    h(
+      'div',
+      { class: 'grid' },
+      row(
+        'Frame rate',
+        select([...FPS_PRESETS.map((f) => [f, `${formatFps(f)} fps`]), ['custom', 'Custom']], fpsValue, (v) => v !== 'custom' && set({ fps: v })),
+        dragValue(s.fps, (v) => set({ fps: v }), { speed: 0.1, min: 1, max: 240, decimals: 3, suffix: ' fps' }),
+      ),
+      row(
+        'Size',
+        select([...SIZE_PRESETS.map(([w, hgt, label]) => [`${w}x${hgt}`, `${w}×${hgt} ${label}`]), ['custom', 'Custom']], sizeValue, (v) => {
+          if (v === 'custom') return;
+          const [w, hgt] = v.split('x').map(Number);
+          set({ width: w, height: hgt });
+        }),
+      ),
+      row(
+        '',
+        dragValue(s.width, (v) => set({ width: Math.round(v) }), { speed: 1, min: 16, max: 16384, decimals: 0, suffix: ' px' }),
+        dragValue(s.height, (v) => set({ height: Math.round(v) }), { speed: 1, min: 16, max: 16384, decimals: 0, suffix: ' px' }),
+      ),
+      row(
+        'Background',
+        h('label', null, h('input', { type: 'checkbox', checked: !s.background, onchange: (e) => set({ background: e.target.checked ? null : [0, 0, 0, 1] }) }), ' Transparent'),
+        s.background ? h('input', { type: 'color', value: rgbaToHex(s.background), oninput: (e) => set({ background: hexToRgba(e.target.value) }) }) : null,
+      ),
+      row(
+        'Framing',
+        select(
+          [
+            ['auto', 'Fit the animation'],
+            ['fixed', 'Fixed'],
+          ],
+          s.frame ? 'fixed' : 'auto',
+          (v) => {
+            if (v === 'auto') set({ frame: null });
+            else {
+              const f = app.viewport?.outputFrame();
+              set({ frame: f ? { x: f.cx, y: f.cy, scale: f.scale } : { x: 0, y: 0, scale: 1 } });
+            }
+            app.showFrame = true;
+          },
+        ),
+      ),
+      s.frame
+        ? [
+            row(
+              'Center',
+              dragValue(s.frame.x, (v) => set({ frame: { ...s.frame, x: v } }), { speed: 1, decimals: 1 }),
+              dragValue(s.frame.y, (v) => set({ frame: { ...s.frame, y: v } }), { speed: 1, decimals: 1 }),
+            ),
+            row('Units / pixel', dragValue(s.frame.scale, (v) => set({ frame: { ...s.frame, scale: v } }), { speed: 0.005, min: 0.001, max: 1000, decimals: 3 })),
+            row(
+              '',
+              h(
+                'button',
+                {
+                  title: 'Frame what the viewport shows',
+                  onclick: () => {
+                    if (app.viewport) set({ frame: app.viewport.frameFromView() });
+                    app.showFrame = true;
+                  },
+                },
+                'Use the current view',
+              ),
+            ),
+          ]
+        : null,
+    ),
+    h('div', { class: 'small weak' }, 'Used when rendering image sequences and video. View ▸ Show output frame shows the framed area.'),
+  );
 }
 
 function startMeshEdit(app, slot, name) {

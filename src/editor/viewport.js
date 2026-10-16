@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // The canvas: draws the rig and handles pan/zoom, selection and the transform tools.
 
+import { animationBounds, describeOutput, outputFrame } from './output.js';
 import { Affine, toAffine, transform, wrapDegrees } from '../core/math.js';
 import { makeBone } from '../core/model.js';
 import { Pose } from '../core/pose.js';
@@ -114,7 +115,51 @@ export class Viewport {
     if (this.drag?.kind === 'create') {
       this.line(this.toScreen(this.drag.start), this.toScreen(this.drag.last), SELECTED, 2);
     }
+    if (app.showFrame) this.drawFrameGate();
     this.drawOverlay();
+  }
+
+  /** The output frame in world units for the current animation (auto framing is cached briefly). */
+  outputFrame() {
+    const app = this.app;
+    const s = app.doc.settings;
+    if (s.frame) return outputFrame(s, null);
+    const key = `${app.mode}:${app.anim}`;
+    const now = performance.now();
+    if (!this.autoFrame || this.autoFrame.key !== key || now - this.autoFrame.at > 1000) {
+      this.autoFrame = { key, at: now, bounds: animationBounds(app.doc, app.mode === 'animate' ? app.anim : null, s.fps) };
+    }
+    return outputFrame(s, this.autoFrame.bounds);
+  }
+
+  /** A fixed output frame that fits in the visible part of the viewport. */
+  frameFromView() {
+    const s = this.app.doc.settings;
+    const [cx, cy] = this.toWorld([this.width / 2, this.height / 2]);
+    const zoom = this.app.view.zoom;
+    const scale = Math.max(1e-6, (Math.min(this.width / s.width, this.height / s.height) * 0.9) / zoom);
+    return { x: cx, y: cy, scale };
+  }
+
+  /** Darkens what lies outside the output frame and outlines it. */
+  drawFrameGate() {
+    const f = this.outputFrame();
+    const [x0, y0] = this.toScreen([f.x0, f.y1]);
+    const [x1, y1] = this.toScreen([f.x1, f.y0]);
+    const ctx = this.ctx;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(0, 0, this.width, Math.max(0, y0));
+    ctx.fillRect(0, y1, this.width, Math.max(0, this.height - y1));
+    ctx.fillRect(0, y0, Math.max(0, x0), y1 - y0);
+    ctx.fillRect(x1, y0, Math.max(0, this.width - x1), y1 - y0);
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(x1 - x0), Math.round(y1 - y0));
+    ctx.font = '11px system-ui, "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.textBaseline = 'bottom';
+    const label = `${describeOutput(this.app.doc.settings)}${this.app.doc.settings.frame ? '' : ' · auto framing'}`;
+    ctx.fillText(label, x0 + 4, y0 - 3);
   }
 
   line(a, b, color, width = 1) {

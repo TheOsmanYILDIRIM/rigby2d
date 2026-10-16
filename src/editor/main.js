@@ -79,6 +79,19 @@ function menus() {
         }),
         ' Show bones',
       ),
+      h(
+        'label',
+        { class: 'item' },
+        h('input', {
+          type: 'checkbox',
+          checked: app.showFrame,
+          onchange: (e) => {
+            app.showFrame = e.target.checked;
+            app.changed();
+          },
+        }),
+        ' Show output frame',
+      ),
       { label: 'Fit the skeleton in view', shortcut: sc('view.fit'), action: () => (app.frameRequest = true) },
       { label: 'Zoom to 100%', shortcut: sc('view.actual'), action: () => zoomActual() },
       'separator',
@@ -267,6 +280,7 @@ splitter($('#split-bottom'), '--bottom', 'y', -1, 120);
 // ---- main loop --------------------------------------------------------------------------------
 
 const viewport = new Viewport(app, $('#viewport'), $('#viewport-gl'));
+app.viewport = viewport;
 const dopesheet = new Dopesheet(app, $('#dopesheet'), $('#dopesheet canvas'));
 const graph = new GraphEditor(app, $('#graph'), $('#graph canvas'));
 const renderMenuBar = buildMenuBar();

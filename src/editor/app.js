@@ -16,7 +16,11 @@ import demoUrl from '../../branding/rigbytron/rigbytron.rigby?url&no-inline';
 /** The bundled demo project: Rigbytron, the Rigby2D mascot. */
 const DEMO_FILE = 'rigbytron.rigby';
 
-export const FPS = 30;
+/**
+ * Frame rate of the open project (its output settings). A live binding: modules importing it see
+ * the current project's value.
+ */
+export let FPS = 30;
 
 /** Setup: edits change the setup (rest) pose. Animate: edits create keyframes at the current time. */
 export const Mode = Object.freeze({ Setup: 'setup', Animate: 'animate' });
@@ -104,6 +108,8 @@ export class App {
     this.selectedKeys.clear();
     this.status = 'Welcome to Rigby2D. Open the Rigbytron demo or a sample from the File menu, or import a PSD / PNGs.';
     this.showBones = true;
+    /** Shows the output frame (resolution and framing) in the viewport. */
+    this.showFrame = false;
     /** Viewport drawing: 'webgl' (default when available) or 'canvas'. */
     this.renderer = loadSetting('rigby.renderer', 'webgl');
     this.frameRequest = false;
@@ -119,6 +125,7 @@ export class App {
 
   changed() {
     invalidateConstraints(this.doc);
+    FPS = this.doc.settings?.fps ?? 30;
     this.version++;
   }
 
@@ -133,6 +140,7 @@ export class App {
     this.shapeEdit = null;
     this.anim = doc.animations.length ? 0 : null;
     this.doc = doc;
+    FPS = doc.settings?.fps ?? 30;
     this.path = path;
     this.sel = null;
     this.multi.clear();
@@ -241,6 +249,7 @@ export class App {
 
   restore(json) {
     this.doc = Skeleton.fromObject(JSON.parse(json));
+    FPS = this.doc.settings?.fps ?? 30;
     this.docJson = this.baseline = json;
     this.selectedKeys.clear();
     this.sanitize();

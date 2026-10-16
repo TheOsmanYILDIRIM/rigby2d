@@ -101,6 +101,7 @@ export function readSkeletonJson(obj, name = 'skeleton') {
   sk.name = name;
   const { [VERSION_FIELD]: version_, ...header } = obj.skeleton;
   sk.header = { version: version_ ?? null, ...clone(header) };
+  if (typeof header.fps === 'number' && header.fps > 0) sk.settings.fps = header.fps;
   for (const key of Object.keys(obj)) {
     if (!['skeleton', 'bones', 'slots', 'constraints', 'ik', 'transform', 'path', 'physics', 'skins', 'events', 'animations'].includes(key)) {
       sk.extra[key] = clone(obj[key]);
@@ -674,6 +675,10 @@ function writeJson(sk, version) {
 
   const header = { ...(clone(sk.header) ?? {}) };
   delete header.version;
+  // The project frame rate is the format's dopesheet frame rate (left out at its default, 30).
+  const fps = sk.settings?.fps ?? 30;
+  if (fps !== 30) header.fps = fps;
+  else delete header.fps;
   const keptVersion = sk.header?.version && String(sk.header.version).startsWith(version) ? sk.header.version : `${version}.0`;
   // Keep the stored bounds while they still describe the setup pose, so unchanged files round-trip.
   const bounds = setupBounds(sk);

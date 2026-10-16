@@ -18,6 +18,16 @@ export const INHERIT_MODES = ['normal', 'onlyTranslation', 'noRotationOrReflecti
 export const BLEND_MODES = ['normal', 'additive', 'multiply', 'screen'];
 export const ATTACHMENT_TYPES = ['region', 'mesh', 'linkedmesh', 'boundingbox', 'path', 'point', 'clipping'];
 
+/**
+ * Output settings used when rendering animations: frame rate, frame size in pixels, background
+ * (null = transparent, else [r, g, b, a] in 0..1) and the framed area: null fits the animation
+ * automatically, else { x, y, scale } is the world point at the frame's center and the world units
+ * per output pixel.
+ */
+export function defaultSettings() {
+  return { fps: 30, width: 1920, height: 1080, background: null, frame: null };
+}
+
 export class LoadError extends Error {
   constructor(kind, message) {
     super(kind === 'json' ? `invalid JSON: ${message}` : `invalid skeleton: ${message}`);
@@ -83,8 +93,10 @@ export class Skeleton {
     this.images = [];
     /** Skeleton header (hash, version, bounds, fps, folders) when imported from skeleton JSON. */
     this.header = null;
-    /** Data Rigby2D keeps but does not evaluate yet: transform/path/physics constraints and unknown fields. */
+    /** Data Rigby2D keeps for round trips: constraints in their file form and unknown fields. */
     this.extra = {};
+    /** Output settings (see `defaultSettings`). */
+    this.settings = defaultSettings();
   }
 
   static fromJson(json) {
@@ -636,7 +648,26 @@ function readSkeleton(o) {
   }));
   sk.header = raw(o.header) ?? null;
   sk.extra = raw(o.extra) ?? {};
+  sk.settings = readSettings(o.settings);
   return sk;
+}
+
+/** Output settings with defaults for missing or invalid values. */
+export function readSettings(o) {
+  const d = defaultSettings();
+  if (!o || typeof o !== 'object') return d;
+  const positive = (v, def, max) => (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= max ? v : def);
+  const color = (c) => (Array.isArray(c) && c.length === 4 && c.every((v) => typeof v === 'number' && v >= 0 && v <= 1) ? c.slice() : null);
+  const f = o.frame;
+  const frame =
+    f && typeof f === 'object' && [f.x, f.y].every((v) => typeof v === 'number' && Number.isFinite(v)) && positive(f.scale, 0, 1e6) > 0 ? { x: f.x, y: f.y, scale: f.scale } : null;
+  return {
+    fps: positive(o.fps, d.fps, 240),
+    width: Math.round(positive(o.width, d.width, 16384)),
+    height: Math.round(positive(o.height, d.height, 16384)),
+    background: color(o.background),
+    frame,
+  };
 }
 
 function writeSkeleton(sk) {
@@ -718,5 +749,6 @@ function writeSkeleton(sk) {
   }
   if (sk.header) out.header = raw(sk.header);
   if (Object.keys(sk.extra).length) out.extra = raw(sk.extra);
+  out.settings = raw(sk.settings);
   return out;
 }
