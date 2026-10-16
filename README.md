@@ -53,7 +53,7 @@ claude mcp add rigby2d -- node /path/to/rigby2d/src/mcp/server.js --root /path/t
 - **Undo / redo** for every edit, with unsaved-change tracking.
 - **`.rigby` work file**: one self-contained file with the whole project and its images (like a `.blend`).
 - **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, constraints, events, deform and draw-order keys round-trip losslessly.
-- **Runtimes included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, image sequences, IK, transform, path, physics and slider constraints, plus a reference WebGL renderer (`src/webgl`). A Rust port of it, about 4× faster, powers the Godot runtime (preview, [`runtimes/`](runtimes/)).
+- **Runtimes included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, image sequences, IK, transform, path, physics and slider constraints, plus a reference WebGL renderer (`src/webgl`). A Rust port of it, 3 to 4× faster, powers the Godot runtime (preview, [`runtimes/`](runtimes/)).
 - **Demo project**: the editor opens with Rigbytron, the Rigby2D mascot, rigged and animated, so you can explore a real rig right away (*File ▸ Open demo (Rigbytron)* reopens it). *File ▸ New sample (robot)* gives a simpler character drawn by the editor.
 
 ## In progress
@@ -191,19 +191,20 @@ and the security model.
 
 ## Performance benchmark (0.1.0)
 
-Measured on a desktop PC in Chromium and Node 20; numbers vary with hardware. Rigs are described
-by size: **M** has 67 bones and 276 mesh vertices, **L** 76 bones and 667 weighted mesh vertices
-with 9 IK constraints, **XL** 143 bones and 879 mesh vertices with 21 transform and path
-constraints.
+Measured on a desktop PC in Chromium, Node 22 and Rust (release build); numbers vary with hardware.
+Rigs are described by size: **M** has 67 bones and 276 mesh vertices, **L** 76 bones and 667
+weighted mesh vertices with 9 IK constraints, **XL** 143 bones and 879 mesh vertices with 21
+transform and path constraints.
 
-**Runtime** (`src/core`): animating one character for one frame (apply the animation, solve
-constraints, compute world transforms and vertices), median of 2000 frames:
+**Runtimes**: animating one character for one frame (apply the animation, solve constraints,
+compute world transforms and vertices), median of 2000 frames of the *walk* animation. JavaScript
+is `src/core`; Rust is `runtimes/rust`, which also powers the Godot runtime:
 
-| Rig | Time per frame | Characters per 16 ms frame |
-| --- | ---: | ---: |
-| M | 47 µs | ~330 |
-| L | 72 µs | ~220 |
-| XL | 184 µs | ~85 |
+| Rig | JavaScript | Rust | Characters per 16 ms frame (JS / Rust) |
+| --- | ---: | ---: | ---: |
+| M | 50 µs | 14.5 µs | ~320 / ~1,100 |
+| L | 71 µs | 22 µs | ~225 / ~720 |
+| XL | 90 µs | 22 µs | ~180 / ~730 |
 
 **WebGL renderer** (`src/webgl`): 50 XL characters, each animated and drawn every frame, take
 21.6 ms per frame including the GPU (0.43 ms per character) in a single draw call.

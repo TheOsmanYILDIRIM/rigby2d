@@ -55,14 +55,16 @@ drawables, draw order and events; `tests/golden.rs` replays them in Rust and com
 
 ### Performance
 
-Animating one character for one frame (`cargo run --release --example bench -- <skeleton>`,
-median of 2,000 frames), against the JavaScript runtime on the same machine:
+Animating one character for one frame: apply the animation, solve constraints, compute world
+transforms and vertices (`cargo run --release --example bench -- <skeleton>`, median of 2,000
+frames of the *walk* animation), against the JavaScript runtime on the same machine. The rigs are
+the ones of the main README's benchmark:
 
-| Rig | JavaScript | Rust |
-| --- | ---: | ---: |
-| 67 bones, 276 mesh vertices | 34.7 µs | 7.6 µs |
-| 60 bones with physics constraints | 70.5 µs | 19.2 µs |
-| 143 bones, 21 transform and path constraints | 76.7 µs | 20.0 µs |
+| Rig | JavaScript | Rust | Speed-up |
+| --- | ---: | ---: | ---: |
+| M: 67 bones, 276 mesh vertices | 50 µs | 14.5 µs | 3.4× |
+| L: 76 bones, 667 weighted mesh vertices, 9 IK constraints | 71 µs | 22 µs | 3.2× |
+| XL: 143 bones, 879 mesh vertices, 21 transform and path constraints | 90 µs | 22 µs | 4.1× |
 
 ## Building and testing
 
