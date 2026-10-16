@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: MIT OR Apache-2.0
-// Rigby2D MCP server: lets AI assistants inspect, validate, sample and convert Rigby2D projects
+// Rigby2D MCP server: lets AI assistants inspect, validate, sample, edit and convert Rigby2D projects
 // over the Model Context Protocol (stdio transport). Usage:
 //   node src/mcp/server.js [--root <dir>]...
 // Each --root is a folder the tools may read and write (default: the current folder).
@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 
 import { createServer, serveStdio } from './protocol.js';
+import { createEditTools } from './edits.js';
 import { Workspace, createTools } from './tools.js';
 
 const { version } = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
@@ -22,8 +23,9 @@ Serves the Model Context Protocol over stdin/stdout for AI assistants.
   --help         Show this help.
   --version      Show the version.
 
-Tools: inspect_project, describe_rig, describe_animation, sample_pose,
-validate_project, convert_project.`;
+Read:  inspect_project, describe_rig, describe_animation, sample_pose, validate_project
+Write: convert_project, add_bone, set_bone_setup, add_animation, set_bone_key,
+       delete_bone_key, set_attachment_key, set_event_key`;
 
 function parseArgs(argv) {
   const roots = [];
@@ -66,8 +68,10 @@ async function main() {
       'Tools for Rigby2D 2D skeletal animation projects: .rigby work files and skeleton .json / .skel exports. ' +
       'Start with inspect_project, use describe_rig and describe_animation for structure, sample_pose to evaluate poses with the runtime ' +
       '(world coordinates, Y up, degrees), validate_project to find problems and convert_project to write other formats. ' +
+      'Editing tools (add_bone, set_bone_setup, add_animation, set_bone_key, delete_bone_key, set_attachment_key, set_event_key) ' +
+      'save the file they are given in its own format, or a copy when output is set; check results with sample_pose or validate_project. ' +
       `Files must be inside the workspace: ${workspace.roots.join(', ')}.`,
-    tools: createTools(workspace),
+    tools: [...createTools(workspace), ...createEditTools(workspace)],
     log,
   });
   log(`ready (workspace: ${workspace.roots.join(', ')})`);

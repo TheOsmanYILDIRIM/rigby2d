@@ -11,7 +11,9 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { ErrorCode, PROTOCOL_VERSIONS, ToolError, checkArguments, createServer } from '../src/mcp/protocol.js';
+import { createEditTools } from '../src/mcp/edits.js';
 import { Workspace, createTools } from '../src/mcp/tools.js';
+import { unzip } from '../src/editor/zip.js';
 
 const REPO = path.resolve(fileURLToPath(import.meta.url), '../..');
 const RIGBY = 'branding/rigbytron/rigbytron.rigby';
@@ -90,7 +92,7 @@ test('mcp protocol: argument checks', () => {
 async function toolbox() {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'rigby-mcp-'));
   const ws = await Workspace.open([REPO, tmp]);
-  const tools = Object.fromEntries(createTools(ws).map((t) => [t.name, t.handler]));
+  const tools = Object.fromEntries([...createTools(ws), ...createEditTools(ws)].map((t) => [t.name, t.handler]));
   return { tmp, tools };
 }
 
@@ -169,6 +171,76 @@ test('mcp tools: convert writes JSON and .skel inside the workspace only', async
   await assert.rejects(tools.inspect_project({ path: 'README.md' }), /Unsupported file type '.md'/);
 });
 
+test('mcp edits: build a new animation in a work file', async () => {
+  const { tmp, tools } = await toolbox();
+  const file = path.join(tmp, 'rigbytron.rigby');
+  await fs.copyFile(path.join(REPO, RIGBY), file);
+  const imagesBefore = [...unzip(new Uint8Array(await fs.readFile(file)))].filter(([k]) => k.startsWith('images/'));
+
+  await tools.add_bone({ path: file, name: 'antenna', parent: 'head', x: 0, y: 400, rotation: 90, length: 60 });
+  await assert.rejects(tools.add_bone({ path: file, name: 'antenna', parent: 'head' }), /already exists/);
+  await assert.rejects(tools.add_bone({ path: file, name: 'x', parent: 'nope' }), /No bone 'nope'/);
+  const rig = await tools.describe_rig({ path: file });
+  assert.deepEqual(rig.bones.at(-1), { name: 'antenna', parent: 'head', length: 60, x: 0, y: 400, rotation: 90, scaleX: 1, scaleY: 1, shearX: 0, shearY: 0, inherit: 'normal' });
+
+  await tools.add_animation({ path: file, name: 'wave' });
+  await tools.set_bone_key({ path: file, animation: 'wave', bone: 'upperarm_r', channel: 'rotate', time: 0, value: 0, curve: 'easeInOut' });
+  const key = await tools.set_bone_key({ path: file, animation: 'wave', bone: 'upperarm_r', channel: 'rotate', time: 0.5, value: 40 });
+  assert.equal(key.duration, 0.5);
+  await tools.set_bone_key({ path: file, animation: 'wave', bone: 'hip', channel: 'translate', time: 0.5, y: -10 });
+  await assert.rejects(tools.set_bone_key({ path: file, animation: 'wave', bone: 'hip', channel: 'scale', time: 0 }), /needs 'x' and.or 'y'/);
+  await tools.set_attachment_key({ path: file, animation: 'wave', slot: 'hand', time: 0.25, attachment: 'hand_e' });
+  await assert.rejects(tools.set_attachment_key({ path: file, animation: 'wave', slot: 'hand', time: 0, attachment: 'head' }), /no attachment 'head'/);
+  const event = await tools.set_event_key({ path: file, animation: 'wave', event: 'wave_hi', time: 0.5, string: 'hi' });
+  assert.equal(event.createdDefinition, true);
+
+  const setup = await tools.sample_pose({ path: file });
+  const end = await tools.sample_pose({ path: file, animation: 'wave', time: 0.5 });
+  const rot = (pose, n) => pose.bones.find((b) => b.name === n).rotation;
+  assert.ok(Math.abs(rot(end, 'upperarm_r') - rot(setup, 'upperarm_r') - 40) < 1e-6);
+  assert.equal(end.slots.find((s) => s.name === 'hand').attachment, 'hand_e');
+  assert.deepEqual(end.eventsUpToTime, [{ time: 0.5, name: 'wave_hi' }]);
+  const wave = await tools.describe_animation({ path: file, animation: 'wave' });
+  assert.deepEqual(wave.bones.find((b) => b.bone === 'upperarm_r').keys, { rotate: [0, 0.5] });
+
+  await tools.delete_bone_key({ path: file, animation: 'wave', bone: 'hip', channel: 'translate', time: 0.5 });
+  await assert.rejects(tools.delete_bone_key({ path: file, animation: 'wave', bone: 'hip', channel: 'translate', time: 0.5 }), /No translate key/);
+  const setupChange = await tools.set_bone_setup({ path: file, bone: 'antenna', rotation: 80, length: 70 });
+  assert.deepEqual(setupChange.changed, ['rotation', 'length']);
+
+  const report = await tools.validate_project({ path: file });
+  assert.equal(report.valid, true);
+  assert.deepEqual(report.warnings, []);
+  const imagesAfter = [...unzip(new Uint8Array(await fs.readFile(file)))].filter(([k]) => k.startsWith('images/'));
+  assert.deepEqual(imagesAfter, imagesBefore, 'images are kept byte for byte');
+  assert.deepEqual((await fs.readdir(tmp)).filter((n) => n.endsWith('.tmp')), [], 'no temporary files are left');
+});
+
+test('mcp edits: save to an output file and edit skeleton exports in their format', async () => {
+  const { tmp, tools } = await toolbox();
+  const json = path.join(tmp, 'r.json');
+  const skel = path.join(tmp, 'r.skel');
+  await fs.copyFile(path.join(REPO, JSON_FILE), json);
+  await fs.copyFile(path.join(REPO, SKEL), skel);
+  const before = await fs.readFile(json, 'utf8');
+
+  const copy = path.join(tmp, 'r-edited.json');
+  await tools.add_animation({ path: json, name: 'idle', output: copy });
+  assert.equal(await fs.readFile(json, 'utf8'), before, 'the input is unchanged when output is given');
+  assert.deepEqual((await tools.inspect_project({ path: copy })).animations.map((a) => a.name), ['hold', 'release', 'idle']);
+  await assert.rejects(tools.add_animation({ path: json, name: 'idle', output: copy }), /already exists. Pass overwrite/);
+  await assert.rejects(tools.add_animation({ path: json, name: 'idle', output: path.join(tmp, 'r.skel') }), /same extension/);
+
+  await tools.set_bone_key({ path: copy, animation: 'idle', bone: 'head', channel: 'rotate', time: 1, value: 5, curve: 'stepped' });
+  assert.equal(JSON.parse(await fs.readFile(copy, 'utf8')).skeleton.spine.startsWith('4.3'), true);
+  assert.equal((await tools.validate_project({ path: copy })).valid, true);
+
+  await tools.set_event_key({ path: skel, animation: 'release', event: 'slash', time: 0.42, int: 3 });
+  const release = await tools.describe_animation({ path: skel, animation: 'release' });
+  assert.deepEqual(release.events, [{ time: 0.42, name: 'slash' }], 'an event key at the same time is replaced');
+  assert.equal((await tools.validate_project({ path: skel })).valid, true);
+});
+
 test('mcp server: answers over stdio', async () => {
   const child = spawn(process.execPath, [path.join(REPO, 'src/mcp/server.js'), '--root', REPO], { stdio: ['pipe', 'pipe', 'pipe'] });
   const lines = [];
@@ -192,7 +264,7 @@ test('mcp server: answers over stdio', async () => {
   await new Promise((resolve) => child.on('close', resolve));
   const byId = new Map(lines.map((m) => [m.id, m]));
   assert.equal(byId.get(1).result.serverInfo.name, 'rigby2d');
-  assert.equal(byId.get(2).result.tools.length, 6);
+  assert.equal(byId.get(2).result.tools.length, 13);
   assert.equal(byId.get(3).result.structuredContent.counts.bones, 11);
   assert.equal(byId.get(null).error.code, ErrorCode.PARSE_ERROR);
   assert.equal(lines.length, 4);

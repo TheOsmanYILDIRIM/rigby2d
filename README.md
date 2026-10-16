@@ -32,7 +32,7 @@
 - **`.rigby` work file**: one self-contained file with the whole project and its images (like a `.blend`).
 - **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, constraints, events, deform and draw-order keys round-trip losslessly.
 - **Runtime included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, image sequences, IK, transform, path, physics and slider constraints, plus a reference WebGL renderer (`src/webgl`).
-- **AI assistant support (MCP)**: a built-in [Model Context Protocol](https://modelcontextprotocol.io) server lets assistants such as Claude inspect, validate, sample and convert projects. See [AI assistants (MCP)](#ai-assistants-mcp).
+- **AI assistant support (MCP)**: a built-in [Model Context Protocol](https://modelcontextprotocol.io) server lets assistants such as Claude inspect, validate, sample, edit and convert projects. See [AI assistants (MCP)](#ai-assistants-mcp).
 - **Demo project**: the editor opens with Rigbytron, the Rigby2D mascot, rigged and animated, so you can explore a real rig right away (*File ▸ Open demo (Rigbytron)* reopens it). *File ▸ New sample (robot)* gives a simpler character drawn by the editor.
 
 ## Getting started
@@ -148,15 +148,18 @@ blend mode for every visible region and mesh. `examples/webgl.html` is a small p
 ## AI assistants (MCP)
 
 Rigby2D ships a Model Context Protocol server, so AI assistants can work with your projects: list
-bones and animations, evaluate poses with the runtime, find missing images and other problems, and
-convert between skeleton formats. It needs only Node.js 20+, no extra packages. For Claude Code:
+bones and animations, evaluate poses with the runtime, find missing images and other problems, add
+bones and animations, set keys and events, and convert between skeleton formats. It needs only
+Node.js 20+, no extra packages. For Claude Code:
 
 ```bash
 claude mcp add rigby2d -- node /path/to/rigby2d/src/mcp/server.js --root /path/to/your/projects
 ```
 
-The server only reads and writes inside the `--root` folders. Tools: `inspect_project`,
-`describe_rig`, `describe_animation`, `sample_pose`, `validate_project` and `convert_project`.
+The server only reads and writes inside the `--root` folders, and edits save atomically in the
+file's own format (or to a copy). Tools: `inspect_project`, `describe_rig`, `describe_animation`,
+`sample_pose`, `validate_project`, `convert_project`, `add_bone`, `set_bone_setup`, `add_animation`,
+`set_bone_key`, `delete_bone_key`, `set_attachment_key` and `set_event_key`.
 See [docs/mcp.md](docs/mcp.md) for other clients, the tools and the security model.
 
 ## Performance benchmark (0.1.0)

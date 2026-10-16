@@ -78,7 +78,7 @@ export class Workspace {
 /**
  * Loads a project file. Returns { file, format ('rigby' | 'json' | 'skel'), version, doc,
  * warnings, images (names available: work file images or atlas regions, or null when unknown),
- * imageSource }.
+ * imageSource, entries (work files: every ZIP entry, to write the images back unchanged) }.
  */
 export async function loadProject(file) {
   const bytes = new Uint8Array(await fs.readFile(file));
@@ -100,7 +100,7 @@ export async function loadProject(file) {
       throw new ToolError(`The work file's project data is invalid: ${e.message}`);
     }
     const images = [...entries.keys()].filter((k) => k.startsWith('images/') && k.endsWith('.png')).map((k) => k.slice(7, -4));
-    return { file, format: 'rigby', version: String(doc.format), doc, warnings: [], images, imageSource: 'work file' };
+    return { file, format: 'rigby', version: String(doc.format), doc, warnings: [], images, imageSource: 'work file', entries };
   }
   let obj;
   if (ext === '.skel' || isSkeletonBinary(bytes)) {
@@ -306,8 +306,10 @@ function samplePose(doc, { animation, time = 0, skin }) {
 
 /**
  * Document data for round-trip checks, without what files do not carry as data: the import header,
- * the image table, format bookkeeping kept under `_` keys in `extra` (binary string table, editor
- * visibility) and the normalized curve forms derived from each curve's control points (`src`).
+ * the image table and format bookkeeping kept under `_` keys in `extra` (binary string table, editor
+ * visibility). Bezier curves are compared by kind: files store their control points in absolute
+ * units, rounded, while presets and edits keep a normalized form, so the numbers legitimately
+ * differ after a round trip.
  */
 function roundTripData(doc) {
   const o = doc.toObject();
@@ -320,9 +322,9 @@ function roundTripData(doc) {
 function normalize(v) {
   if (Array.isArray(v)) return v.map(normalize);
   if (v === null || typeof v !== 'object') return v;
+  if ('bezier' in v || 'beziers' in v) return 'bezier';
   const out = {};
   for (const [k, x] of Object.entries(v)) {
-    if (v.src && (k === 'bezier' || k === 'beziers')) continue;
     if (k === 'extra' && x && typeof x === 'object') {
       const kept = Object.fromEntries(Object.entries(x).filter(([e]) => !e.startsWith('_')));
       if (Object.keys(kept).length) out.extra = normalize(kept);
@@ -438,8 +440,8 @@ async function convert(ws, { input, output, version = '4.3', overwrite = false }
 
 // ---- tool table -------------------------------------------------------------------------------
 
-const PATH = { type: 'string', description: 'Project file: a .rigby work file or a skeleton .json / .skel export. Relative paths resolve against the first workspace root.' };
-const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+export const PATH = { type: 'string', description: 'Project file: a .rigby work file or a skeleton .json / .skel export. Relative paths resolve against the first workspace root.' };
+export const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
 /** The tools, bound to a workspace. */
 export function createTools(ws) {
