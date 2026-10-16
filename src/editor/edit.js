@@ -56,6 +56,11 @@ function writeKeys(app, bone, t, channels) {
   }
 }
 
+/** Keys every transform channel of `bone` at the current time to local transform `t` (Animate mode). */
+export function keyBoneTransform(app, bone, t) {
+  writeKeys(app, bone, t, CHANNELS);
+}
+
 /**
  * Sets a bone's local transform. Setup mode changes the setup pose. Animate mode writes keys when
  * auto key is on; otherwise the change is kept as an unkeyed change until it is keyed.

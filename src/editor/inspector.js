@@ -12,6 +12,7 @@ import { bindMesh, regionToMesh, unbindMesh } from './meshtool.js';
 import { eventUi, skinUi } from './skineventui.js';
 import { dragValue, h, select, textField } from './widgets.js';
 import { FPS_PRESETS, SIZE_PRESETS, formatFps, hexToRgba, rgbaToHex } from './output.js';
+import { posesUi } from './poseui.js';
 
 export function render(app, el) {
   const b = selBone(app.sel);
@@ -31,7 +32,7 @@ export function render(app, el) {
               : projectUi(app);
   // The mesh being edited stays on top while bones are selected for binding or painting.
   const mesh = meshUi(app);
-  el.replaceChildren(...[mesh, content].flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false));
+  el.replaceChildren(...[mesh, content, posesUi(app)].flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false));
 }
 
 const row = (label, ...content) => [h('label', null, label), h('div', { class: 'cell' }, ...content)];

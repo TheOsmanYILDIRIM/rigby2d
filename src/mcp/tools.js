@@ -316,7 +316,10 @@ function roundTripData(doc) {
   delete o.header;
   delete o.images;
   delete o.name;
-  delete o.settings; // output settings are project data, not skeleton data
+  // Output settings, poses and controllers are project data, not skeleton data.
+  delete o.settings;
+  delete o.poses;
+  delete o.controllers;
   return normalize(o);
 }
 

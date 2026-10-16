@@ -680,3 +680,58 @@ details > summary {
   height: 100%;
   background: var(--accent);
 }
+
+/* Pose library and face controls */
+.poses summary {
+  cursor: pointer;
+  padding: 2px 0;
+}
+.pose-save {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0;
+}
+.pose-save input[type='text'] {
+  flex: 1;
+  min-width: 0;
+}
+.pose-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+.pose-row .pose-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pose-amount input,
+.controller input[type='range'] {
+  vertical-align: middle;
+  width: 100%;
+}
+.controller {
+  padding: 6px;
+  margin: 4px 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.controller-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.controller-head strong {
+  flex: 1;
+}
+.controller-poses select {
+  max-width: 45%;
+}
+.section-title {
+  margin-top: 8px;
+  font-weight: 600;
+}

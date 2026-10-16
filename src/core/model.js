@@ -11,6 +11,8 @@ import { LINEAR, cloneCurve } from './curve.js';
 import { identityTransform } from './math.js';
 
 /** Version tag of the internal snapshot format. */
+import { readControllers, readPoses } from './poses.js';
+
 export const FORMAT = 'rigby-snapshot/1';
 
 /** How a bone inherits its parent's transform. */
@@ -97,6 +99,10 @@ export class Skeleton {
     this.extra = {};
     /** Output settings (see `defaultSettings`). */
     this.settings = defaultSettings();
+    /** Pose library: { name, bones: { bone name: local transform }, slots: { slot name: attachment } }. */
+    this.poses = [];
+    /** Facial controllers: { name, from (pose name or null = setup pose), to (pose name), value }. */
+    this.controllers = [];
   }
 
   static fromJson(json) {
@@ -649,6 +655,8 @@ function readSkeleton(o) {
   sk.header = raw(o.header) ?? null;
   sk.extra = raw(o.extra) ?? {};
   sk.settings = readSettings(o.settings);
+  sk.poses = readPoses(o.poses);
+  sk.controllers = readControllers(o.controllers);
   return sk;
 }
 
@@ -750,5 +758,7 @@ function writeSkeleton(sk) {
   if (sk.header) out.header = raw(sk.header);
   if (Object.keys(sk.extra).length) out.extra = raw(sk.extra);
   out.settings = raw(sk.settings);
+  if (sk.poses.length) out.poses = raw(sk.poses);
+  if (sk.controllers.length) out.controllers = raw(sk.controllers);
   return out;
 }
