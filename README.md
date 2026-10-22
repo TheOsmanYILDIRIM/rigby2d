@@ -251,10 +251,10 @@ blend mode for every visible region and mesh. `examples/webgl.html` is a small p
 
 ## MCP server reference
 
-34 tools. Read and convert: `inspect_project`, `describe_rig`, `describe_animation`, `sample_pose`,
+35 tools. Read and convert: `inspect_project`, `describe_rig`, `describe_animation`, `sample_pose`,
 `validate_project`, `convert_project`. Edit: `add_bone`, `set_bone_setup`, `rename_bone`,
 `add_animation`, `rename_animation`, `delete_animation`, `set_bone_key`, `delete_bone_key`,
-`set_attachment_key`, `set_event_key`, `set_slot`. Film, poses and audio (`.rigby`): `set_workspace`,
+`set_attachment_key`, `set_event_key`, `set_slot`, and `batch_edit` for many edits in one atomic call. Film, poses and audio (`.rigby`): `set_workspace`,
 `set_output`, `save_pose`, `apply_pose`, `delete_pose`, `add_face_control`, `set_face_control`,
 `delete_face_control`, `add_audio_track`, `set_audio_track`, `remove_audio_track`, `lip_sync`.
 Rigging: `detect_parts`, `autorig`, `map_bones`, `retarget_animation`. Scripts: `run_script`

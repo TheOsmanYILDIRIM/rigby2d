@@ -59,18 +59,33 @@ through `npm run`: npm prints to standard output, which the protocol uses.
 | `add_bone` | Adds a bone under an existing bone, with its setup pose relative to the parent. |
 | `set_bone_setup` | Changes a bone's setup pose (x, y, rotation, scale, shear, length); only the given fields. |
 | `add_animation` | Adds an empty animation. |
-| `set_bone_key` | Sets a rotate, translate, scale or shear key at a time, with a curve to the next key (`linear`, `stepped`, `easeIn`, `easeOut`, `easeInOut`). Replaces a key at the same time. |
+| `set_bone_key` | Sets a rotate, translate, scale or shear key at a time, with a curve to the next key: `linear`, `stepped`, `easeIn`, `easeOut`, `easeInOut`, or a custom cubic bezier `[cx1, cy1, cx2, cy2]` (as in CSS `cubic-bezier()`; cx1 and cx2 within 0..1). Replaces a key at the same time. |
 | `delete_bone_key` | Deletes a bone key at a time. |
 | `set_attachment_key` | Shows an attachment of a slot from a time on (image swap), or hides it. |
 | `set_event_key` | Fires an event at a time, creating the event definition if needed. Replaces the same event at the same time. |
+| `batch_edit` | Applies many of the edits above in one call: `operations` is a list of `{ op, ...that tool's arguments }` (without `path`), run in order. The project is loaded once and saved once, atomically: if any operation fails, nothing is saved and the error names the operation. Use it to build animations: 40 keys take about 15 ms instead of 0.6 s as separate calls. |
 
 Key values are relative to the setup pose, as in the editor and the file formats: rotate,
 translate and shear values are added to it, scale values multiply it. An animation's duration
 grows to include new keys.
 
+For many edits at once (an animation with dozens of keys), use `batch_edit`:
+
+```json
+{
+  "path": "hero.rigby",
+  "operations": [
+    { "op": "add_animation", "name": "nod" },
+    { "op": "set_bone_key", "animation": "nod", "bone": "head", "channel": "rotate", "time": 0, "value": 0, "curve": [0.25, 0.1, 0.25, 1] },
+    { "op": "set_bone_key", "animation": "nod", "bone": "head", "channel": "rotate", "time": 0.5, "value": -15, "curve": "easeInOut" }
+  ]
+}
+```
+
 Each editing call loads the file, applies one change, checks the result and saves it in the same
-format: a `.rigby` work file keeps its images byte for byte, skeleton JSON keeps its format version
-(3.8, 4.2 or 4.3) and `.skel` stays binary 4.3. Saving is atomic (a temporary file is renamed over
+format: a `.rigby` work file keeps its images byte for byte and gains no fields it did not have
+(older work files without output settings stay that way until you change them), skeleton JSON keeps
+its format version (3.8, 4.2 or 4.3) and `.skel` stays binary 4.3. Saving is atomic (a temporary file is renamed over
 the target). Pass `output` to save a copy instead of changing the input; an existing `output` is
 only replaced with `overwrite: true`. To undo, keep a copy or use `output`: the tools do not keep
 history. After editing, `sample_pose` and `validate_project` check the result; the Rigby2D editor

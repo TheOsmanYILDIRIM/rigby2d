@@ -98,6 +98,8 @@ export class Skeleton {
     this.extra = {};
     /** Output settings (see `defaultSettings`). */
     this.settings = defaultSettings();
+    /** Whether the file this came from stored settings (then saving keeps them, even at defaults). */
+    this.settingsInFile = false;
     /** Pose library: { name, bones: { bone name: local transform }, slots: { slot name: attachment } }. */
     this.poses = [];
     /** Facial controllers: { name, from (pose name or null = setup pose), to (pose name), value }. */
@@ -658,6 +660,7 @@ function readSkeleton(o) {
   sk.header = raw(o.header) ?? null;
   sk.extra = raw(o.extra) ?? {};
   sk.settings = readSettings(o.settings);
+  sk.settingsInFile = o.settings !== undefined;
   sk.poses = readPoses(o.poses);
   sk.controllers = readControllers(o.controllers);
   sk.workspace = oneOf(o.workspace, ['game', 'film'], null);
@@ -764,7 +767,8 @@ function writeSkeleton(sk) {
   }
   if (sk.header) out.header = raw(sk.header);
   if (Object.keys(sk.extra).length) out.extra = raw(sk.extra);
-  out.settings = raw(sk.settings);
+  // Only when set: saving a file that never had settings must not add them.
+  if (sk.settingsInFile || JSON.stringify(sk.settings) !== JSON.stringify(defaultSettings())) out.settings = raw(sk.settings);
   if (sk.poses.length) out.poses = raw(sk.poses);
   if (sk.controllers.length) out.controllers = raw(sk.controllers);
   if (sk.workspace) out.workspace = sk.workspace;
