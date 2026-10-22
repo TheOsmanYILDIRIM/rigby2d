@@ -1,5 +1,7 @@
 node_modules/
 dist/
+build/
+dist-mcpb/
 src-tauri/target/
 src-tauri/gen/schemas/
 *.swp

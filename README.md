@@ -46,7 +46,15 @@ as Claude can work directly on your animation projects, not just talk about them
 Ask things like *"Which images are missing from hero.skel?"* *"Add a 1-second wave animation to
 rigbytron.rigby that raises the right arm and fires a 'hi' event at the end"*, or *"Add line.wav to the
 talk animation and lip-sync the mouth control to it."* Edits save in the
-file's own format and stay inside the folders you allow. Setup is one line ([details](docs/mcp.md)):
+file's own format and stay inside the folders you allow.
+
+**Claude Desktop (Windows, macOS):** download
+**[Rigby2D-AI.mcpb](https://github.com/jaisurya-dev-art/rigby2d/releases/latest/download/Rigby2D-AI.mcpb)**,
+double-click it, choose your project folders and click *Install*. Nothing else to install: Claude
+Desktop brings everything the extension needs. The editor walks you through it in
+*Help ▸ Connect an AI assistant*.
+
+**Claude Code:** one line ([details](docs/mcp.md)):
 
 ```bash
 claude mcp add rigby2d -- node /path/to/rigby2d/src/mcp/server.js --root /path/to/your/projects

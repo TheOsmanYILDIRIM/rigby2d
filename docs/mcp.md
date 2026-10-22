@@ -11,8 +11,22 @@ files (ag-psd): run `npm install` once in the Rigby2D folder to use them.
 
 ## Setup
 
-The server speaks MCP over stdio. Point your client at `src/mcp/server.js` and give it the folders
-it may access with `--root` (repeatable; default: the folder the client starts it in).
+**Claude Desktop, the easy way (Windows, macOS):** the Rigby2D extension is one file.
+
+1. Download [Rigby2D-AI.mcpb](https://github.com/jaisurya-dev-art/rigby2d/releases/latest/download/Rigby2D-AI.mcpb)
+   (about 7 MB; also on every [release](https://github.com/jaisurya-dev-art/rigby2d/releases)).
+2. Double-click it (or drag it onto the Claude Desktop window, or use *Settings ▸ Extensions ▸
+   Advanced settings ▸ Install Extension…*).
+3. Choose your project folders and click *Install*.
+
+No Node.js, terminal or settings file is needed: Claude Desktop includes the runtime. The extension
+holds the whole server, Python scripting and PSD support. To change the folders later, open the
+extension's settings in Claude Desktop. The editor shows these steps in *Help ▸ Connect an AI
+assistant*.
+
+**Other setups.** The server speaks MCP over stdio. Point your client at `src/mcp/server.js` and give
+it the folders it may access (`--root <dir>`, or just the folder; repeatable; default: the folder the
+client starts it in).
 
 **Claude Code**
 
@@ -20,7 +34,7 @@ it may access with `--root` (repeatable; default: the folder the client starts i
 claude mcp add rigby2d -- node /path/to/rigby2d/src/mcp/server.js --root /path/to/your/projects
 ```
 
-**Claude Desktop and other clients** that use an `mcpServers` configuration file:
+**Other clients** that use an `mcpServers` configuration file (or Claude Desktop without the extension):
 
 ```json
 {
@@ -208,3 +222,11 @@ The implementation is in `src/mcp/` (`protocol.js`: protocol handling and transp
 reading, validation and conversion; `edits.js`: editing; `film.js`: film, poses and audio;
 `rigging.js`: AutoRig and retargeting; `scripting.js`: Python scripts; `server.js`: command line)
 and is covered by `test/mcp.test.js`, `test/mcpfilm.test.js` and `test/mcprig.test.js`.
+
+## Building the extension
+
+`npm run build:mcpb` packs the Claude Desktop extension (`mcpb/build.mjs`): it follows the server's
+imports to collect exactly the files it uses, adds Pyodide and ag-psd, writes `manifest.json` (with
+the tool list and a "Project folders" setting), validates it with Anthropic's `mcpb` tool and writes
+`dist-mcpb/Rigby2D-AI-<version>.mcpb`, plus a copy named `Rigby2D-AI.mcpb` for the "latest" link.
+Releases attach both.

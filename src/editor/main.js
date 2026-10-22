@@ -24,6 +24,7 @@ import * as log from './log.js';
 import { toggleLogWindow, windowOpen as logOpen } from './logwindow.js';
 import { Scripts } from './scripting/scriptui.js';
 import { createTutorials } from './tutorials/index.js';
+import { openAiConnect } from './aiconnect.js';
 
 const app = new App();
 // Errors anywhere in the editor, and status messages, go to the log (View ▸ Log).
@@ -139,6 +140,7 @@ function menus() {
     Scripts: scripts.menu(),
     Help: [
       { label: 'Tutorials…', action: () => tutorials.open() },
+      { label: 'Connect an AI assistant…', action: () => openAiConnect() },
       'separator',
       h(
         'div',

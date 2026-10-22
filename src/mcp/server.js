@@ -19,10 +19,11 @@ const log = (text) => process.stderr.write(`rigby2d-mcp: ${text}\n`);
 
 const HELP = `Rigby2D MCP server ${version}
 
-Usage: rigby2d-mcp [--root <dir>]...
+Usage: rigby2d-mcp [--root <dir> | <dir>]...
 
 Serves the Model Context Protocol over stdin/stdout for AI assistants.
   --root <dir>   Folder the tools may access (repeatable; default: current folder).
+  <dir>          The same, without --root.
   --help         Show this help.
   --version      Show the version.
 
@@ -40,6 +41,8 @@ function parseArgs(argv) {
       if (!argv[i + 1]) throw new Error('--root needs a folder');
       roots.push(argv[++i]);
     } else if (arg.startsWith('--root=')) roots.push(arg.slice('--root='.length));
+    // A plain folder is a root too (MCP bundles pass each folder the user picked as one argument).
+    else if (!arg.startsWith('-')) roots.push(arg);
     else throw new Error(`unknown argument '${arg}' (see --help)`);
   }
   return { roots };

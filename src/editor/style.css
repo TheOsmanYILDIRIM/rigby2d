@@ -1166,3 +1166,47 @@ div.log-entry {
 .lesson-title {
   font-weight: 600;
 }
+
+/* ---- Connect an AI assistant ---- */
+.ai-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-steps li > div {
+  margin-top: 2px;
+}
+.ai-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+.ai-link {
+  flex: 1;
+  min-width: 0;
+  font: 12px ui-monospace, Consolas, monospace;
+}
+.ai-connect a.button {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  text-decoration: none;
+}
+.ai-connect button.primary,
+.ai-connect a.button.primary {
+  background: var(--accent);
+  color: white;
+}
+.ai-code pre {
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font: 12px ui-monospace, Consolas, monospace;
+  user-select: text;
+}
