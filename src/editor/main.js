@@ -4,10 +4,15 @@
 
 import { WORKSPACES, has } from './workspaces.js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { emit, listen } from '@tauri-apps/api/event';
+import { Skeleton } from '../core/model.js';
+import { EV_SYNC, EV_CONTROL, EV_CLOSED, PANELS, panelLabel } from './dock.js';
 
 import './style.css';
 import { App, Mode, saveSetting } from './app.js';
-import { ACTIONS, PRESETS, REPEATING, actionFor, actionsFor, comboOf, shortcutLabel } from './keymap.js';
+import { ACTIONS, PRESETS, shortcutLabel } from './keymap.js';
+import { installKeyboard, isTyping, runAction } from './keys.js';
 import { openRenderDialog } from './renderui.js';
 import { openAutoRig, openRetarget } from './rigui.js';
 import { startAudio, stopAudio } from './audio.js';
@@ -17,7 +22,7 @@ import * as toolbar from './toolbar.js';
 import * as tree from './tree.js';
 import * as inspector from './inspector.js';
 import { GraphEditor } from './graph.js';
-import { Dopesheet, deleteSelectedKeys, renderControls } from './timeline.js';
+import { Dopesheet, deleteSelectedKeys, renderControls, keySelectionIndices, applyKeySelection } from './timeline.js';
 import { Viewport } from './viewport.js';
 import { closeMenu, h, isMenuOpen, popupMenu, widgetState } from './widgets.js';
 import * as log from './log.js';
@@ -32,6 +37,140 @@ log.installCapture(app);
 const scripts = new Scripts(app);
 const inTauri = '__TAURI_INTERNALS__' in window;
 const $ = (sel) => document.querySelector(sel);
+
+// ---- detached timeline window -----------------------------------------------------------------
+// The timeline can pop out into a real OS window (panel.html), e.g. onto a second monitor. This
+// window stays the source of truth; the two keep in sync over Tauri events (see dock.js).
+
+// Open detached panel windows, by id (see dock.js PANELS). The editor is the single authority; a
+// change here broadcasts to every open window, and each window forwards its shortcuts back here.
+const detachedWindows = new Map();
+const geomUnlisten = new Map();
+let panelsReady = false;
+let lastSync = '';
+let lastSentDoc = null;
+
+const anyDetached = () => detachedWindows.size > 0;
+
+const geomKey = (id) => `rigby.panel.${id}.geom`;
+
+// Where the user last left a panel window (logical px). Null when never detached or unreadable.
+function loadGeom(id) {
+  try {
+    const g = JSON.parse(globalThis.localStorage?.getItem(geomKey(id)) ?? 'null');
+    return g && [g.x, g.y, g.w, g.h].every(Number.isFinite) ? g : null;
+  } catch {
+    return null;
+  }
+}
+
+// Persist a panel window's position and size as the user moves/resizes it, so it reopens the same.
+async function trackGeom(id, win) {
+  const save = async () => {
+    try {
+      const sf = await win.scaleFactor();
+      const p = await win.outerPosition();
+      const s = await win.innerSize();
+      saveSetting(geomKey(id), JSON.stringify({ x: Math.round(p.x / sf), y: Math.round(p.y / sf), w: Math.round(s.width / sf), h: Math.round(s.height / sf) }));
+    } catch {
+      // Geometry is a convenience; ignore if the window info isn't available.
+    }
+  };
+  const stops = await Promise.all([win.onMoved(save), win.onResized(save)]);
+  geomUnlisten.set(id, () => { for (const stop of stops) stop(); });
+}
+
+async function detachPanel(id) {
+  if (!inTauri || !PANELS[id] || detachedWindows.has(id)) return;
+  const { label, width, height } = PANELS[id];
+  detachedWindows.set(id, null);
+  panelsReady = false;
+  lastSync = '';
+  lastSentDoc = null;
+  $('#app').classList.add(`detached-${id}`);
+  const opts = { url: `panel.html?panel=${id}`, title: `Rigby2D - ${label}`, width, height, minWidth: 320, minHeight: 200 };
+  // Reopen where the user last left this panel (possibly on another monitor). With nothing saved,
+  // the OS places it on the editor's own monitor; drag it anywhere once and it sticks from then on.
+  const saved = loadGeom(id);
+  if (saved) Object.assign(opts, { width: saved.w, height: saved.h, x: saved.x, y: saved.y });
+  const win = new WebviewWindow(panelLabel(id), opts);
+  detachedWindows.set(id, win);
+  trackGeom(id, win);
+  win.once('tauri://error', (e) => {
+    app.setStatus(`Could not open the ${label} window: ${e.payload}`);
+    dockPanel(id);
+  });
+  app.setStatus(`${label} popped out to its own window. Close it to dock it back.`);
+}
+
+function dockPanel(id) {
+  if (!detachedWindows.has(id)) return;
+  const win = detachedWindows.get(id);
+  detachedWindows.delete(id);
+  const stop = geomUnlisten.get(id);
+  if (stop) { stop(); geomUnlisten.delete(id); }
+  $('#app').classList.remove(`detached-${id}`);
+  if (win) win.destroy().catch(() => {});
+  app.changed();
+}
+
+/** A change signature over the shared state (so an unchanged frame sends nothing). */
+// Change signature over the shared state, derived from the snapshot so new fields are covered
+// automatically. docJson is excluded (it is huge and tracked separately) and keys folded in.
+function stateSignature(s, keys) {
+  return JSON.stringify({ ...s, docJson: undefined, keys });
+}
+
+/** Runs a shortcut the detached window forwarded, on the authoritative editor App (undo lives here). */
+function runPanelAction(action) {
+  runAction(app, action, { viewport, zoomActual, deleteSelectedKeys, closeMenu });
+}
+
+/** Adopts the state the detached window sent (document edits as one undo step), without echoing it. */
+function applyFromPanel(p) {
+  app.applyStateSnapshot(p, { undo: true });
+  applyKeySelection(app, p.keys);
+  const s = app.snapshotState();
+  lastSync = stateSignature(s, keySelectionIndices(app));
+  if (p.docJson) lastSentDoc = s.docJson;
+}
+
+if (inTauri) {
+  listen(EV_CONTROL, (e) => {
+    if (!anyDetached()) return;
+    const p = e.payload ?? {};
+    if (p.ready) {
+      // A window is up and asks for the first full state (broadcast reaches every window).
+      panelsReady = true;
+      lastSync = '';
+      lastSentDoc = null;
+      return;
+    }
+    if (p.action) return runPanelAction(p.action);
+    applyFromPanel(p);
+  });
+  listen(EV_CLOSED, (e) => dockPanel(e.payload?.panel));
+  // Closing the editor closes the whole program: tear down any detached panel windows too.
+  getCurrentWindow().onCloseRequested(() => {
+    for (const [, win] of detachedWindows) win?.destroy().catch(() => {});
+  });
+}
+
+/** Broadcasts the shared editor state to every detached window (per frame; cheap when unchanged). */
+function syncPanels() {
+  if (!anyDetached() || !panelsReady) return;
+  const s = app.snapshotState();
+  const keys = keySelectionIndices(app);
+  const sig = stateSignature(s, keys);
+  const docChanged = s.docJson !== lastSentDoc;
+  if (sig === lastSync && !docChanged) return;
+  lastSync = sig;
+  // Payload is the snapshot itself plus the key selection; the document rides only when it changed.
+  const payload = { ...s, keys };
+  if (docChanged) lastSentDoc = s.docJson;
+  else delete payload.docJson;
+  emit(EV_SYNC, payload);
+}
 
 // ---- menu bar ---------------------------------------------------------------------------------
 
@@ -206,88 +345,6 @@ function buildMenuBar() {
   };
 }
 
-// ---- keyboard ---------------------------------------------------------------------------------
-
-const isTyping = (el) =>
-  el && ((el.tagName === 'INPUT' && !el.readOnly && !['checkbox', 'radio', 'color'].includes(el.type)) || el.tagName === 'TEXTAREA');
-
-/** Runs a keymap action. */
-function run(action) {
-  const setTool = (tool) => () => {
-    app.tool = tool;
-    app.changed();
-  };
-  const handlers = {
-    'tool.pose': setTool('pose'),
-    'tool.create': setTool('create'),
-    'tool.rotate': setTool('rotate'),
-    'tool.translate': setTool('translate'),
-    'tool.scale': setTool('scale'),
-    'tool.shear': setTool('shear'),
-    'mode.toggle': () => app.toggleMode(),
-    'play.forward': () => app.togglePlay(1),
-    'play.backward': () => app.togglePlay(-1),
-    'time.start': () => app.setTime(0),
-    'time.end': () => app.jumpToEnd(),
-    'key.next': () => app.stepKey(1),
-    'key.previous': () => app.stepKey(-1),
-    'frame.next': () => app.stepFrame(1),
-    'frame.previous': () => app.stepFrame(-1),
-    'frame.next10': () => app.stepFrame(10),
-    'frame.previous10': () => app.stepFrame(-10),
-    'loop.toggle': () => {
-      app.looping = !app.looping;
-      app.setStatus(`Looping ${app.looping ? 'on' : 'off'}`);
-    },
-    'key.changed': () => edit.keyChanged(app),
-    'key.tool': () => edit.keyTool(app),
-    'key.transforms': () => edit.keySelection(app),
-    'key.shown': () => edit.keyShown(app),
-    'autokey.toggle': () => {
-      app.autoKey = !app.autoKey;
-      app.changed();
-    },
-    'select.none': () => app.deselect(),
-    'view.fit': () => (app.frameRequest = true),
-    'view.actual': () => zoomActual(),
-    'edit.delete': () => {
-      if (viewport.meshTool.deleteSelected() || viewport.shapeTool.deleteSelected()) return;
-      if (app.selectedKeys.size) deleteSelectedKeys(app);
-      else edit.deleteSelection(app);
-    },
-    'edit.undo': () => app.undo(),
-    'edit.redo': () => app.redo(),
-    'file.open': () => app.openDialog(),
-    'file.save': () => app.save(false),
-    'file.saveAs': () => app.save(true),
-    'file.export': () => app.exportSkeletonJson(app.saveVersion()),
-    'menu.close': () => closeMenu(),
-  };
-  handlers[action]?.();
-}
-
-window.addEventListener('keydown', (e) => {
-  const combo = comboOf(e);
-  if (!combo) return;
-  let action = actionFor(app.keymap, combo);
-  if (!action) return;
-  const typing = isTyping(e.target);
-  // While typing, only file shortcuts work (text fields keep their own undo, delete, etc.).
-  if (typing && !action.startsWith('file.')) return;
-  if (e.target.tagName === 'SELECT' && !['mode.toggle', 'menu.close'].includes(action) && !action.startsWith('file.')) return;
-  // A key bound to "close menus" closes an open menu; otherwise it runs its other action (deselect).
-  if (action === 'menu.close') {
-    e.preventDefault();
-    if (isMenuOpen()) return closeMenu();
-    action = actionsFor(app.keymap, combo).find((a) => a !== 'menu.close');
-    if (!action) return;
-  }
-  if (e.repeat && !REPEATING.has(action)) return;
-  e.preventDefault();
-  closeMenu();
-  run(action);
-});
-
 // ---- panel splitters --------------------------------------------------------------------------
 
 function splitter(el, cssVar, axis, sign, min) {
@@ -320,6 +377,7 @@ const viewport = new Viewport(app, $('#viewport'), $('#viewport-gl'));
 app.viewport = viewport;
 const dopesheet = new Dopesheet(app, $('#dopesheet'), $('#dopesheet canvas'));
 const graph = new GraphEditor(app, $('#graph'), $('#graph canvas'));
+installKeyboard(app, { viewport, zoomActual, deleteSelectedKeys, closeMenu, isMenuOpen });
 const renderMenuBar = buildMenuBar();
 const tutorials = createTutorials(app, viewport, { refresh: () => renderNow() });
 
@@ -427,6 +485,7 @@ function frame(now) {
     document.title = title;
     if (inTauri) getCurrentWindow().setTitle(title).catch(() => {});
   }
+  syncPanels();
   requestAnimationFrame(frame);
 }
 
@@ -446,3 +505,9 @@ if (import.meta.env.DEV) window.rigby = { app, memoryFs, dopesheet, graph, viewp
 if (scripts.library.length) setTimeout(() => scripts.loadAll({ quiet: true }), 1500);
 
 $('#status-log').addEventListener('click', () => toggleLogWindow());
+
+// Each panel pops out into its own window from the ⧉ button at its top-right (desktop only).
+for (const btn of document.querySelectorAll('.panel-detach-btn')) {
+  btn.hidden = !inTauri;
+  btn.addEventListener('click', () => detachPanel(btn.dataset.panel));
+}

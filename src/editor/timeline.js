@@ -563,6 +563,34 @@ export function curveMenu(app, x, y) {
   ]);
 }
 
+/** Every key of an animation in a fixed order, so a selection can be addressed by index. Both the
+ *  editor and the detached window build the same order from the same document. */
+export function orderedKeys(app, anim) {
+  const out = [];
+  for (const { track } of tracks(app, anim)) for (const k of trackKeys(anim, track) ?? []) out.push(k);
+  return out;
+}
+
+/** The selected keys as indices into orderedKeys, for sending the selection between windows. */
+export function keySelectionIndices(app) {
+  const anim = app.currentAnimation();
+  if (!anim || !app.selectedKeys.size) return [];
+  const order = orderedKeys(app, anim);
+  const out = [];
+  order.forEach((k, i) => {
+    if (app.selectedKeys.has(k)) out.push(i);
+  });
+  return out;
+}
+
+/** Resolves selection indices back to the current animation's key objects. */
+export function applyKeySelection(app, indices) {
+  const anim = app.currentAnimation();
+  if (!anim) return (app.selectedKeys = new Set());
+  const order = orderedKeys(app, anim);
+  app.selectedKeys = new Set((indices ?? []).map((i) => order[i]).filter(Boolean));
+}
+
 function diamond(ctx, c, r, fill) {
   ctx.beginPath();
   ctx.moveTo(c[0], c[1] - r);
