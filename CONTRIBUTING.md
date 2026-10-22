@@ -52,14 +52,38 @@ quick UI work. File dialogs and disk access only work in the desktop app (`npm r
   (`pack.js`, `sample.js`). Run `npm test` before pushing.
 - For UI changes, include a screenshot or short clip in the pull request.
 
+## Branches
+
+| Branch | What it is |
+| --- | --- |
+| `main` | Stable: what the latest release was built from. It changes only when a release is made. |
+| `develop` | Where work comes together. **Open pull requests against `develop`.** |
+
+Make your own branch in your fork, named for what it does:
+
+- `feat/<short-name>` for a new feature (`feat/onion-skin`);
+- `fix/<short-name>` for a bug fix (`fix/key-drag-snap`), with the issue number when there is one
+  (`fix/12-key-drag-snap`);
+- `docs/<short-name>` for documentation and tutorials;
+- `runtime/<short-name>` for the JavaScript, Rust or Godot runtimes.
+
+When `develop` is ready, a maintainer merges it into `main` and makes a release.
+
 ## Pull request process
 
-1. Create a branch from `main` (`fix/…`, `feat/…`, `docs/…`).
+1. Fork the repository, then create your branch from `develop`:
+   ```bash
+   git clone https://github.com/<you>/rigby2d.git
+   cd rigby2d
+   git checkout develop
+   git checkout -b feat/my-change
+   ```
 2. Keep each PR focused on one change; write a clear description of what and why.
 3. Make sure `npm test` passes and `npm run web:build` succeeds; for runtime changes also
    `cargo test --release --workspace` in `runtimes/rust`.
 4. Link the related issue (e.g. `Closes #12`).
-5. A maintainer will review; please respond to feedback with follow-up commits.
+5. Open the pull request against `develop` (not `main`). A maintainer will review; please respond to
+   feedback with follow-up commits. If `develop` has moved on meanwhile, merge it into your branch.
 
 ### Commit messages
 
