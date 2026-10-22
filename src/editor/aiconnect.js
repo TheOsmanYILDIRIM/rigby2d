@@ -62,7 +62,16 @@ export function openAiConnect() {
           h('div', { class: 'small weak' }, isDesktop ? 'Copy the link, paste it into your web browser and the file downloads (about 7 MB).' : 'One file, about 7 MB.'),
           h('div', { class: 'ai-row' }, download, link),
         ),
-        h('li', null, h('b', null, 'Double-click the downloaded file'), h('div', { class: 'small weak' }, 'Claude Desktop opens and shows the extension. No other software is needed: Claude Desktop includes everything it needs.')),
+        h(
+          'li',
+          null,
+          h('b', null, 'Drag the downloaded file onto the Claude Desktop window'),
+          h(
+            'div',
+            { class: 'small weak' },
+            'Or, in Claude Desktop: Settings ▸ Extensions ▸ Advanced settings ▸ Install Extension…, then pick the file. (Double-clicking the file may work too, but on some Windows installs it asks which app to use; if it does, close that box and drag the file instead.) No other software is needed: Claude Desktop includes everything the extension needs.',
+          ),
+        ),
         h('li', null, h('b', null, 'Choose your project folders and click Install'), h('div', { class: 'small weak' }, 'Claude can only open and change files inside the folders you choose.')),
         h(
           'li',

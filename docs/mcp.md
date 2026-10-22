@@ -15,8 +15,10 @@ files (ag-psd): run `npm install` once in the Rigby2D folder to use them.
 
 1. Download [Rigby2D-AI.mcpb](https://github.com/jaisurya-dev-art/rigby2d/releases/latest/download/Rigby2D-AI.mcpb)
    (about 7 MB; also on every [release](https://github.com/jaisurya-dev-art/rigby2d/releases)).
-2. Double-click it (or drag it onto the Claude Desktop window, or use *Settings ▸ Extensions ▸
-   Advanced settings ▸ Install Extension…*).
+2. Drag it onto the Claude Desktop window, or in Claude Desktop open *Settings ▸ Extensions ▸
+   Advanced settings ▸ Install Extension…* and pick it. Double-clicking may work too, but on some
+   Windows installs (for example Claude from the Microsoft Store) Windows asks which app to use:
+   close that box and drag the file instead.
 3. Choose your project folders and click *Install*.
 
 No Node.js, terminal or settings file is needed: Claude Desktop includes the runtime. The extension

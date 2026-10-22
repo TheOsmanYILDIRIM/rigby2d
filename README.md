@@ -50,7 +50,8 @@ file's own format and stay inside the folders you allow.
 
 **Claude Desktop (Windows, macOS):** download
 **[Rigby2D-AI.mcpb](https://github.com/jaisurya-dev-art/rigby2d/releases/latest/download/Rigby2D-AI.mcpb)**,
-double-click it, choose your project folders and click *Install*. Nothing else to install: Claude
+drag it onto the Claude Desktop window (or use *Settings ▸ Extensions ▸ Advanced settings ▸ Install
+Extension…*), choose your project folders and click *Install*. Nothing else to install: Claude
 Desktop brings everything the extension needs. The editor walks you through it in
 *Help ▸ Connect an AI assistant*.
 
