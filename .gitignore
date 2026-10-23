@@ -11,3 +11,6 @@ src-tauri/gen/schemas/
 *.exe
 *.msi
 *.dmg
+
+# Promo video renders
+promo/out/

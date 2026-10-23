@@ -25,10 +25,34 @@ function pyodideAssets() {
   };
 }
 
+// The promo studio (promo/index.html, development only) saves renders into promo/out/.
+function promoSave() {
+  return {
+    name: 'rigby-promo-save',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/__promo/save', (req, res) => {
+        const name = path.basename(new URL(req.url ?? '', 'http://x').searchParams.get('name') ?? '');
+        if (req.method !== 'POST' || !/^[\w.-]+\.(mp4|png)$/.test(name)) {
+          res.statusCode = 400;
+          return res.end();
+        }
+        const chunks = [];
+        req.on('data', (c) => chunks.push(c));
+        req.on('end', () => {
+          fs.mkdirSync('promo/out', { recursive: true });
+          fs.writeFileSync(path.join('promo/out', name), Buffer.concat(chunks));
+          res.end('ok');
+        });
+      });
+    },
+  };
+}
+
 // Vite serves and bundles the editor UI; Tauri hosts it in a native window.
 export default defineConfig({
   clearScreen: false,
-  plugins: [pyodideAssets()],
+  plugins: [pyodideAssets(), promoSave()],
   server: { port: 1420, strictPort: true, watch: { ignored: ['**/src-tauri/**'] } },
   envPrefix: ['VITE_', 'TAURI_ENV_'],
   build: {
