@@ -11,7 +11,6 @@
 <p align="center">
   <img alt="Status: early alpha" src="https://img.shields.io/badge/status-early%20alpha-orange">
   <a href="runtimes/godot/addons/rigby2d/README.md"><img alt="Runtime ready: Godot" src="https://img.shields.io/badge/runtime%20ready-Godot-478cbf?logo=godotengine&logoColor=white"></a> 
-  [![Upstar](https://upstar.dev/badge/jaisurya-dev-art/rigby2d.svg)](https://upstar.dev/r/jaisurya-dev-art/rigby2d)
   <a href="docs/mcp.md"><img alt="MCP server built in" src="https://img.shields.io/badge/MCP-server%20built%20in-7c3aed"></a>
   <a href="#license"><img alt="License: MIT or Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey">
