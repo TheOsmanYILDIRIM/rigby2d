@@ -11,6 +11,7 @@
 <p align="center">
   <img alt="Status: early alpha" src="https://img.shields.io/badge/status-early%20alpha-orange">
   <a href="https://upstar.dev/r/jaisurya-dev-art/rigby2d"><img alt="Upstar" src="https://upstar.dev/badge/jaisurya-dev-art/rigby2d.svg"></a>
+  <a href="https://www.youtube.com/watch?v=KK3WT9YzhAE"><img alt="Watch on YouTube" src="https://img.shields.io/badge/watch-75s%20overview-ff0000?logo=youtube&logoColor=white"></a>
   <a href="runtimes/godot/addons/rigby2d/README.md"><img alt="Runtime ready: Godot" src="https://img.shields.io/badge/runtime%20ready-Godot-478cbf?logo=godotengine&logoColor=white"></a>
   <a href="docs/mcp.md"><img alt="MCP server built in" src="https://img.shields.io/badge/MCP-server%20built%20in-7c3aed"></a>
   <a href="#license"><img alt="License: MIT or Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg"></a>
@@ -22,6 +23,11 @@
 
 <p align="center">
   <a href="https://github.com/jaisurya-dev-art/rigby2d/releases/latest/download/Rigby2D_x64_portable.exe"><b>Download (portable)</b></a>: the latest portable editor for Windows, no install needed
+</p>
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=KK3WT9YzhAE"><img src="https://img.youtube.com/vi/KK3WT9YzhAE/maxresdefault.jpg" alt="Watch the Rigby2D overview on YouTube (75 seconds)" width="800"></a><br>
+  <sub>▶ <a href="https://www.youtube.com/watch?v=KK3WT9YzhAE">Watch the 75-second overview</a>: AutoRig, animation, film, games and AI</sub>
 </p>
 
 <p align="center">
