@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=KK3WT9YzhAE"><img src="https://img.youtube.com/vi/KK3WT9YzhAE/maxresdefault.jpg" alt="Watch the Rigby2D overview on YouTube (75 seconds)" width="800"></a><br>
+  <a href="https://www.youtube.com/watch?v=KK3WT9YzhAE"><img src="docs/video-preview.jpg" alt="Watch the Rigby2D overview on YouTube (75 seconds)" width="800"></a><br>
   <sub>▶ <a href="https://www.youtube.com/watch?v=KK3WT9YzhAE">Watch the 75-second overview</a>: AutoRig, animation, film, games and AI</sub>
 </p>
 
