@@ -16,7 +16,7 @@ const toHotkey = (v) => (v === '' ? null : Number(v));
 const hotkeyValue = (hotkey) => (hotkey === null || hotkey === undefined ? '' : String(hotkey));
 
 /** A plain modal with an Escape-to-close backdrop; `build(close)` returns its contents. */
-function modal(build) {
+function modal(build, { wide = false } = {}) {
   const overlay = h('div', { class: 'modal-backdrop' });
   const onKey = (e) => {
     if (e.key === 'Escape') {
@@ -29,7 +29,7 @@ function modal(build) {
     document.removeEventListener('keydown', onKey, true);
   };
   document.addEventListener('keydown', onKey, true);
-  overlay.append(h('div', { class: 'modal' }, ...build(close).filter(Boolean)));
+  overlay.append(h('div', { class: `modal${wide ? ' modal-wide' : ''}` }, ...build(close).filter(Boolean)));
   document.body.append(overlay);
   return close;
 }
@@ -122,6 +122,8 @@ function currentPanelsHint(ctx) {
 
 function openManageLayouts(ctx) {
   modal((close) => {
+    // (wider modal below so the row's name field, hotkey select and the Load/Update/Delete
+    // actions keep their width once the "unsaved" badge joins them at the right edge.)
     const list = h('div', { class: 'layout-list' });
     const render = () => {
       const layouts = loadLayouts();
@@ -141,12 +143,12 @@ function openManageLayouts(ctx) {
                 h('span', { class: 'layout-dot', title: active ? (unsaved ? 'Active — unsaved window changes' : 'Active layout') : '' }, active ? '●' : ''),
                 textField(l.name, (v) => saveLayouts(renameLayout(loadLayouts(), l.id, v)), { width: '100%' }),
                 select(HOTKEY_OPTIONS, hotkeyValue(l.hotkey), (v) => persist(assignHotkey(loadLayouts(), l.id, toHotkey(v)))),
-                unsaved ? h('span', { class: 'layout-badge', title: 'The windows moved since this layout was saved' }, 'unsaved') : null,
                 h('div', { class: 'layout-actions' },
                   h('button', { title: 'Load this layout now', onclick: () => { loadLayout(ctx, l); render(); } }, 'Load'),
-                  h('button', { title: 'Replace it with the current window arrangement', onclick: async (e) => { e.currentTarget.disabled = true; const panels = await ctx.sync.captureLayout(); saveLayouts(updatePanels(loadLayouts(), l.id, panels)); if (active) ctx.sync.setActiveLayout(l.id); ctx.app.setStatus(`Updated "${l.name}" to the current arrangement`); render(); } }, 'Update'),
+                  h('button', { title: 'Save the current window arrangement into this layout and make it the active one', onclick: async (e) => { e.currentTarget.disabled = true; const panels = await ctx.sync.captureLayout(); saveLayouts(updatePanels(loadLayouts(), l.id, panels)); ctx.sync.setActiveLayout(l.id); ctx.app.setStatus(`Updated "${l.name}" to the current arrangement`); render(); } }, 'Update'),
                   h('button', { title: 'Delete this layout', onclick: async () => { if (await confirmDialog(`Delete the layout "${l.name}"?`, 'Delete layout')) { if (active) ctx.sync.setActiveLayout(null); persist(removeLayout(loadLayouts(), l.id)); } } }, 'Delete'),
                 ),
+                unsaved ? h('span', { class: 'layout-badge', title: 'The windows moved since this layout was saved' }, 'unsaved') : null,
               );
             })
           : [h('p', { class: 'weak' }, 'No saved layouts yet. Use View ▸ Window layouts ▸ Save current layout.')]),
@@ -160,5 +162,5 @@ function openManageLayouts(ctx) {
       list,
       h('div', { class: 'modal-buttons' }, h('button', { class: 'primary', onclick: close }, 'Done')),
     ];
-  });
+  }, { wide: true });
 }
