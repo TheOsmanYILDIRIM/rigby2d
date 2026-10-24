@@ -15,6 +15,7 @@ import * as inspector from './inspector.js';
 import { installKeyboard } from './keys.js';
 import { closeMenu, isMenuOpen, widgetState, h } from './widgets.js';
 import { EV_SYNC, EV_CONTROL, EV_CLOSED, PANELS } from './dock.js';
+import { layoutHotkeyDigit, listenForPlacement } from './panelsync.js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { emit, listen } from '@tauri-apps/api/event';
 
@@ -94,6 +95,20 @@ installKeyboard(app, {
   closeMenu,
   isMenuOpen,
 });
+
+// Ctrl+Alt+<digit> is not a keymap shortcut; forward it so a saved window layout loads even when a
+// panel window (not the editor) has focus. The editor resolves the digit to a layout (panelsync).
+// Capture phase: text fields stopPropagation() keydown, so a bubble listener would miss it when a
+// field was focused.
+window.addEventListener('keydown', (e) => {
+  const digit = layoutHotkeyDigit(e);
+  if (digit === null) return;
+  e.preventDefault();
+  emit(EV_CONTROL, { layoutHotkey: digit });
+}, true);
+
+// Reposition/resize this window when the editor loads a layout that moves an already-open panel.
+listenForPlacement(panelId);
 
 // Keep the panel from rebuilding mid-interaction (a held press inside it), so the click is not lost.
 let pointersDown = 0;
