@@ -647,8 +647,13 @@ export class App {
       }
       this.doc = Skeleton.fromObject(JSON.parse(s.docJson));
       // Keep our own canonical snapshot so the sync below is not mistaken for a fresh edit.
+      // Like restore() (undo/redo), this does NOT touch `saved`: adopting an edit from another
+      // window is a real change, so the editor (the authority) stays dirty until the user saves —
+      // the title keeps its * and New/Open still warn. `saved` means "what is on disk", and only
+      // new/open/save write it. Mirror windows never read dirty()/save, so their stale `saved` is
+      // harmless.
       const canon = this.doc.toSnapshot();
-      this.docJson = this.baseline = this.saved = canon;
+      this.docJson = this.baseline = canon;
       this.selectedKeys.clear();
     }
     // Match the other window's frame rate so the ruler and the keys line up (changed() reads this).

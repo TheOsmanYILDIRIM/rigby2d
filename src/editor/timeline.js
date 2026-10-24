@@ -2,14 +2,18 @@
 // Bottom panel: animation list, transport controls and the dopesheet (the graph editor is graph.js).
 
 import { has, timecode } from './workspaces.js';
-import { Animation, BONE_CHANNELS, SLOT_CHANNELS } from '../core/animation.js';
+import { Animation } from '../core/animation.js';
 import { listConstraints } from '../core/constraintdata.js';
-import { channelKeys, keyedChannels, setConstraintCurve } from '../core/constraintkeys.js';
+import { keyedChannels, setConstraintCurve } from '../core/constraintkeys.js';
 import { EASE_IN, EASE_IN_OUT, EASE_OUT, LINEAR, STEPPED, cloneCurve, isBezier } from '../core/curve.js';
 import { uniqueName } from '../core/model.js';
 import { FPS, Mode, selBone, selSlot, snap } from './app.js';
 import * as edit from './edit.js';
 import { dragValue, h, popupMenu, select, textField } from './widgets.js';
+// The dopesheet's row order and key-selection-by-index live in keyorder.js (core-only, so the
+// selection round trip can be tested in Node). Re-exported here so the windows import them as before.
+import { tracks, trackKeys } from './keyorder.js';
+export { orderedKeys, keySelectionIndices, applyKeySelection } from './keyorder.js';
 
 const GUTTER = 170;
 const ROW = 20;
@@ -144,58 +148,6 @@ export function renderControls(app, el) {
       .flat()
       .filter(Boolean),
   );
-}
-
-/** Rows of the dopesheet for the current animation: [{ track, label }]. */
-function tracks(app, anim) {
-  const out = [];
-  const label = (ch) => ch.replace(/([A-Z])/g, ' $1').toLowerCase();
-  for (const tl of anim.bones) {
-    const name = app.doc.bones[tl.bone]?.name ?? `#${tl.bone}`;
-    for (const channel of BONE_CHANNELS) {
-      if (tl[channel].length) out.push({ track: { bone: tl.bone, channel }, label: `${name} · ${label(channel)}` });
-    }
-  }
-  for (const tl of anim.slots) {
-    const name = app.doc.slots[tl.slot]?.name ?? `#${tl.slot}`;
-    for (const channel of SLOT_CHANNELS) {
-      if (tl[channel].length) out.push({ track: { slot: tl.slot, channel }, label: `${name} · ${channel === 'attachment' ? 'image' : channel}` });
-    }
-  }
-  anim.deform.forEach((d, i) => {
-    out.push({ track: { deform: i, slot: d.slot }, label: `${app.doc.slots[d.slot]?.name ?? '?'} · deform ${d.attachment}` });
-  });
-  anim.ik.forEach((k, i) => out.push({ track: { ik: i }, label: `IK ${app.doc.ik[k.constraint]?.name ?? '?'}` }));
-  for (const [skin, slots] of Object.entries(anim.extra?.attachments ?? {})) {
-    for (const [slot, atts] of Object.entries(slots)) {
-      for (const [attachment, timelines] of Object.entries(atts)) {
-        if (Array.isArray(timelines.sequence) && timelines.sequence.length) {
-          out.push({ track: { sequence: { skin, slot, attachment } }, label: `${slot} · sequence${skin === 'default' ? '' : ` [${skin}]`}` });
-        }
-      }
-    }
-  }
-  for (const t of keyedChannels(anim, listConstraints(app.doc))) {
-    out.push({ track: { raw: { type: t.type, name: t.name, channel: t.channel } }, label: `${t.name} · ${t.channel ?? 'mix'}` });
-  }
-  if (anim.drawOrder.length) out.push({ track: { drawOrder: true }, label: 'draw order' });
-  if (anim.events.length) out.push({ track: { events: true }, label: 'events' });
-  return out;
-}
-
-function trackKeys(anim, track) {
-  if (track.raw) return channelKeys(anim, track.raw.type, track.raw.name, track.raw.channel);
-  if (track.sequence) {
-    const keys = anim.extra?.attachments?.[track.sequence.skin]?.[track.sequence.slot]?.[track.sequence.attachment]?.sequence;
-    for (const k of keys ?? []) k.time ??= 0;
-    return keys;
-  }
-  if (track.deform !== undefined) return anim.deform[track.deform]?.keys;
-  if (track.ik !== undefined) return anim.ik[track.ik]?.keys;
-  if (track.drawOrder) return anim.drawOrder;
-  if (track.events) return anim.events;
-  if (track.slot !== undefined) return anim.slotTimeline(track.slot)?.[track.channel ?? 'attachment'];
-  return anim.boneTimeline(track.bone)?.[track.channel];
 }
 
 /** Deletes every selected key. */
@@ -561,34 +513,6 @@ export function curveMenu(app, x, y) {
     'separator',
     { label: app.selectedKeys.size > 1 ? `Delete ${app.selectedKeys.size} keys` : 'Delete key', action: () => deleteSelectedKeys(app) },
   ]);
-}
-
-/** Every key of an animation in a fixed order, so a selection can be addressed by index. Both the
- *  editor and the detached window build the same order from the same document. */
-export function orderedKeys(app, anim) {
-  const out = [];
-  for (const { track } of tracks(app, anim)) for (const k of trackKeys(anim, track) ?? []) out.push(k);
-  return out;
-}
-
-/** The selected keys as indices into orderedKeys, for sending the selection between windows. */
-export function keySelectionIndices(app) {
-  const anim = app.currentAnimation();
-  if (!anim || !app.selectedKeys.size) return [];
-  const order = orderedKeys(app, anim);
-  const out = [];
-  order.forEach((k, i) => {
-    if (app.selectedKeys.has(k)) out.push(i);
-  });
-  return out;
-}
-
-/** Resolves selection indices back to the current animation's key objects. */
-export function applyKeySelection(app, indices) {
-  const anim = app.currentAnimation();
-  if (!anim) return (app.selectedKeys = new Set());
-  const order = orderedKeys(app, anim);
-  app.selectedKeys = new Set((indices ?? []).map((i) => order[i]).filter(Boolean));
 }
 
 function diamond(ctx, c, r, fill) {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // The editor's keyboard shortcuts: maps a key press to a keymap action and runs it. Both the main
-// window and the detached timeline window install this, so every shortcut (now and future) works
+// window and the detached panel windows install this, so every shortcut (now and future) works
 // in both without being listed twice.
 
 import { REPEATING, actionFor, actionsFor, comboOf } from './keymap.js';

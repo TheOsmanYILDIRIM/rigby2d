@@ -35,7 +35,7 @@ export default defineConfig({
     target: 'es2021',
     outDir: 'dist',
     emptyOutDir: true,
-    // The editor, the splash screen window and the detached timeline window.
+    // The editor, the splash screen window and the detached panel windows (panel.html).
     rollupOptions: { input: { main: 'index.html', splash: 'splash.html', panel: 'panel.html' } },
   },
 });
