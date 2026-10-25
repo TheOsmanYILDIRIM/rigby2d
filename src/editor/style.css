@@ -514,6 +514,62 @@ input[type='color'] {
   padding: 4px 8px;
   white-space: nowrap;
 }
+/* A nested submenu (View ▸ Window layouts ▸ …) opens to the right of its parent item. */
+.submenu-popup {
+  z-index: 101;
+}
+/* The active layout is bold; amber when the windows moved since it was saved. */
+.popup .item.active {
+  font-weight: 600;
+}
+.popup .item.unsaved {
+  color: #e6a23c;
+}
+
+/* Manage window layouts dialog */
+.layout-legend {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.layout-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 340px;
+  overflow: auto;
+}
+/* One compact line per layout: indicator · name · shortcut · actions. */
+.layout-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 2px;
+  border-bottom: 1px solid var(--border);
+}
+.layout-row > input[type='text'] {
+  flex: 1;
+  min-width: 80px;
+}
+.layout-dot {
+  width: 12px;
+  color: transparent;
+}
+.layout-row.active .layout-dot {
+  color: var(--accent);
+}
+.layout-row.dirty .layout-dot {
+  color: #e6a23c;
+}
+.layout-badge {
+  color: #e6a23c;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.layout-actions {
+  display: flex;
+  gap: 4px;
+}
 
 .grid {
   display: grid;

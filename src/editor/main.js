@@ -27,6 +27,7 @@ import { Scripts } from './scripting/scriptui.js';
 import { createTutorials } from './tutorials/index.js';
 import { openAiConnect } from './aiconnect.js';
 import { installPanelSync } from './panelsync.js';
+import { windowLayoutsMenuItem } from './layoutui.js';
 
 const app = new App();
 // Errors anywhere in the editor, and status messages, go to the log (View ▸ Log).
@@ -118,6 +119,8 @@ function menus() {
         ' Show output frame',
       ),
       { label: logOpen() ? 'Hide log' : 'Log', action: () => toggleLogWindow() },
+      // Save and recall where the detached panels sit (desktop only; panels pop out only there).
+      ...(inTauri && sync ? [windowLayoutsMenuItem({ app, sync })] : []),
       'separator',
       { label: 'Fit the skeleton in view', shortcut: sc('view.fit'), action: () => (app.frameRequest = true) },
       { label: 'Zoom to 100%', shortcut: sc('view.actual'), action: () => zoomActual() },

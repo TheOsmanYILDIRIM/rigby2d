@@ -22,3 +22,7 @@ export const EV_CONTROL = 'rigby:panel-control';
 
 /** Window → editor: { panel } is closing, so that panel docks back into the editor. */
 export const EV_CLOSED = 'rigby:panel-closed';
+
+/** Editor → a window: { panel, x, y, w, h } (logical px): reposition/resize yourself. Used when a
+ *  saved window layout is loaded and an already-open panel has to move (see panelsync / layouts). */
+export const EV_PLACE = 'rigby:panel-place';
