@@ -22,7 +22,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jaisurya-dev-art/rigby2d/releases/latest/download/Rigby2D_x64_portable.exe"><b>Download (portable)</b></a>: the latest portable editor for Windows, no install needed
+  <a href="https://github.com/jaisurya-dev-art/rigby2d/releases/latest/download/Rigby2D_x64_portable.exe"><b>Download (portable)</b></a>: the latest portable editor for Windows, no install needed<br>
+  <a href="https://jaisurya-dev-art.github.io/rigby2d/editor/"><b>Try it in your browser</b></a>: the full editor, nothing to install ·
+  <a href="https://jaisurya-dev-art.github.io/rigby2d/"><b>Website</b></a>
 </p>
 
 <p align="center">
