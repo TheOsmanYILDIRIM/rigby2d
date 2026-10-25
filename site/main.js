@@ -9,6 +9,7 @@ import { readSkeletonJson } from '../src/core/interop.js';
 import { Pose } from '../src/core/pose.js';
 import { AnimationState } from '../src/core/state.js';
 import { WebGLRenderer } from '../src/webgl/renderer.js';
+import { animationBounds } from '../src/editor/output.js';
 import skelUrl from '../branding/rigbytron/export/rigbytron.skel?url&no-inline';
 import atlasText from '../branding/rigbytron/export/rigbytron.atlas?raw';
 import pageUrl from '../branding/rigbytron/export/rigbytron.png?url';
@@ -19,8 +20,19 @@ const costEl = $('[data-cost]');
 const buttons = [...document.querySelectorAll('[data-anim]')];
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** Rigbytron is about this many world units tall, standing on y = 0. */
-const FIGURE_HEIGHT = 1400;
+/** Space left around Rigbytron, as a fraction of the stage. */
+const MARGIN = 0.04;
+
+/** World bounds [x0, y0, x1, y1] covering every frame of every animation (the slash reaches far left). */
+function figureBounds(sk) {
+  let b = animationBounds(sk, null, 30);
+  sk.animations.forEach((_, i) => {
+    const a = animationBounds(sk, i, 30);
+    if (!a) return;
+    b = b ? [Math.min(b[0], a[0]), Math.min(b[1], a[1]), Math.max(b[2], a[2]), Math.max(b[3], a[3])] : a;
+  });
+  return b ?? [-500, 0, 500, 1400];
+}
 
 function fallback() {
   canvas.hidden = true;
@@ -40,6 +52,7 @@ async function start() {
   const textures = renderer.atlasTextures(atlas, new Map([[atlas.pages[0].name, page]]));
   const pose = new Pose(sk);
   const state = new AnimationState();
+  const [bx0, by0, bx1, by1] = figureBounds(sk);
   let mode = 'both';
 
   // "both" plays the gesture, hold then release, and starts it again after a short rest.
@@ -79,9 +92,9 @@ async function start() {
     gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    // Fit the figure to the stage: feet near the bottom, the arm's reach inside the width.
-    const zoom = Math.min((0.9 * ch) / FIGURE_HEIGHT, (0.95 * cw) / 1100);
-    const camera = { x: 60, y: (0.46 * ch) / zoom, zoom: zoom * dpr };
+    // Fit everything any animation draws inside the stage, so the slash is never cut off.
+    const zoom = Math.min(((1 - 2 * MARGIN) * cw) / (bx1 - bx0), ((1 - 2 * MARGIN) * ch) / (by1 - by0));
+    const camera = { x: (bx0 + bx1) / 2, y: (by0 + by1) / 2, zoom: zoom * dpr };
     const t0 = performance.now();
     state.update(sk, dt);
     state.apply(sk, pose);

@@ -159,6 +159,14 @@ playback fix.
 
 ## Getting started
 
+### Try it in your browser
+
+**[Open the editor](https://jaisurya-dev-art.github.io/rigby2d/editor/)** on the
+[Rigby2D website](https://jaisurya-dev-art.github.io/rigby2d/): the full editor with the Rigbytron
+demo, the tutorials and Python scripting, with nothing to install. Files open and save through your
+browser (folder access where the browser supports it, otherwise a download). Detachable panels and
+window layouts need the desktop app. The website and its editor follow the `develop` branch.
+
 ### Download
 
 **[Download (portable)](https://github.com/jaisurya-dev-art/rigby2d/releases/latest/download/Rigby2D_x64_portable.exe)**: the latest portable editor for Windows, a single `.exe`: download and open, no install.
@@ -211,6 +219,15 @@ The app is written to `src-tauri/target/release/` and the installers (MSI and NS
 ```bash
 npm test
 ```
+
+### Website
+
+```bash
+npm run site:build
+```
+
+Builds the website (`site/`) and the browser editor (served at `/editor/`) into `_site/`. Every push
+to `develop` deploys it to GitHub Pages through `.github/workflows/pages.yml`.
 
 ## Using Rigby2D
 
@@ -333,6 +350,7 @@ src/editor/scripting/  Python scripting: the rigby module, script host and scrip
 runtimes/       Rust runtime and the Godot 4 node (preview); see runtimes/README.md
 branding/       Logo, lockups, icons and Rigbytron (proprietary, see TRADEMARKS.md)
 examples/       WebGL player example
+site/           Website (GitHub Pages): landing page with Rigbytron playing live on the runtime
 src-tauri/      Native desktop shell (editor and splash windows, file dialog/fs plugins only)
 test/           node:test suites
 docs/           Screenshot and the film, AutoRig, scripting and MCP server guides
