@@ -391,6 +391,7 @@ function projectUi(app) {
           app.changed();
         }),
       ),
+      row('Textures', textureFilterSelect(app)),
     ),
     app.doc.skins.length
       ? h(
@@ -431,6 +432,23 @@ function projectUi(app) {
       h('li', null, 'File ▸ Save writes the .rigby work file; File ▸ Export writes skeleton JSON or .skel + a packed atlas for runtimes.'),
     ),
   ];
+}
+
+/** How images are sampled when scaled: smooth, or sharp for pixel art. Also written to exported atlases. */
+function textureFilterSelect(app) {
+  const el = select(
+    [
+      ['linear', 'Smooth (linear)'],
+      ['nearest', 'Pixel art (nearest)'],
+    ],
+    app.doc.textureFilter,
+    (v) => {
+      app.doc.textureFilter = v;
+      app.changed();
+    },
+  );
+  el.title = 'How images are drawn when scaled. Pixel art keeps every pixel sharp in the viewport, in renders and in exported atlases (filter: Nearest).';
+  return el;
 }
 
 /** Film: audio tracks of the current animation (offset and volume). */
