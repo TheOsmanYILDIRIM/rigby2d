@@ -28,6 +28,10 @@ import { createTutorials } from './tutorials/index.js';
 import { openAiConnect } from './aiconnect.js';
 import { installPanelSync } from './panelsync.js';
 import { windowLayoutsMenuItem } from './layoutui.js';
+import { startAnalytics } from './analytics.js';
+
+// Anonymous visit and feature counts, only on the public website's browser editor (analytics.js).
+startAnalytics();
 
 const app = new App();
 // Errors anywhere in the editor, and status messages, go to the log (View ▸ Log).

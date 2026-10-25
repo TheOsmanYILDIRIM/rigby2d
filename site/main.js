@@ -10,9 +10,13 @@ import { Pose } from '../src/core/pose.js';
 import { AnimationState } from '../src/core/state.js';
 import { WebGLRenderer } from '../src/webgl/renderer.js';
 import { animationBounds } from '../src/editor/output.js';
+import { startAnalytics } from '../src/editor/analytics.js';
 import skelUrl from '../branding/rigbytron/export/rigbytron.skel?url&no-inline';
 import atlasText from '../branding/rigbytron/export/rigbytron.atlas?raw';
 import pageUrl from '../branding/rigbytron/export/rigbytron.png?url';
+
+// Anonymous visit counts; links marked data-goatcounter-click count their clicks (analytics.js).
+startAnalytics();
 
 const $ = (s) => document.querySelector(s);
 const canvas = $('#hero');

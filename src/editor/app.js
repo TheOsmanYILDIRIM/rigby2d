@@ -14,6 +14,7 @@ import * as sample from './sample.js';
 import { addSound, sounds, stopAudio } from './audio.js';
 import { WORKSPACES, workspace as workspaceDef } from './workspaces.js';
 import * as onion from './onion.js';
+import { track } from './analytics.js';
 import demoUrl from '../../branding/rigbytron/rigbytron.rigby?url&no-inline';
 
 /** The bundled demo project: Rigbytron, the Rigby2D mascot. */
@@ -449,6 +450,7 @@ export class App {
       this.loadDocument(doc, imported ? null : path);
       this.saveTarget = !imported && fs.reusable ? { path, fs } : null;
       const what = imported ? 'Imported' : 'Opened';
+      track(imported ? 'editor-import-skeleton' : 'editor-open');
       this.setStatus(warnings.length ? `${what} with warnings: ${warnings.join('; ')}` : `${what} ${path}`);
     } catch (e) {
       this.setStatus(`Could not open ${path}: ${errorText(e)}`);
@@ -543,6 +545,7 @@ export class App {
       this.syncJson();
       this.baseline = this.saved = this.docJson;
       const note = warnings.length ? ` (warnings: ${warnings.join('; ')})` : '';
+      track('editor-save');
       this.setStatus(`Saved ${target.path}${note}`);
     } catch (e) {
       this.setStatus(`Save failed: ${errorText(e)}`);
@@ -557,6 +560,7 @@ export class App {
       const { atlasPath, warnings } = await io.exportSkeletonJson(target.path, target.fs, this.doc, this.images, version);
       await target.fs.finish();
       const note = warnings.length ? ` (warnings: ${warnings.join('; ')})` : '';
+      track('editor-export-json');
       this.setStatus(`Exported skeleton JSON ${version}: ${target.path} and ${atlasPath}${note}`);
     } catch (e) {
       this.setStatus(`Skeleton JSON export failed: ${errorText(e)}`);
@@ -571,6 +575,7 @@ export class App {
       const { atlasPath, warnings } = await io.exportSkeletonBinary(target.path, target.fs, this.doc, this.images);
       await target.fs.finish();
       const note = warnings.length ? ` (warnings: ${warnings.join('; ')})` : '';
+      track('editor-export-skel');
       this.setStatus(`Exported ${target.path} and ${atlasPath}${note}`);
     } catch (e) {
       this.setStatus(`Binary export failed: ${errorText(e)}`);
@@ -583,6 +588,7 @@ export class App {
     try {
       const n = await io.importPsd(file, this.doc, this.images);
       this.frameRequest = true;
+      track('editor-import-psd');
       this.setStatus(`Imported ${n} layers from ${file.name}`);
     } catch (e) {
       this.setStatus(`PSD import failed: ${errorText(e)}`);
