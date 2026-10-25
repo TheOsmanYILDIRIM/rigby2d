@@ -88,7 +88,10 @@ export class GLView {
     r.line(x0, 0, x1, 0, px, X_AXIS);
     r.line(0, y0, 0, y1, px, Y_AXIS);
 
-    r.drawSkeleton(app.doc, pose, (name) => this.lookup(app.images, name));
+    const lookup = (name) => this.lookup(app.images, name);
+    // Onion skinning: ghosts of nearby frames, faded (and optionally masked per bone) behind the pose.
+    for (const g of app.onionDraws?.() ?? []) r.drawSkeleton(app.doc, g.pose, lookup, { tint: g.tint, skip: g.skip });
+    r.drawSkeleton(app.doc, pose, lookup);
     r.end();
     this.stats = { drawCalls: r.drawCalls };
     return true;

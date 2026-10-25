@@ -18,6 +18,9 @@ import demoUrl from '../../branding/rigbytron/rigbytron.rigby?url&no-inline';
 /** The bundled demo project: Rigbytron, the Rigby2D mascot. */
 const DEMO_FILE = 'rigbytron.rigby';
 
+/** Default onion-skin tint colors (future = cool, past = warm), shared with the UI. */
+export const ONION_DEFAULTS = { futureColor: [0.55, 0.75, 1], pastColor: [1, 0.55, 0.55] };
+
 /**
  * Frame rate of the open project (its output settings). A live binding: modules importing it see
  * the current project's value.
@@ -112,6 +115,26 @@ export class App {
     this.showBones = true;
     /** Shows the output frame (resolution and framing) in the viewport. */
     this.showFrame = false;
+    /**
+     * Onion skinning: ghost poses of nearby frames drawn behind the current one. `future` / `past`
+     * are the default frame counts and the colors tint them. `perBone` (bone index -> partial
+     * override) limits the ghosts to those bones and their descendants; empty = the whole skeleton.
+     * Disabled costs one `if` per frame.
+     */
+    this.onion = {
+      enabled: false,
+      showFuture: true,
+      showPast: true,
+      future: 3,
+      past: 3,
+      loop: true,
+      pastColor: [...ONION_DEFAULTS.pastColor],
+      futureColor: [...ONION_DEFAULTS.futureColor],
+      /** bone index -> { future?, past?, showFuture?, showPast?, futureColor?, pastColor? }. */
+      perBone: new Map(),
+    };
+    /** Playback speed multiplier (1 = real time). */
+    this.playSpeed = 1;
     /** Viewport drawing: 'webgl' (default when available) or 'canvas'. */
     this.renderer = loadSetting('rigby.renderer', 'webgl');
     this.frameRequest = false;
@@ -202,6 +225,103 @@ export class App {
       }
       pose.updateWorld(this.doc);
     }
+    return pose;
+  }
+
+  /**
+   * The onion settings in effect for a bone: its own `perBone` entry, or the nearest ancestor's
+   * (so enabling a parent ghosts its children), or the global defaults when `perBone` is empty.
+   * Returns null when the bone is not ghosted.
+   */
+  onionFor(bone) {
+    const o = this.onion;
+    const base = (ov = {}) => ({
+      future: (ov.showFuture ?? o.showFuture) ? ((ov.future ?? o.future) | 0) : 0,
+      past: (ov.showPast ?? o.showPast) ? ((ov.past ?? o.past) | 0) : 0,
+      futureColor: ov.futureColor ?? o.futureColor,
+      pastColor: ov.pastColor ?? o.pastColor,
+    });
+    if (o.perBone.size === 0) return base();
+    for (let b = bone; b !== null && b !== undefined; b = this.doc.bones[b]?.parent ?? null) {
+      if (o.perBone.has(b)) return base(o.perBone.get(b));
+    }
+    return null;
+  }
+
+  /** True when any bone is currently showing onion ghosts (for the "predictions active" notice). */
+  onionActive() {
+    const o = this.onion;
+    if (!o.enabled || this.mode !== Mode.Animate || !this.currentAnimation()) return false;
+    if (o.perBone.size === 0) return (o.showFuture && o.future > 0) || (o.showPast && o.past > 0);
+    return o.perBone.size > 0;
+  }
+
+  /**
+   * Draw instructions for onion skinning: an array of { pose, tint, skip } to draw behind the
+   * current pose, nearest frames brightest, grouped so each bone gets its own frame count and
+   * color. Returns [] when disabled or not animating. Cached while the time and config hold.
+   */
+  onionDraws() {
+    const o = this.onion;
+    if (!o.enabled || this.mode !== Mode.Animate) return [];
+    const anim = this.currentAnimation();
+    if (!anim) return [];
+    const bones = this.doc.bones;
+    // Resolve each bone's effective settings once.
+    const cfg = bones.map((_, b) => this.onionFor(b));
+    let maxPast = 0;
+    let maxFuture = 0;
+    for (const c of cfg) {
+      if (!c) continue;
+      maxPast = Math.max(maxPast, c.past);
+      maxFuture = Math.max(maxFuture, c.future);
+    }
+    if (maxPast === 0 && maxFuture === 0) return [];
+    const key = [this.version, this.timeVersion, this.time, o.perBone.size, maxPast, maxFuture, JSON.stringify([...o.perBone]), o.pastColor.join(','), o.futureColor.join(',')].join('|');
+    if (this._onionCache?.key === key) return this._onionCache.draws;
+
+    const draws = [];
+    const dur = anim.duration;
+    const dt = 1 / FPS;
+    // One distance in one direction: the ghosted bones at that distance, grouped by color, each
+    // group drawn as one skeleton masked to its bones. Nearer frames are brighter.
+    const addDistance = (dir, d) => {
+      const maxN = dir > 0 ? maxFuture : maxPast;
+      const groups = new Map();
+      bones.forEach((_, b) => {
+        const c = cfg[b];
+        if (!c || (dir > 0 ? c.future : c.past) < d) return;
+        const color = dir > 0 ? c.futureColor : c.pastColor;
+        const ckey = color.join(',');
+        if (!groups.has(ckey)) groups.set(ckey, { color, bones: new Set() });
+        groups.get(ckey).bones.add(b);
+      });
+      if (!groups.size) return;
+      const pose = this.ghostPose(anim, this.time + dir * d * dt, dur, o.loop);
+      if (!pose) return;
+      const alpha = 0.5 * (1 - (d - 1) / Math.max(1, maxN));
+      for (const g of groups.values()) {
+        const skip = o.perBone.size === 0 ? null : (slot) => !g.bones.has(this.doc.slots[slot]?.bone);
+        draws.push({ pose, tint: [g.color[0], g.color[1], g.color[2], alpha], skip });
+      }
+    };
+    // Farthest first so nearer (brighter) ghosts land on top; past then future at each distance.
+    for (let d = Math.max(maxPast, maxFuture); d >= 1; d--) {
+      if (d <= maxPast) addDistance(-1, d);
+      if (d <= maxFuture) addDistance(1, d);
+    }
+    this._onionCache = { key, draws };
+    return draws;
+  }
+
+  /** A posed skeleton at time `t` (looping or clamped), or null when outside a non-looping clip. */
+  ghostPose(anim, t, dur, loop) {
+    let tt = t;
+    if (dur > 0 && loop) tt = remEuclid(t, dur);
+    else if (t < 0 || (dur > 0 && t > dur)) return null;
+    const pose = new Pose(this.doc);
+    pose.apply(this.doc, anim, tt, 1);
+    pose.updateWorld(this.doc);
     return pose;
   }
 
@@ -577,8 +697,9 @@ export class App {
       return;
     }
     const before = this.time;
-    this.physicsDelta += Math.min(dt, 0.1);
-    this.time += Math.min(dt, 0.1) * this.playDirection;
+    const step = Math.min(dt, 0.1) * (this.playSpeed || 1);
+    this.physicsDelta += step;
+    this.time += step * this.playDirection;
     let wrapped = false;
     if (this.time > anim.duration || this.time < 0) {
       if (this.looping && anim.duration > 0) {

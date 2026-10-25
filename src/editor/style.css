@@ -1210,3 +1210,121 @@ div.log-entry {
   font: 12px ui-monospace, Consolas, monospace;
   user-select: text;
 }
+
+/* ---- Onion skinning (frame prediction) ------------------------------------------------------ */
+#viewbar .onion-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+#viewbar .onion-toggle,
+#viewbar .onion-gear {
+  background: transparent;
+  color: var(--weak);
+}
+#viewbar .onion-toggle:hover,
+#viewbar .onion-gear:hover {
+  background: var(--widget);
+}
+#viewbar .onion-toggle.on {
+  color: var(--accent);
+  font-weight: 600;
+}
+/* Per-bone button and direction marks in the tree. */
+.row .onion-bonebtn {
+  margin-left: 4px;
+  color: var(--weak);
+  opacity: 0;
+  cursor: pointer;
+}
+.row:hover .onion-bonebtn,
+.row .onion-bonebtn.on {
+  opacity: 1;
+}
+.row .onion-bonebtn.on {
+  color: var(--accent);
+}
+.row .onion-marks {
+  margin-left: 6px;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.row .onion-mark {
+  cursor: help;
+}
+/* "Predictions active" notice beside the ANIMATE button. */
+#menubar .onion-notice {
+  margin-left: 8px;
+  color: rgb(240, 150, 60);
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid rgba(240, 150, 60, 0.4);
+  border-radius: 4px;
+  padding: 1px 7px;
+}
+#menubar .onion-notice:hover {
+  background: rgba(240, 150, 60, 0.12);
+}
+/* Quick palette panel (inside a .popup). */
+.onion-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 230px;
+  padding: 2px;
+}
+.onion-panel .onion-title {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.onion-panel .onion-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.onion-panel .onion-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.onion-panel .onion-num {
+  width: 56px;
+}
+.onion-panel .onion-color {
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  cursor: pointer;
+}
+.onion-panel .onion-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 0;
+}
+.onion-panel .onion-note {
+  color: var(--weak);
+  font-size: 11px;
+  line-height: 1.35;
+  max-width: 230px;
+}
+.onion-panel .onion-color-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.onion-panel .onion-reset {
+  background: transparent;
+  color: var(--weak);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 5px;
+  line-height: 20px;
+  cursor: pointer;
+}
+.onion-panel .onion-reset:hover {
+  background: var(--widget);
+  color: var(--text);
+}

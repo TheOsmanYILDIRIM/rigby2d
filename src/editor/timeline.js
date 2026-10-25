@@ -112,6 +112,22 @@ export function renderControls(app, el) {
         }),
         ' Loop',
       ),
+      select(
+        [
+          [0.1, '0.1×'],
+          [0.25, '0.25×'],
+          [0.5, '0.5×'],
+          [1, '1×'],
+          [1.5, '1.5×'],
+          [2, '2×'],
+        ],
+        app.playSpeed ?? 1,
+        (v) => {
+          app.playSpeed = v;
+          app.changed();
+        },
+        { tut: 'timeline:speed' },
+      ),
       h(
         'span',
         { class: 'mono', title: has(app, 'timecode') ? 'Timecode (hours:minutes:seconds:frames) and frame' : 'Frame and seconds' },

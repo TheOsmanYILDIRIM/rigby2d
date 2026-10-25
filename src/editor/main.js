@@ -186,13 +186,32 @@ function buildMenuBar() {
     return btn;
   });
   const mode = h('button', { class: 'mode', 'data-tut': 'mode', onclick: () => app.toggleMode() });
+  // Notice that onion-skin predictions are on, with a menu to turn them off (hidden otherwise).
+  const onionNotice = h(
+    'button',
+    {
+      class: 'onion-notice',
+      hidden: true,
+      title: 'Onion-skin predictions are visible in the viewport — click for options',
+      onclick: (e) => {
+        const r = e.target.getBoundingClientRect();
+        popupMenu(r.left, r.bottom, [
+          { label: 'Turn off all predictions', action: () => { app.onion.enabled = false; app.changed(); } },
+          app.onion.perBone.size ? { label: `Clear per-bone settings (${app.onion.perBone.size})`, action: () => { app.onion.perBone.clear(); app.changed(); } } : null,
+        ].filter(Boolean));
+      },
+    },
+    '◉ Onion skin on',
+  );
   // Workspace switcher: which tools the editor shows for this project.
   const tabs = Object.values(WORKSPACES).map((ws) => h('button', { class: 'workspace-tab', 'data-tut': `workspace:${ws.id}`, title: ws.description, onclick: () => app.workspace !== ws.id && app.setWorkspace(ws.id) }, ws.label));
   const switcher = h('div', { class: 'workspaces', 'data-tut': 'workspaces', role: 'tablist', title: 'Workspace' }, tabs);
-  bar.replaceChildren(...titles, h('span', { class: 'vsep' }), mode, h('span', { class: 'spacer' }), switcher);
+  bar.replaceChildren(...titles, h('span', { class: 'vsep' }), mode, onionNotice, h('span', { class: 'spacer' }), switcher);
   // Called every frame: touch the DOM only when something shown changed.
   let shown = '';
   return () => {
+    // The notice follows the live onion state, independent of the cached menubar state below.
+    onionNotice.hidden = !app.onionActive();
     const state = `${app.mode}|${app.workspace}|${app.keymap}`;
     if (state === shown) return;
     shown = state;
