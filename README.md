@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://jaisurya-dev-art.github.io/rigby2d/editor/"><img alt="Try it in your browser: the full editor, nothing to install" src="https://img.shields.io/badge/%E2%96%B6%20Try%20it%20in%20your%20browser-the%20full%20editor%2C%20nothing%20to%20install-b5d3e7?style=for-the-badge&labelColor=0a0a0b" height="40"></a><br>
+  <a href="https://jaisurya-dev-art.github.io/rigby2d/"><img alt="Try it in your browser: the full editor, nothing to install" src="https://img.shields.io/badge/%E2%96%B6%20Try%20it%20in%20your%20browser-the%20full%20editor%2C%20nothing%20to%20install-b5d3e7?style=for-the-badge&labelColor=0a0a0b" height="40"></a><br>
   <sub><a href="https://jaisurya-dev-art.github.io/rigby2d/editor/"><b>Open the editor</b></a> with the Rigbytron demo, tutorials and Python scripting · <a href="https://jaisurya-dev-art.github.io/rigby2d/">Website</a></sub>
 </p>
 
