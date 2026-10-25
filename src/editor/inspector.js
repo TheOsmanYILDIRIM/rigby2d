@@ -15,6 +15,7 @@ import { FPS_PRESETS, SIZE_PRESETS, formatFps, hexToRgba, rgbaToHex } from './ou
 import { posesUi } from './poseui.js';
 import { has } from './workspaces.js';
 import { sounds } from './audio.js';
+import { renameOnionBone } from './onion.js';
 
 export function render(app, el) {
   const b = selBone(app.sel);
@@ -69,6 +70,7 @@ function boneUi(app, b) {
       textField(bone.name, (name) => {
         if (name && app.doc.boneIndex(name) === null) {
           renameBoneRefs(app.doc, bone.name, name);
+          renameOnionBone(app.onion, bone.name, name); // per-bone onion settings are keyed by name
           bone.name = name;
           app.changed();
         }

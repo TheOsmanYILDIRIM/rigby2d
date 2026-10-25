@@ -206,7 +206,7 @@ function buildMenuBar() {
         const r = e.target.getBoundingClientRect();
         popupMenu(r.left, r.bottom, [
           { label: 'Turn off all predictions', action: () => { app.onion.enabled = false; app.changed(); } },
-          app.onion.perBone.size ? { label: `Clear per-bone settings (${app.onion.perBone.size})`, action: () => { app.onion.perBone.clear(); app.changed(); } } : null,
+          app.onionOverrideCount() ? { label: `Clear per-bone settings (${app.onionOverrideCount()})`, action: () => { app.onion.perBone.clear(); app.changed(); } } : null,
         ].filter(Boolean));
       },
     },

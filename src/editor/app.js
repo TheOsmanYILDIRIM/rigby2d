@@ -13,6 +13,7 @@ import * as platform from './platform.js';
 import * as sample from './sample.js';
 import { addSound, sounds, stopAudio } from './audio.js';
 import { WORKSPACES, workspace as workspaceDef } from './workspaces.js';
+import * as onion from './onion.js';
 import demoUrl from '../../branding/rigbytron/rigbytron.rigby?url&no-inline';
 
 /** The bundled demo project: Rigbytron, the Rigby2D mascot. */
@@ -117,9 +118,11 @@ export class App {
     this.showFrame = false;
     /**
      * Onion skinning: ghost poses of nearby frames drawn behind the current one. `future` / `past`
-     * are the default frame counts and the colors tint them. `perBone` (bone index -> partial
+     * are the default frame counts and the colors tint them. `perBone` (bone name -> partial
      * override) limits the ghosts to those bones and their descendants; empty = the whole skeleton.
-     * Disabled costs one `if` per frame.
+     * It is keyed by name, not index: indices shift when bones are deleted or reparented and when
+     * undo rebuilds the document, names do not. Read and write it through onionOverride /
+     * setOnionOverride / onionOverrideCount. Disabled costs one `if` per frame.
      */
     this.onion = {
       enabled: false,
@@ -130,7 +133,7 @@ export class App {
       loop: true,
       pastColor: [...ONION_DEFAULTS.pastColor],
       futureColor: [...ONION_DEFAULTS.futureColor],
-      /** bone index -> { future?, past?, showFuture?, showPast?, futureColor?, pastColor? }. */
+      /** bone name -> { future?, past?, showFuture?, showPast?, futureColor?, pastColor? }. */
       perBone: new Map(),
     };
     /** Playback speed multiplier (1 = real time). */
@@ -188,6 +191,9 @@ export class App {
     this.multi.clear();
     this.pending.clear();
     this.selectedKeys.clear();
+    // Per-bone onion settings belong to the document they were made for.
+    this.onion.perBone.clear();
+    this._onionCache = null;
     this.time = 0;
     this.playing = false;
     this.history = { undo: [], redo: [] };
@@ -228,32 +234,32 @@ export class App {
     return pose;
   }
 
-  /**
-   * The onion settings in effect for a bone: its own `perBone` entry, or the nearest ancestor's
-   * (so enabling a parent ghosts its children), or the global defaults when `perBone` is empty.
-   * Returns null when the bone is not ghosted.
-   */
-  onionFor(bone) {
-    const o = this.onion;
-    const base = (ov = {}) => ({
-      future: (ov.showFuture ?? o.showFuture) ? ((ov.future ?? o.future) | 0) : 0,
-      past: (ov.showPast ?? o.showPast) ? ((ov.past ?? o.past) | 0) : 0,
-      futureColor: ov.futureColor ?? o.futureColor,
-      pastColor: ov.pastColor ?? o.pastColor,
-    });
-    if (o.perBone.size === 0) return base();
-    for (let b = bone; b !== null && b !== undefined; b = this.doc.bones[b]?.parent ?? null) {
-      if (o.perBone.has(b)) return base(o.perBone.get(b));
-    }
-    return null;
+  /** A bone's own onion override (by bone index), or undefined. */
+  onionOverride(bone) {
+    return onion.onionOverride(this.doc, this.onion, bone);
+  }
+
+  /** Sets a bone's own onion override (by bone index), or removes it when `entry` is null. */
+  setOnionOverride(bone, entry) {
+    onion.setOnionOverride(this.doc, this.onion, bone, entry);
+  }
+
+  /** How many bones of this document have their own onion settings (see onion.js). */
+  onionOverrideCount() {
+    return onion.onionOverrideCount(this.doc, this.onion);
+  }
+
+  /** The onion settings in effect for a bone, or null when it is not ghosted (see onion.js). */
+  onionFor(bone, overrides) {
+    return onion.onionFor(this.doc, this.onion, bone, overrides);
   }
 
   /** True when any bone is currently showing onion ghosts (for the "predictions active" notice). */
   onionActive() {
     const o = this.onion;
     if (!o.enabled || this.mode !== Mode.Animate || !this.currentAnimation()) return false;
-    if (o.perBone.size === 0) return (o.showFuture && o.future > 0) || (o.showPast && o.past > 0);
-    return o.perBone.size > 0;
+    if (this.onionOverrideCount() === 0) return (o.showFuture && o.future > 0) || (o.showPast && o.past > 0);
+    return true;
   }
 
   /**
@@ -268,7 +274,8 @@ export class App {
     if (!anim) return [];
     const bones = this.doc.bones;
     // Resolve each bone's effective settings once.
-    const cfg = bones.map((_, b) => this.onionFor(b));
+    const overrides = this.onionOverrideCount();
+    const cfg = bones.map((_, b) => this.onionFor(b, overrides));
     let maxPast = 0;
     let maxFuture = 0;
     for (const c of cfg) {
@@ -277,7 +284,7 @@ export class App {
       maxFuture = Math.max(maxFuture, c.future);
     }
     if (maxPast === 0 && maxFuture === 0) return [];
-    const key = [this.version, this.timeVersion, this.time, o.perBone.size, maxPast, maxFuture, JSON.stringify([...o.perBone]), o.pastColor.join(','), o.futureColor.join(',')].join('|');
+    const key = [this.version, this.timeVersion, this.time, overrides, maxPast, maxFuture, JSON.stringify([...o.perBone]), o.pastColor.join(','), o.futureColor.join(',')].join('|');
     if (this._onionCache?.key === key) return this._onionCache.draws;
 
     const draws = [];
@@ -301,7 +308,7 @@ export class App {
       if (!pose) return;
       const alpha = 0.5 * (1 - (d - 1) / Math.max(1, maxN));
       for (const g of groups.values()) {
-        const skip = o.perBone.size === 0 ? null : (slot) => !g.bones.has(this.doc.slots[slot]?.bone);
+        const skip = overrides === 0 ? null : (slot) => !g.bones.has(this.doc.slots[slot]?.bone);
         draws.push({ pose, tint: [g.color[0], g.color[1], g.color[2], alpha], skip });
       }
     };

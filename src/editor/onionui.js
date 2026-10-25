@@ -15,7 +15,11 @@ function checkRow(label, checked, onChange) {
   return h('label', { class: 'onion-check' }, cb, ' ' + label);
 }
 
-function numRow(label, value, onChange, { min = 0, max = 90 } = {}) {
+// Each ghost frame is a full pose evaluation and a skeleton draw, every frame while playing, so the
+// counts stay in a range that keeps large rigs responsive (30 each way = 60 ghost poses).
+const MAX_ONION_FRAMES = 30;
+
+function numRow(label, value, onChange, { min = 0, max = MAX_ONION_FRAMES } = {}) {
   const input = h('input', { class: 'onion-num', type: 'number', min, max, step: 1, value: String(value) });
   const commit = () => {
     const v = Math.max(min, Math.min(max, Math.round(+input.value || 0)));
@@ -77,7 +81,7 @@ export function onionPanel(app, x, y) {
     }),
     h('div', { class: 'onion-sep' }),
     checkRow('Loop', o.loop, (v) => { o.loop = v; refresh(); }),
-    h('div', { class: 'onion-note' }, o.perBone.size ? `${o.perBone.size} bone(s) have their own settings: prediction shows only on those. Clear them from each bone or the ANIMATE notice.` : 'Applies to the whole skeleton. Enable individual bones from the tree to limit it.'),
+    h('div', { class: 'onion-note' }, app.onionOverrideCount() ? `${app.onionOverrideCount()} bone(s) have their own settings: prediction shows only on those. Clear them from each bone or the ANIMATE notice.` : 'Applies to the whole skeleton. Enable individual bones from the tree to limit it.'),
   );
   popupMenu(x, y, [node]);
 }
@@ -87,15 +91,15 @@ export function onionBonePanel(app, bone, x, y) {
   const o = app.onion;
   const name = app.doc.bones[bone]?.name ?? `#${bone}`;
   const ensure = () => {
-    if (!o.perBone.has(bone)) o.perBone.set(bone, {});
+    if (!app.onionOverride(bone)) app.setOnionOverride(bone, {});
     o.enabled = true; // configuring a bone implies showing predictions
-    return o.perBone.get(bone);
+    return app.onionOverride(bone);
   };
-  const ov = o.perBone.get(bone) ?? {};
+  const ov = app.onionOverride(bone) ?? {};
   const refresh = () => app.changed();
   // Removing an override falls back to the global default; return that value for the picker.
   const clearOverride = (key, fallback) => () => {
-    const e = o.perBone.get(bone);
+    const e = app.onionOverride(bone);
     if (e) delete e[key];
     refresh();
     return fallback;
@@ -104,9 +108,9 @@ export function onionBonePanel(app, bone, x, y) {
     'div',
     { class: 'onion-panel', onpointerdown: (e) => e.stopPropagation() },
     h('div', { class: 'onion-title' }, `Onion skin · ${name}`),
-    checkRow('Show on this bone (and its children)', o.perBone.has(bone), (v) => {
+    checkRow('Show on this bone (and its children)', !!app.onionOverride(bone), (v) => {
       if (v) ensure();
-      else o.perBone.delete(bone);
+      else app.setOnionOverride(bone, null);
       refresh();
     }),
     h('div', { class: 'onion-sep' }),

@@ -79,9 +79,9 @@ export function render(app, el) {
     // Onion skinning: a per-bone toggle plus marks showing which direction(s) are ghosted.
     const animate = app.mode === Mode.Animate;
     const oc = animate && app.onion.enabled ? app.onionFor(bone) : null;
-    const direct = app.onion.perBone.has(bone);
+    const direct = !!app.onionOverride(bone);
     const marks =
-      oc && app.onion.perBone.size > 0
+      oc && app.onionOverrideCount() > 0
         ? h(
             'span',
             { class: 'onion-marks' },
