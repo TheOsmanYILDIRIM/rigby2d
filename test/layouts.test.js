@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { assignHotkey, byHotkey, hotkeyLabel, loadLayouts, removeLayout, renameLayout, saveLayouts, updatePanels, upsertLayout } from '../src/editor/layouts.js';
+import { assignHotkey, byHotkey, hotkeyLabel, layoutHotkeyDigit, loadLayouts, removeLayout, renameLayout, saveLayouts, updatePanels, upsertLayout } from '../src/editor/layouts.js';
 
 const layout = (id, name, hotkey = null, panels = {}) => ({ id, name, hotkey, panels });
 
@@ -67,4 +67,25 @@ test('load/save round trip through an injected storage, ignoring malformed entri
   assert.deepEqual(loadLayouts(storage).map((l) => l.name), ['B']);
   // Unreadable storage yields an empty list.
   assert.deepEqual(loadLayouts({ getItem: () => '{bad json' }), []);
+});
+
+test('Ctrl+Alt+<digit> matches, but AltGr characters (German AltGr+7 = "{") stay text', () => {
+  const ev = (code, key, { altGraph = false, ...mods } = {}) => ({
+    ctrlKey: true, altKey: true, shiftKey: false, metaKey: false, code, key,
+    getModifierState: (m) => m === 'AltGraph' && altGraph,
+    ...mods,
+  });
+  assert.equal(layoutHotkeyDigit(ev('Digit7', '7')), 7);
+  assert.equal(layoutHotkeyDigit(ev('Digit0', '0')), 0);
+  assert.equal(layoutHotkeyDigit(ev('Numpad3', '3')), 3);
+  // Windows reports AltGr as Ctrl+Alt; these keystrokes type characters and must not be taken.
+  assert.equal(layoutHotkeyDigit(ev('Digit7', '{', { altGraph: true })), null);
+  assert.equal(layoutHotkeyDigit(ev('Digit8', '[')), null); // AltGraph state not reported, still a character
+  // Numpad digits do not type with AltGr, so they still count.
+  assert.equal(layoutHotkeyDigit(ev('Numpad7', '7', { altGraph: true })), 7);
+  // Other modifiers, or a missing Ctrl/Alt, are not the shortcut.
+  assert.equal(layoutHotkeyDigit(ev('Digit1', '1', { shiftKey: true })), null);
+  assert.equal(layoutHotkeyDigit(ev('Digit1', '1', { metaKey: true })), null);
+  assert.equal(layoutHotkeyDigit(ev('Digit1', '1', { ctrlKey: false })), null);
+  assert.equal(layoutHotkeyDigit(ev('KeyA', 'a')), null);
 });

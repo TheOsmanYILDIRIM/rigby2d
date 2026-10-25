@@ -75,6 +75,26 @@ export function updatePanels(list, id, panels) {
   return list.map((l) => (l.id === id ? { ...l, panels } : l));
 }
 
+/**
+ * The digit 0-9 of a Ctrl+Alt+<digit> window-layout shortcut in keydown event `e`, or null.
+ *
+ * On Windows, AltGr arrives as Ctrl+Alt, and on many layouts AltGr plus a digit types a character
+ * (German AltGr+7 is `{`, Polish and Nordic layouts have similar ones). Those keystrokes are text,
+ * not shortcuts: the listener runs in the capture phase, so matching them would load a layout and
+ * swallow the character in every text field, the Python script editor included. So a digit-row
+ * key counts only when AltGr is not held and the key did not produce a non-digit character. Numpad
+ * digits never type with AltGr and always count.
+ */
+export function layoutHotkeyDigit(e) {
+  if (!e.ctrlKey || !e.altKey || e.shiftKey || e.metaKey) return null;
+  if (/^Numpad[0-9]$/.test(e.code)) return Number(e.code.slice(-1));
+  if (e.getModifierState?.('AltGraph')) return null;
+  const typedOther = typeof e.key === 'string' && e.key.length === 1 && !/^[0-9]$/.test(e.key);
+  if (/^Digit[0-9]$/.test(e.code)) return typedOther ? null : Number(e.code.slice(-1));
+  if (/^[0-9]$/.test(e.key)) return Number(e.key);
+  return null;
+}
+
 /** The layout bound to a Ctrl+Alt+<digit> shortcut, or null. */
 export function byHotkey(list, hotkey) {
   return list.find((l) => l.hotkey === hotkey) ?? null;

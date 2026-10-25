@@ -11,21 +11,15 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { EV_SYNC, EV_CONTROL, EV_CLOSED, EV_PLACE, PANELS, panelLabel } from './dock.js';
 import { saveSetting } from './app.js';
 import { keySelectionIndices, applyKeySelection } from './keyorder.js';
-import { byHotkey, loadLayouts } from './layouts.js';
+import { byHotkey, layoutHotkeyDigit, loadLayouts } from './layouts.js';
+
+// The shortcut matcher lives in layouts.js (no Tauri imports, so it is unit-tested in Node).
+export { layoutHotkeyDigit };
 
 /** A change signature over the shared state, so an unchanged frame sends nothing. Derived from the
  *  snapshot so new fields are covered automatically; docJson is excluded (huge, tracked separately). */
 function stateSignature(s, keys) {
   return JSON.stringify({ ...s, docJson: undefined, keys });
-}
-
-/** The digit 0–9 of a Ctrl+Alt+<digit> window-layout shortcut, or null. Uses the physical key code
- *  (so it is independent of the keyboard layout / AltGr), falling back to the produced digit. */
-export function layoutHotkeyDigit(e) {
-  if (!e.ctrlKey || !e.altKey || e.shiftKey || e.metaKey) return null;
-  if (/^(Digit|Numpad)[0-9]$/.test(e.code)) return Number(e.code.slice(-1));
-  if (/^[0-9]$/.test(e.key)) return Number(e.key);
-  return null;
 }
 
 const geomKey = (id) => `rigby.panel.${id}.geom`;
