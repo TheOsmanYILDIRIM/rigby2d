@@ -114,17 +114,19 @@ the [scripting guide](docs/scripting.md).
 ## Features
 
 - **AI assistant support (MCP)**: a built-in [Model Context Protocol](https://modelcontextprotocol.io) server lets assistants such as Claude inspect, validate, sample, edit and convert projects. See [Built for AI assistants](#built-for-ai-assistants-mcp).
-- **Art import**: PSD files (every pixel layer becomes a part, layout preserved) or individual PNGs.
+- **Art import**: PSD files (every pixel layer becomes a part, layout preserved) or individual PNGs. For pixel art, set *Textures* to *Pixel art (nearest)* in the Project inspector: images stay sharp in the viewport and in renders, and exported atlases use `filter: Nearest, Nearest`, which the runtimes follow.
 - **Rigby AutoRig and retargeting**: rig layered artwork in one step (bones, joints, meshes, IK), and reuse animations across characters with automatic bone mapping and proportion compensation. See the [guide](docs/autorig.md).
 - **Rigging**: draw bone chains directly in the viewport, reparent, attach images to bones, reorder draw order, turn images into meshes (add, move and delete vertices), bind meshes to bones and paint weights, create linked meshes, set up image sequences, and edit bounding box, clipping and path shapes.
 - **Constraints, skins and events**: create IK, transform, path, physics and slider constraints from the selected bones and edit every setting; key their mixes and values in Animate mode; key mesh deformation and image sequence frames; create skins (with skin bones and constraints) and events with keyed values; add bounding box, clipping, point and path attachments.
 - **Animation**: Setup and Animate modes, pose / rotate / translate / scale / shear tools, key buttons and optional auto key, switchable shortcut presets.
+- **Onion skinning**: see past and future frames as tinted ghosts behind the pose in Animate mode (*Onion* in the viewport toolbar), with frame counts, colors and looping; limit it to chosen bones and their children from the bone tree.
 - **Film output** (Film workspace): resolution and frame rate presets (23.976, 24, 25 fps; 4K, 2K Scope and Flat, Full HD, vertical, square), transparent or colored background, automatic or fixed framing, timecode, audio tracks with lip-sync; render transparent PNG sequences, WebM (with alpha) and MP4, one animation or a batch of animations and skins. See the [film guide](docs/film.md).
 - **Python scripting**: custom tools in the Scripts menu, a script editor, and a log window with tracebacks. See the [scripting guide](docs/scripting.md).
 - **Pose library and face controls**: save poses (with mouth-shape image swaps), apply them at any amount or as keys, and drive faces with sliders that blend between poses.
 - **Dopesheet and graph editor**: multi-key selection, moving and retiming keys, curve presets, bezier handle editing, image-swap keys.
 - **WebGL viewport** with a Canvas 2D fallback (*View* menu).
-- **Undo / redo** for every edit, with unsaved-change tracking.
+- **Detachable panels and window layouts** (desktop app): pop the Timeline, Tree and Inspector out into their own windows, for example on a second monitor, and save the arrangements as named layouts to recall from *View ▸ Window layouts* or with Ctrl+Alt+<digit>.
+- **Undo / redo** for every edit, with unsaved-change tracking (including edits made while the timeline plays).
 - **`.rigby` work file**: one self-contained file with the whole project and its images (like a `.blend`).
 - **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, constraints, events, deform and draw-order keys round-trip losslessly.
 - **Runtimes included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, image sequences, IK, transform, path, physics and slider constraints, plus a reference WebGL renderer (`src/webgl`). A Rust port of it, 3 to 4× faster, powers the Godot runtime (preview, [`runtimes/`](runtimes/)).
@@ -143,6 +145,15 @@ Rigby2D is in early alpha. Work under way:
 Done in this cycle: the offline renderer (PNG sequences, WebM, MP4), resolution and frame-rate
 controls, the batch renderer, the pose library and face controls, and audio tracks with
 loudness-driven lip-sync (mixed into WebM and MP4 renders), and an animatable camera.
+
+New since 0.2.5: detachable panels ([#3](https://github.com/jaisurya-dev-art/rigby2d/pull/3)), saved
+window layouts ([#6](https://github.com/jaisurya-dev-art/rigby2d/pull/6),
+[#12](https://github.com/jaisurya-dev-art/rigby2d/pull/12)), onion skinning
+([#10](https://github.com/jaisurya-dev-art/rigby2d/pull/10)), edits made during playback now mark
+the project unsaved ([#4](https://github.com/jaisurya-dev-art/rigby2d/pull/4)), and a pixel-art
+texture filter ([#11](https://github.com/jaisurya-dev-art/rigby2d/issues/11)). Thanks to
+[@maruccimauro](https://github.com/maruccimauro) for the panels, layouts, onion skinning and
+playback fix.
 
 ## Getting started
 
