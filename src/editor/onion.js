@@ -37,6 +37,23 @@ export function renameOnionBone(onion, from, to) {
 }
 
 /**
+ * Carries overrides across a rebuild of the document (undo, redo, an edit adopted from a detached
+ * panel) that renamed bones, which renameOnionBone() alone cannot see: undoing a rename brings the
+ * old name back while the override stays under the new one. A rename keeps the bone count and the
+ * bone's index, so only same-index bones whose old name is gone and whose new name is new count;
+ * deletes and reparenting keep their names and need nothing here.
+ */
+export function followBoneRenames(onion, before, after) {
+  if (onion.perBone.size === 0 || before.bones.length !== after.bones.length) return;
+  const oldNames = new Set(before.bones.map((b) => b.name));
+  const newNames = new Set(after.bones.map((b) => b.name));
+  before.bones.forEach((b, i) => {
+    const to = after.bones[i].name;
+    if (!newNames.has(b.name) && !oldNames.has(to) && !onion.perBone.has(to)) renameOnionBone(onion, b.name, to);
+  });
+}
+
+/**
  * The settings in effect for a bone: its own override, or the nearest ancestor's (so enabling a
  * parent ghosts its children), or the global defaults when no bone has its own. Returns null when
  * the bone is not ghosted. `overrides` is onionOverrideCount(), when the caller already has it.

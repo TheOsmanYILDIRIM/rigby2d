@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Onion skinning settings (onion.js): per-bone overrides follow their bone by name through deletes,
-// reparenting, undo-style rebuilds and renames, and stale entries never mask the whole skeleton.
+// reparenting, undo-style rebuilds and renames (including undoing one), and stale entries never mask the whole skeleton.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 
-import { readSkeletonJson } from '../src/core/index.js';
-import { onionFor, onionOverride, onionOverrideCount, renameOnionBone, setOnionOverride } from '../src/editor/onion.js';
+import { Skeleton, readSkeletonJson } from '../src/core/index.js';
+import { followBoneRenames, onionFor, onionOverride, onionOverrideCount, renameOnionBone, setOnionOverride } from '../src/editor/onion.js';
 
 const json = JSON.parse(readFileSync(new URL('../branding/rigbytron/export/rigbytron.json', import.meta.url), 'utf8'));
 const load = () => readSkeletonJson(json, 'rigbytron').skeleton;
@@ -78,4 +78,45 @@ test('renaming a bone carries its override', () => {
   assert.equal(o.perBone.has(old), false);
   setOnionOverride(doc, o, parent, null);
   assert.equal(onionOverrideCount(doc, o), 0);
+});
+
+test('undoing and redoing a rename keeps the override on its bone', () => {
+  const doc = load();
+  const o = settings();
+  const { parent } = pick(doc);
+  const old = doc.bones[parent].name;
+  setOnionOverride(doc, o, parent, { past: 4 });
+  // Rename as the inspector does, then undo/redo by rebuilding from snapshots.
+  const beforeRename = doc.toSnapshot();
+  renameOnionBone(o, old, 'renamed');
+  doc.bones[parent].name = 'renamed';
+  const afterRename = doc.toSnapshot();
+  const undone = Skeleton.fromObject(JSON.parse(beforeRename));
+  followBoneRenames(o, doc, undone);
+  assert.equal(onionOverride(undone, o, parent)?.past, 4, 'undo brings the override back to the old name');
+  assert.equal(onionOverrideCount(undone, o), 1, 'the rest of the skeleton stays unghosted');
+  assert.equal(onionFor(undone, o, 0), null);
+  const redone = Skeleton.fromObject(JSON.parse(afterRename));
+  followBoneRenames(o, undone, redone);
+  assert.equal(onionOverride(redone, o, parent)?.past, 4, 'redo moves it to the new name again');
+  assert.deepEqual([...o.perBone.keys()], ['renamed']);
+});
+
+test('rebuilds without a rename leave overrides alone', () => {
+  const doc = load();
+  const o = settings();
+  const last = doc.bones[doc.bones.length - 1].name;
+  setOnionOverride(doc, o, doc.bones.length - 1, { future: 7 });
+  // Reparenting reorders bones (same count, names at shifted indices): nothing is renamed.
+  const moved = Skeleton.fromObject(JSON.parse(doc.toSnapshot()));
+  const target = moved.bones.findIndex((b, i) => i > 0 && b.name !== last && !moved.isDescendant(i, index(moved, last)));
+  moved.reparentBone(index(moved, last), target);
+  followBoneRenames(o, doc, moved);
+  followBoneRenames(o, moved, doc);
+  assert.deepEqual([...o.perBone.keys()], [last]);
+  // Deleting a bone changes the count: nothing to follow.
+  const fewer = Skeleton.fromObject(JSON.parse(doc.toSnapshot()));
+  fewer.removeBone(pick(fewer).parent);
+  followBoneRenames(o, doc, fewer);
+  assert.deepEqual([...o.perBone.keys()], [last]);
 });

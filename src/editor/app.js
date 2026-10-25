@@ -394,7 +394,9 @@ export class App {
   }
 
   restore(json) {
+    const before = this.doc;
     this.doc = Skeleton.fromObject(JSON.parse(json));
+    onion.followBoneRenames(this.onion, before, this.doc);
     FPS = this.doc.settings?.fps ?? 30;
     this.docJson = this.baseline = json;
     this.selectedKeys.clear();
@@ -777,7 +779,9 @@ export class App {
         if (this.history.undo.length > 200) this.history.undo.shift();
         this.history.redo = [];
       }
+      const prev = this.doc;
       this.doc = Skeleton.fromObject(JSON.parse(s.docJson));
+      onion.followBoneRenames(this.onion, prev, this.doc);
       // Keep our own canonical snapshot so the sync below is not mistaken for a fresh edit.
       // Like restore() (undo/redo), this does NOT touch `saved`: adopting an edit from another
       // window is a real change, so the editor (the authority) stays dirty until the user saves —
