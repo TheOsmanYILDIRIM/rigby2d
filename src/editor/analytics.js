@@ -5,7 +5,7 @@
 // only on the public website: never in the desktop app, in local development or in tests.
 
 /** The GoatCounter site code (the dashboard is https://<code>.goatcounter.com). Empty: off. */
-export const GOATCOUNTER_CODE = '';
+export const GOATCOUNTER_CODE = 'rigby2d';
 
 /** Hosts that count. Anything else (localhost, the desktop app, forks' Pages sites) does not. */
 const HOSTS = ['jaisurya-dev-art.github.io'];
