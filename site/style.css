@@ -264,8 +264,44 @@ h3 {
   font-size: 0.85rem;
 }
 
+.stage {
+  position: relative;
+}
+.stage-line {
+  min-height: 1.6em;
+  margin: 6px 8% 0;
+  text-align: center;
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 500;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+.stage-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 18px;
+}
+.sound {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-alt);
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.sound[aria-pressed='true'] {
+  color: var(--text);
+  border-color: var(--steel);
+}
 .stage-controls {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -273,6 +309,7 @@ h3 {
 }
 .stage-controls button {
   min-width: 64px;
+  padding: 0 10px;
   min-height: 32px;
   border: 0;
   border-radius: 7px;

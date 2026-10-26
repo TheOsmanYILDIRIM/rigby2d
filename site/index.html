@@ -28,6 +28,7 @@
           <a href="#ai">AI</a>
           <a href="#runtimes">Runtimes</a>
           <a href="#download">Download</a>
+          <a href="./docs/">Docs</a>
           <a href="https://github.com/jaisurya-dev-art/rigby2d" rel="noopener" data-goatcounter-click="site-github-nav">GitHub</a>
         </nav>
         <a class="btn small primary" href="./editor/" data-goatcounter-click="site-open-editor-nav">Open editor</a>
@@ -52,16 +53,26 @@
             <p class="fine">Free · MIT or Apache-2.0 · No account, no install for the browser editor</p>
           </div>
 
-          <figure class="stage" aria-label="Rigbytron, the Rigby2D mascot, animated live">
+          <figure class="stage" aria-label="NILA, the Rigby2D mascot, animated live">
             <canvas id="hero" aria-hidden="true"></canvas>
-            <img class="stage-fallback" src="../docs/screenshot.jpg" alt="The Rigby2D editor with the Rigbytron demo" hidden />
+            <p class="stage-line" data-line aria-live="polite"></p>
+            <img class="stage-fallback" src="../branding/nila/thumbnail.png" alt="NILA, the Rigby2D mascot" hidden />
             <figcaption>
-              <div class="stage-controls" role="group" aria-label="Animation">
-                <button type="button" data-anim="hold" aria-pressed="false">hold</button>
-                <button type="button" data-anim="release" aria-pressed="false">release</button>
-                <button type="button" data-anim="both" aria-pressed="true">both</button>
+              <div class="stage-controls" role="group" aria-label="NILA's expressions">
+                <button type="button" data-anim="hello" aria-pressed="false">Hello</button>
+                <button type="button" data-anim="happy" aria-pressed="false">Happy</button>
+                <button type="button" data-anim="surprised" aria-pressed="false">Surprised</button>
+                <button type="button" data-anim="thinking" aria-pressed="false">Thinking</button>
+                <button type="button" data-anim="curious" aria-pressed="false">Curious</button>
+                <button type="button" data-anim="wink" aria-pressed="false">Wink</button>
+                <button type="button" data-anim="smooth" aria-pressed="false">Lip-sync</button>
+                <button type="button" data-anim="physics" aria-pressed="false">Physics</button>
+                <button type="button" data-anim="wave" aria-pressed="false">Wave</button>
               </div>
-              <span class="live"><i></i>Live: the Rigby2D runtime, in your browser <span data-cost></span></span>
+              <div class="stage-meta">
+                <button type="button" class="sound" data-sound aria-pressed="false">Sound off</button>
+                <span class="live"><i></i>Live: NILA on the Rigby2D runtime, in your browser <span data-cost></span></span>
+              </div>
             </figcaption>
           </figure>
         </div>
@@ -140,11 +151,11 @@
               <li>Many edits apply as one atomic batch</li>
               <li>One-file install, or one command from source</li>
             </ul>
-            <a class="btn" href="https://github.com/jaisurya-dev-art/rigby2d/blob/develop/docs/mcp.md" rel="noopener">MCP guide</a>
+            <a class="btn" href="./docs/mcp.html">MCP guide</a>
           </div>
           <div class="chat" aria-label="Example requests">
             <p class="bubble">Which images are missing from <code>hero.skel</code>?</p>
-            <p class="bubble">Add a 1-second wave animation to <code>rigbytron.rigby</code> that raises the right arm and fires a <code>hi</code> event at the end.</p>
+            <p class="bubble">Add a 1-second wave animation to <code>nila.rigby</code> that raises the right arm and fires a <code>hi</code> event at the end.</p>
             <p class="bubble">Add <code>line.wav</code> to the talk animation and lip-sync the mouth control to it.</p>
             <p class="bubble">AutoRig <code>character.psd</code>.</p>
           </div>
@@ -160,8 +171,8 @@
               A dependency-free JavaScript runtime with a reference WebGL renderer, and a Rust port that matches it frame by frame,
               3 to 4× faster, powering the Godot 4 node <code>RigbySkeleton2D</code>. Unity is next.
             </p>
-            <p>The animation at the top of this page is that JavaScript runtime, drawing Rigbytron live.</p>
-            <a class="btn" href="https://github.com/jaisurya-dev-art/rigby2d/tree/develop/runtimes" rel="noopener">Runtimes</a>
+            <p>The animation at the top of this page is that JavaScript runtime, drawing NILA live: mesh deformation, physics on her braid and earrings, face swaps and lip-sync, all from one exported <code>.skel</code>.</p>
+            <a class="btn" href="./docs/runtimes.html">Runtime guide</a>
           </div>
           <pre class="code" aria-label="JavaScript runtime example"><code><span class="k">const</span> skeleton = Skeleton.fromJson(json);
 <span class="k">const</span> pose = <span class="k">new</span> Pose(skeleton);
@@ -216,11 +227,12 @@ state.apply(skeleton, pose);
       <div class="wrap foot-row">
         <img src="../branding/rigby2d-lockup-transparent.svg" alt="Rigby2D by Hoverlabs" width="176" height="66" />
         <p>
-          Source code licensed MIT OR Apache-2.0. The Rigby2D, Hoverlabs and Rigbytron names, logos and artwork are trademarks of
+          Source code licensed MIT OR Apache-2.0. The Rigby2D, Hoverlabs, NILA and Rigbytron names, logos and artwork are trademarks of
           Hoverlabs; see <a href="https://github.com/jaisurya-dev-art/rigby2d/blob/develop/TRADEMARKS.md" rel="noopener">TRADEMARKS.md</a>.
           Visits are counted anonymously with <a href="https://www.goatcounter.com" rel="noopener">GoatCounter</a>: no cookies, no personal data.
         </p>
         <nav aria-label="Project links">
+          <a href="./docs/">Documentation</a>
           <a href="https://github.com/jaisurya-dev-art/rigby2d" rel="noopener">GitHub</a>
           <a href="https://github.com/jaisurya-dev-art/rigby2d/issues" rel="noopener">Issues</a>
           <a href="https://github.com/jaisurya-dev-art/rigby2d/blob/develop/CONTRIBUTING.md" rel="noopener">Contributing</a>
