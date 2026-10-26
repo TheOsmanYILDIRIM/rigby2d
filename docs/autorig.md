@@ -1,41 +1,52 @@
-# Rigby AutoRig and animation retargeting
+# AutoRig
 
-## Rigby AutoRig
+AutoRig turns layered artwork into an editable rig in one step: it identifies the body parts, places
+joints where the parts meet, builds the skeleton, turns bending parts into weighted meshes and adds IK
+to arms and legs.
 
-AutoRig turns layered artwork into an editable rig in one step. It works from a PSD with one
-layer per body part.
+![NILA rigged by AutoRig: 31 bones, a bending torso mesh and IK on arms and legs](images/autorig-result.jpg "One click: 31 bones, a torso mesh and 4 IK constraints from 72 layers")
 
-1. *File ▸ AutoRig artwork…*, then **Import PSD…**. Layers are imported in place, one image per
-   layer.
-2. Check the table. Each layer has a **part** and a **side**, found from its name or, when the
-   name says nothing, from where it sits. Change any that are wrong, or choose *leave unrigged*.
-3. **Generate rig**. It is one undo step.
+## Rigging a character
 
-### What it builds
+1. Start from a project with the layers imported and no bones yet: *File ▸ Import PSD…*, or the
+   **Import PSD…** button inside the AutoRig dialog. See [Importing art](importing-art.md).
+2. Choose *File ▸ AutoRig artwork…*. The table lists every layer with the **Part** and **Side**
+   AutoRig found for it, and whether it was **found by** the layer's name or its position.
+3. Correct any row that is wrong, or choose *— leave unrigged —* for layers that should not move
+   (a background, a shadow you will place by hand).
+4. Press **Generate rig**. It is one undo step.
 
-- **Spine**: `hip` low in the body and `chest` up to the shoulders. The body layer becomes a mesh
-  that bends with both.
+![The AutoRig dialog: each layer with its detected part and side](images/autorig-dialog.jpg "Every row can be corrected before generating")
+
+> [!NOTE]
+> AutoRig works on unrigged artwork. If the project already has bones, the dialog says so and offers
+> **Start over from a PSD…**, which opens a fresh project for the artwork.
+
+## What it builds
+
+- **Spine**: a `hip` bone low in the body and a `chest` bone up to the shoulders. The body layer
+  becomes a mesh that bends with both.
 - **Neck and head**: the head turns at its base.
 - **Arms and legs**: `upperarm`, `forearm`, `hand`, `thigh`, `shin` and `foot` bones, with joints
-  placed where the layers meet.
+  where the layers meet.
   - A single layer for a whole arm or leg is split into two bones and turned into a weighted mesh,
     so it bends at the elbow or knee.
   - IK targets (`ik_hand_l`, `ik_foot_r`, …) are added for two-bone limbs. A limb drawn bent keeps
-    its bend direction; a straight one bends its middle joint away from the body. Flip
-    *Bend positive* in the IK settings to reverse it.
-- **Face**: small bones for eyes, pupils (following their eye), brows, nose, mouth and jaw, under
+    its bend direction; a straight one bends its middle joint away from the body. Flip **Bend** in
+    the IK settings to reverse it.
+- **Face**: small bones for the eyes, pupils (following their eye), brows, nose, mouth and jaw, under
   the head.
 - **Extras**: hair and ears hang from the head, wings from the chest, and tails from the hip as a
   three-bone chain with a mesh.
 - **Anything else** rides on the nearest bone, and the log lists it.
 
-Every layer stays exactly where it was drawn, and everything AutoRig makes is ordinary rig data
-that you can edit.
+Every layer stays exactly where it was drawn, and everything AutoRig makes is ordinary rig data:
+rename bones, move joints, repaint weights, add constraints.
 
-### Naming layers
+## Naming layers
 
-Names are read loosely: case, separators and word order do not matter. For example,
-`L_UpperArm`, `upper arm left`, `arm.l` and `LeftArm2` are all understood.
+Names are read loosely: case, separators and word order do not matter. `L_UpperArm`,
+`upper arm left`, `arm.l` and `LeftArm2` are all understood.
 
 | Part | Names that work |
 | --- | --- |
@@ -47,60 +58,23 @@ Names are read loosely: case, separators and word order do not matter. For examp
 | Face | `eye`, `pupil` / `iris`, `brow` / `eyebrow`, `mouth` / `lips` / `teeth`, `nose`, `jaw` / `chin`, `ear` |
 | Extras | `hair`, `bangs`, `ponytail`, `hat`, `helmet`, `horns`; `tail`; `wing` |
 
-**Sides**: `l`, `left`, `r` or `right`, anywhere in the name. Sides are the **character's**. When
-a layer has no side, AutoRig assumes the character faces you, so its left is on the image's
-right.
+**Sides**: `l`, `left`, `r` or `right`, anywhere in the name. Sides are the **character's**. When a
+layer has no side, AutoRig assumes the character faces you, so its left is on the image's right.
 
-**Alternate images** of a part, such as `hand_open` and `hand_fist`, share the part's bone.
+**Alternate images** of a part, such as `hand_open` and `hand_fist` or `mouth_A` and `mouth_O`,
+share the part's bone, and their slot gets each alternate as an attachment.
 
-## Animation retargeting
+> [!TIP]
+> Layers named for nothing in particular (`Layer 12`) are identified by where they sit. Naming them
+> is still faster than fixing rows in the table.
 
-Make an animation once and reuse it on other characters.
+## After AutoRig
 
-1. Open the character that should receive the animations.
-2. Choose *File ▸ Retarget animations from another character…* and pick the project that has the
-   animations.
-3. Tick the animations you want, then check the bone matches.
-4. **Retarget**. It is one undo step.
-
-### How bones are matched
-
-Bones are matched in this order:
-
-1. Your choice in the table.
-2. The same name.
-3. A similar name: `arm.L` and `Arm_Left` match.
-4. The same body part and side: `L_UpperArm` and `upperarm_l` match.
-
-Control bones such as `ik_hand_l` only match other control bones. Keys of bones that have no match
-are left out.
-
-### Proportions and poses
-
-- **Movement scale**: translations are scaled by the ratio of the two characters' heights. You
-  can type your own value.
-- **Bone frames**: translations are turned from each source bone's parent frame into the target
-  bone's, so they move the same way in the world even when the rigs are built differently.
-- **Mirrored bones**: when a bone is mirrored in one rig but not the other, its rotations are
-  reversed.
-
-**Rotations** have two modes:
-
-- **Relative** (default): rotations are added to the target's own rest pose. Use it when the
-  characters are rigged alike.
-- **Match world directions**: bones point the way the source's bones point. It makes up for
-  different rest poses, such as arms down in one rig and arms out in the other.
-
-### What is carried over
-
-| Carried over | Left out |
-| --- | --- |
-| Bone keys and their curves | Mesh deformation keys (meshes differ between characters) |
-| Slot keys, by slot name; image swaps only for images the target has | Draw order keys |
-| Events (missing event definitions are added) | |
-| IK mix keys, by constraint name | |
-
-The log lists anything left out.
+- Check the joints by rotating bones with the Rotate tool, and move any joint that is off: in Setup
+  mode, translate the bone (its children and images stay where they are drawn).
+- Repaint mesh weights where a bend looks soft or stiff. See [Meshes](meshes.md#weights).
+- Add [physics](constraints.md#physics) to hair, earrings and cloth.
+- Save [poses](poses-and-faces.md) for expressions, and set up [lip-sync](lip-sync.md).
 
 ## Through MCP
 
@@ -108,7 +82,6 @@ The log lists anything left out.
 | --- | --- |
 | `detect_parts` | Previews AutoRig on a PSD or an unrigged `.rigby` file. |
 | `autorig` | Rigs a PSD into a new `.rigby` file, or rigs an unrigged one. |
-| `map_bones` | Previews the bone matching between two characters. |
-| `retarget_animation` | Copies one or more animations to another character. |
 
-See the [MCP guide](mcp.md).
+See the [MCP guide](mcp.md) and [Retargeting](retargeting.md) for reusing animations between
+characters.

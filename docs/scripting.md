@@ -25,6 +25,8 @@ def mirror():
 
 After you run or save this script, *Scripts ▸ Mirror selected bones* runs `mirror()`.
 
+![The script editor with a Python script, its Run and Save to library buttons](images/script-editor.jpg "Scripts ▸ Script editor…")
+
 ### Scripts in files
 
 *Scripts ▸ Add script files (.py)…* adds scripts from disk. In the desktop app the editor remembers

@@ -1,8 +1,12 @@
-# Rigby2D for film and video
+# Film workspace
 
-Rigby2D started as an editor for game animation and now also makes animation for film, video and
-motion graphics. The **Film workspace** gathers the tools for that. Switch to it with the
-**Game | Film** switch at the top right of the editor, or start with *File ▸ New film project*.
+Rigby2D makes animation for film, video and motion graphics as well as for games. The **Film
+workspace** gathers the tools for that: output resolution and frame rate, an animatable camera, audio
+tracks with lip-sync, face controls, and an offline renderer for PNG sequences, WebM with alpha and
+MP4. Switch to it with the **Game | Film** switch at the top right of the editor, or start with
+*File ▸ New film project*.
+
+![NILA's 70-second promo in the Film workspace, with the output frame and timecode](images/film-output.jpg "The Film workspace: the output frame in the viewport, timecode in the timeline")
 
 ## Workspaces
 
@@ -16,7 +20,7 @@ A workspace decides which tools the editor shows; it never changes the animation
 | Time display | Frames and seconds | Timecode (`HH:MM:SS:FF`) and frames |
 | Output panel, output frame, render | Hidden | Shown |
 | Pose library | Yes | Yes |
-| Face controls | Hidden | Shown |
+| Face controls, audio tracks, lip-sync | Hidden | Shown |
 
 The workspace is saved with the project (`.rigby`), so a film project opens in the Film workspace.
 New projects use the workspace you used last. Skeleton exports opened with *File ▸ Open* start in
@@ -29,6 +33,9 @@ are never written to skeleton exports, so game files are identical whichever wor
 
 Select nothing (click an empty area of the viewport) to see the project panel. Its **Output**
 section sets:
+
+![The project panel in the Film workspace: output frame rate, size, background and framing, then the animation's audio track](images/project-film.jpg "NILA's output settings (1080p at 60 fps, following the camera bone) and her voiceover track")
+
 
 - **Frame rate**: 12, 15, 23.976, 24, 25, 29.97, 30, 48, 50 or 60 fps, or any rate. It also sets
   the frame grid of the timeline and keys.
@@ -45,7 +52,10 @@ section sets:
 
 ## Rendering
 
-*File ▸ Render animation* renders at the output settings:
+*File ▸ Render animation… (PNG, WebM, MP4)* renders at the output settings:
+
+![The Render animation dialog: format, quality, frames and the animations to render](images/render-dialog.jpg "Pick a format and the animations (and skins) to render")
+
 
 | Format | Transparency | Notes |
 | --- | --- | --- |
@@ -66,67 +76,24 @@ from the start of the animation. Video encoding uses the system's encoders throu
 
 ## Poses and face controls
 
-The **Poses & face controls** section at the bottom of the inspector:
-
-- **Save pose** stores the selected bones' pose (every bone when none is selected) together with
-  the images their slots show, such as mouth shapes.
-- **Apply** puts a pose back, at any amount (*Apply at*). In Setup mode it changes the setup pose;
-  in Animate mode it sets keys at the current frame.
-- **Face controls** are sliders that blend from the setup pose (or another pose) to a pose: brows
-  up, eyes closed, mouth open. Rotations take the short way round, and image swaps switch at the
-  halfway point. In Animate mode, dragging a slider keys the face at the current frame.
+The pose library works in both workspaces; face controls (sliders that blend between poses) are part
+of the Film workspace. See [Poses and face controls](poses-and-faces.md).
 
 ## Audio and lip-sync
 
-*File ▸ Import audio* (or *Import audio* in the project panel) adds WAV, MP3, OGG, M4A or FLAC files
-as audio tracks of the current animation. Each track has a start time and volume; tracks play with
-the timeline and are stored inside the `.rigby` file.
+*File ▸ Import audio…* (or **Import audio…** in the project panel) adds WAV, MP3, OGG, M4A or FLAC
+files as audio tracks of the current animation. Each track has a start time and volume; tracks play
+with the timeline and are stored inside the `.rigby` file.
 
-**Lip-sync (mouth shapes)**: *Lip-sync…* in the audio section keys a mouth slot shape by shape from
-the speech, so every sound gets its mouth. It uses the nine shapes animators use:
-
-| Shape | For |
-| --- | --- |
-| A | ah, as in "father" |
-| E | eh, as in "bed" |
-| I | ee, and most consonants (C D G K N R S T Y Z) |
-| O | oh, as in "go" |
-| U | oo and w, as in "you" |
-| MBP | lips closed: M, B, P |
-| FV | lower lip on teeth: F, V |
-| L | tongue up: L, TH |
-| rest | silence between words |
-
-The timing comes from one of:
-
-- **Automatic transcription** (the default): Whisper listens to the track on your computer and times
-  every word, so you need neither a transcript nor a timing file. Pick the language spoken. The
-  speech model (about 77 MB) downloads the first time and is kept for later, so it then works
-  offline; nothing is uploaded. *Transcribe* shows what it heard; *Generate lip-sync* transcribes
-  first if needed.
-- **The words spoken**: type the line; Rigby2D lays the words over the speech in the track (its
-  loudness), each taking time for its sounds. Nothing else is needed.
-- **A timing file** for exact timing:
-  - ElevenLabs text-to-speech timestamps (character timings, so the voice you generated syncs
-    exactly)
-  - Whisper or any `[{ word, start, end }]` word-timing JSON
-  - Rhubarb Lip Sync (`.tsv` or `.json`) and Papagayo / Moho switch files (`.dat`)
-
-Pick the mouth slot (the slot whose images cover the most shapes is chosen for you) and check the
-mapping: images are matched by name (`mouth_viseme_A`, `A`, `ah`, `MBP`, `mouth_smile` for rest...),
-and any shape can be set by hand; a shape without an image uses the rest mouth. *Lead* sets how many
-frames each mouth lands before its sound (2 by default, as animators time it) and *Hold at least*
-how long a shape stays, so the mouth never flickers. *Generate lip-sync* replaces the mouth keys over
-the length of the track as one undo step; the result is ordinary image-swap keys, so it exports to
-skeleton JSON and `.skel` and plays in every runtime.
-
-**Lip-sync (loudness)**: the *Lip-sync* button of a face control keys that control on every frame
-from the loudness of the animation's first audio track: a "mouth open" control opens on speech and
-closes in silence. Use it for mouths drawn as one shape that opens and closes.
+**Lip-sync** keys the mouth from the speech in a track: *Lip-sync…* in the audio section keys mouth
+shapes sound by sound (with automatic transcription, a typed line or a timing file), and the
+*Lip-sync* button of a face control keys a mouth-open control from the loudness. See
+[Lip-sync](lip-sync.md).
 
 WebM and MP4 renders include the animation's audio, mixed. Every render also writes it as
 `<name>.wav` next to the frames or video, ready for your video editor.
 
 ## Coming next
 
-Scene composition: several characters in one shot.
+Scene composition: several characters in one shot. Follow the
+[issues](https://github.com/jaisurya-dev-art/rigby2d/issues) for progress.

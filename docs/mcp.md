@@ -1,4 +1,4 @@
-# Rigby2D MCP server
+# AI assistants (MCP)
 
 Rigby2D includes a [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server, so AI
 assistants such as Claude can inspect, validate, sample, edit and convert Rigby2D projects:
@@ -25,6 +25,8 @@ No Node.js, terminal or settings file is needed: Claude Desktop includes the run
 holds the whole server, Python scripting and PSD support. To change the folders later, open the
 extension's settings in Claude Desktop. The editor shows these steps in *Help ▸ Connect an AI
 assistant*.
+
+![The Connect an AI assistant dialog in the editor's Help menu](images/ai-connect.jpg "Help ▸ Connect an AI assistant walks through the setup")
 
 **Other setups.** The server speaks MCP over stdio. Point your client at `src/mcp/server.js` and give
 it the folders it may access (`--root <dir>`, or just the folder; repeatable; default: the folder the
@@ -56,6 +58,9 @@ Run `node src/mcp/server.js --help` to check the installation. Start the server 
 through `npm run`: npm prints to standard output, which the protocol uses.
 
 ## Tools
+
+This section explains the tools by task. The [MCP tool reference](mcp-tools.md) lists every tool with
+all of its parameters, generated from the server itself.
 
 ### Reading and conversion
 
