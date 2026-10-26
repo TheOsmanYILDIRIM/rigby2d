@@ -17,6 +17,18 @@ The editor ships Pyodide to run Python scripts: the files in `pyodide/` of the b
 The source code of these components, as distributed, is available from the links above and from
 the npm package.
 
+## Speech recognition (automatic lip-sync timing)
+
+The editor ships these to transcribe audio for lip-sync, bundled into the build's assets:
+
+- **Transformers.js**: Apache License 2.0. Source: <https://github.com/huggingface/transformers.js>.
+- **ONNX Runtime Web** (including `ort-wasm-simd-threaded.asyncify.wasm`): MIT License. Source:
+  <https://github.com/microsoft/onnxruntime>.
+
+The Whisper speech model is not distributed with Rigby2D: the editor downloads it from Hugging Face
+(`onnx-community/whisper-base_timestamped`) the first time it is used. Whisper is by OpenAI, MIT
+License: <https://github.com/openai/whisper>.
+
 ## Godot runtime
 
 The Godot addon includes godot-rust (MPL-2.0); see `THIRD_PARTY_NOTICES.md` inside the addon.

@@ -77,6 +77,9 @@ test('importers: ElevenLabs, word JSON, Whisper, Rhubarb and Papagayo', () => {
   assert.deepEqual(plain.words.map((w) => w.word), ['one', 'two']);
   const whisper = readTiming(JSON.stringify({ segments: [{ words: [{ word: ' Hello', start: 0.2, end: 0.6 }] }] }));
   assert.deepEqual(whisper.words, [{ word: 'Hello', start: 0.2, end: 0.6 }]);
+  // transformers.js Whisper (what the editor's Transcribe produces).
+  const chunks = readTiming(JSON.stringify({ text: ' Hi there', chunks: [{ text: ' Hi', timestamp: [0.1, 0.3] }, { text: ' there', timestamp: [0.3, 0.7] }] }));
+  assert.deepEqual(chunks.words, [{ word: 'Hi', start: 0.1, end: 0.3 }, { word: 'there', start: 0.3, end: 0.7 }]);
 
   const tsv = readTiming('0.00\tX\n0.10\tA\n0.25\tD\n0.40\tG\n0.60\tX\n');
   assert.equal(tsv.kind, 'rhubarb');

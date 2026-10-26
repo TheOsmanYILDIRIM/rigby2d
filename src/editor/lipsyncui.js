@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // The Lip-sync dialog (Film workspace, audio section): mouth shapes keyed from speech timing onto a
-// mouth slot. Timing comes from a typed transcript (laid over the audio's loudness) or a timing file
-// (ElevenLabs timestamps, Whisper or other word-timing JSON, Rhubarb Lip Sync, Papagayo). The work
-// itself is in core/lipsync.js; this file is the UI.
+// mouth slot. Timing comes from Whisper listening to the track on this computer (whisper.js), a typed
+// transcript (laid over the audio's loudness) or a timing file (ElevenLabs timestamps, Whisper or
+// other word-timing JSON, Rhubarb Lip Sync, Papagayo). The work itself is in core/lipsync.js; this
+// file is the UI.
 
 import { VISEMES, VISEME_HINTS, keyLipSync, matchMouths, readTiming, timeTextByLoudness, tidy, visemeCues } from '../core/lipsync.js';
 import { track as count } from './analytics.js';
 import { FPS, Mode } from './app.js';
 import { frameLevels, sounds, tracksOf } from './audio.js';
 import * as platform from './platform.js';
+import { transcribe } from './whisper.js';
 import { h } from './widgets.js';
 
 /** A modal dialog; returns { body, close }. Escape closes it. */
@@ -38,6 +40,26 @@ const select = (options, value, onchange) =>
     options.map(([v, label]) => h('option', { value: v, selected: v === value }, label)),
   );
 
+/** Languages Whisper is asked to hear (it understands about a hundred; these are the common ones). */
+const LANGUAGES = [
+  ['en', 'English'],
+  ['ta', 'Tamil'],
+  ['hi', 'Hindi'],
+  ['te', 'Telugu'],
+  ['ml', 'Malayalam'],
+  ['kn', 'Kannada'],
+  ['es', 'Spanish'],
+  ['fr', 'French'],
+  ['de', 'German'],
+  ['it', 'Italian'],
+  ['pt', 'Portuguese'],
+  ['ru', 'Russian'],
+  ['ja', 'Japanese'],
+  ['ko', 'Korean'],
+  ['zh', 'Chinese'],
+  ['ar', 'Arabic'],
+];
+
 /** How many mouth shapes a slot's images cover, to pick the mouth slot by itself. */
 const coverage = (slot) => Object.values(matchMouths(slot.attachments.map((a) => a.name))).filter(Boolean).length;
 
@@ -52,8 +74,11 @@ export function openLipSync(app) {
   const best = slots.reduce((a, b) => (coverage(b.s) > coverage(a.s) ? b : a));
   const state = {
     track: 0,
-    source: 'text',
+    source: 'auto',
     text: '',
+    language: 'en',
+    heard: null, // { kind, text, words } from transcribing the track
+    busy: '', // transcription progress
     timing: null, // { kind, words } or { kind, cues } from a file
     fileName: '',
     error: '',
@@ -63,6 +88,33 @@ export function openLipSync(app) {
     minHold: Math.max(2, Math.round(FPS * 0.05)),
   };
   const { body, close } = modal();
+  let note = null; // the line that shows transcription progress
+
+  /** Whisper listens to the chosen track and times its words. */
+  const listen = async () => {
+    const t = tracks[state.track];
+    const buffer = sounds.get(t.sound)?.buffer;
+    if (!buffer) {
+      state.error = `'${t.sound}' could not be decoded.`;
+      return draw();
+    }
+    state.error = '';
+    state.busy = 'Starting…';
+    draw();
+    const onProgress = (text) => {
+      state.busy = text;
+      if (note) note.textContent = text;
+    };
+    try {
+      state.heard = { kind: 'whisper', ...(await transcribe(buffer, { language: state.language, onProgress })) };
+      if (!state.heard.words.length) state.error = 'No speech was heard in this track.';
+      count('editor-transcribe');
+    } catch (e) {
+      state.error = `Transcription failed: ${e.message}`;
+    }
+    state.busy = '';
+    draw();
+  };
 
   const pickFile = async () => {
     const [file] = (await app.guard(() => platform.pickImportFiles('Timing', ['json', 'tsv', 'txt', 'dat'], false))) ?? [];
@@ -87,17 +139,24 @@ export function openLipSync(app) {
       const words = timeTextByLoudness(state.text, frameLevels(t, FPS, frames), FPS);
       return { list: visemeCues(words, opts), offset: 0, words: words.length };
     }
-    if (!state.timing) return null;
-    if (state.timing.words) return { list: visemeCues(state.timing.words, opts), offset: t.offset, words: state.timing.words.length };
+    const timing = state.source === 'auto' ? state.heard : state.timing;
+    if (!timing) return null;
+    if (timing.words) return { list: visemeCues(timing.words, opts), offset: t.offset, words: timing.words.length };
     // Mouth cues from other tools: the same lead and hold rules.
     const lead = state.lead / FPS;
-    return { list: tidy(state.timing.cues.map((c) => ({ time: Math.max(0, c.time - lead), viseme: c.viseme })), state.minHold / FPS), offset: t.offset, words: 0 };
+    return { list: tidy(timing.cues.map((c) => ({ time: Math.max(0, c.time - lead), viseme: c.viseme })), state.minHold / FPS), offset: t.offset, words: 0 };
   };
 
-  const generate = () => {
+  const generate = async () => {
+    if (state.busy) return;
+    // Automatic timing transcribes first, so one click is enough.
+    if (state.source === 'auto' && !state.heard) {
+      await listen();
+      if (!state.heard?.words.length) return;
+    }
     const made = cues();
     if (!made || !made.list.length) {
-      state.error = state.source === 'text' ? 'Type the words spoken in the track first.' : 'Choose a timing file first.';
+      state.error = { text: 'Type the words spoken in the track first.', file: 'Choose a timing file first.', auto: 'No speech was heard in this track.' }[state.source];
       return draw();
     }
     const t = tracks[state.track];
@@ -129,18 +188,35 @@ export function openLipSync(app) {
         'div',
         { class: 'lipsync-grid' },
         h('label', null, 'Audio'),
-        select(tracks.map((t, i) => [String(i), `${t.sound}${t.offset ? ` (at ${t.offset.toFixed(2)} s)` : ''}`]), String(state.track), (v) => ((state.track = Number(v)), draw())),
+        select(tracks.map((t, i) => [String(i), `${t.sound}${t.offset ? ` (at ${t.offset.toFixed(2)} s)` : ''}`]), String(state.track), (v) => ((state.track = Number(v)), (state.heard = null), draw())),
         h('label', null, 'Timing from'),
         select(
           [
+            ['auto', 'Transcribe the audio automatically (Whisper)'],
             ['text', 'The words spoken (timed by the audio)'],
             ['file', 'A timing file'],
           ],
           state.source,
           (v) => ((state.source = v), (state.error = ''), draw()),
         ),
+        state.source === 'auto' ? h('label', null, 'Language') : null,
+        state.source === 'auto' ? select(LANGUAGES, state.language, (v) => ((state.language = v), (state.heard = null), draw())) : null,
       ),
-      state.source === 'text'
+      state.source === 'auto'
+        ? h(
+            'div',
+            { class: 'lipsync-file' },
+            h('button', { onclick: listen, disabled: !!state.busy }, state.heard ? 'Transcribe again' : 'Transcribe'),
+            (note = h(
+              'span',
+              { class: 'small weak' },
+              state.busy ||
+                (state.heard
+                  ? `${state.heard.words.length} timed words: “${state.heard.text.length > 160 ? `${state.heard.text.slice(0, 160)}…` : state.heard.text}”`
+                  : 'Whisper listens to the track on this computer and times every word. The speech model (about 77 MB) downloads the first time and is kept for later.'),
+            )),
+          )
+        : state.source === 'text'
         ? h('textarea', { class: 'lipsync-text', rows: 3, placeholder: 'Type what is said in the track, e.g. "Hi! I\'m Nila, and I\'m made of layers."', oninput: (e) => (state.text = e.target.value) }, state.text)
         : h('div', { class: 'lipsync-file' }, h('button', { onclick: pickFile }, 'Choose timing file…'), h('span', { class: 'small weak' }, timingNote)),
       state.error ? h('div', { class: 'lipsync-error' }, state.error) : null,
@@ -180,7 +256,7 @@ export function openLipSync(app) {
         h('input', { type: 'number', min: 1, max: 8, value: state.minHold, class: 'frame-input', onchange: (e) => (state.minHold = Math.max(1, Math.min(8, Math.round(+e.target.value || 1)))) }),
       ),
       h('div', { class: 'small weak' }, 'Replaces the mouth keys over the length of the audio track. Undo reverts it.'),
-      h('div', { class: 'modal-buttons' }, h('button', { onclick: close }, 'Cancel'), h('button', { class: 'primary', 'data-tut': 'lipsync:generate', onclick: generate }, 'Generate lip-sync')),
+      h('div', { class: 'modal-buttons' }, h('button', { onclick: close }, 'Cancel'), h('button', { class: 'primary', 'data-tut': 'lipsync:generate', disabled: !!state.busy, onclick: generate }, 'Generate lip-sync')),
     ];
     body.replaceChildren(...parts.filter(Boolean));
   };

@@ -99,6 +99,11 @@ the speech, so every sound gets its mouth. It uses the nine shapes animators use
 
 The timing comes from one of:
 
+- **Automatic transcription** (the default): Whisper listens to the track on your computer and times
+  every word, so you need neither a transcript nor a timing file. Pick the language spoken. The
+  speech model (about 77 MB) downloads the first time and is kept for later, so it then works
+  offline; nothing is uploaded. *Transcribe* shows what it heard; *Generate lip-sync* transcribes
+  first if needed.
 - **The words spoken**: type the line; Rigby2D lays the words over the speech in the track (its
   loudness), each taking time for its sounds. Nothing else is needed.
 - **A timing file** for exact timing:

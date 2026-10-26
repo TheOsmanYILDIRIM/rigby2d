@@ -298,11 +298,12 @@ function wordsFromJson(o) {
   // ElevenLabs text-to-speech with timestamps.
   const al = o.normalized_alignment ?? o.alignment ?? (Array.isArray(o.characters) ? o : null);
   if (al?.characters) return wordsFromCharacters(al);
-  // [{ word, start, end }], { words: [...] }, or Whisper's { segments: [{ words }] }.
-  const list = Array.isArray(o) ? o : o.words ?? o.segments?.flatMap((s) => s.words ?? []);
+  // [{ word, start, end }], { words: [...] }, Whisper's { segments: [{ words }] }, or transformers.js
+  // Whisper's { chunks: [{ text, timestamp: [start, end] }] }.
+  const list = Array.isArray(o) ? o : o.words ?? o.chunks ?? o.segments?.flatMap((s) => s.words ?? []);
   if (Array.isArray(list)) {
     return list
-      .map((w) => ({ word: String(w.word ?? w.text ?? '').trim(), start: Number(w.start ?? w.start_time), end: Number(w.end ?? w.end_time) }))
+      .map((w) => ({ word: String(w.word ?? w.text ?? '').trim(), start: Number(w.start ?? w.start_time ?? w.timestamp?.[0]), end: Number(w.end ?? w.end_time ?? w.timestamp?.[1]) }))
       .filter((w) => w.word && Number.isFinite(w.start) && Number.isFinite(w.end));
   }
   return null;
