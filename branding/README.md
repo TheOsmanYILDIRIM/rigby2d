@@ -1,6 +1,7 @@
 # Rigby2D brand assets
 
-The Rigby2D name, logo, lockups and icons in this folder are proprietary trademarks of Hoverlabs.
+The Rigby2D name, logo, lockups and icons in this folder, and the Rigbytron and NILA characters, are
+proprietary trademarks and brand assets of Hoverlabs.
 They are **not** covered by the MIT or Apache 2.0 licenses that apply to the source code. See
 [TRADEMARKS.md](../TRADEMARKS.md) for what is allowed.
 
@@ -11,8 +12,11 @@ They are **not** covered by the MIT or Apache 2.0 licenses that apply to the sou
 | `rigby2d-mark.svg` | The R mark alone |
 | `rigby2d-icon-dark.svg` | App icon and favicon source |
 | `rigby2d-icon-256.png` | Rendered app icon |
-| `rigbytron/rigbytron.rigby` | Rigbytron, the mascot: rig and animations (`hold`, `release`), a Rigby2D work file. The editor opens it as the demo project |
+| `rigbytron/rigbytron.rigby` | Rigbytron, the mascot: rig and animations (`hold`, `release`), a Rigby2D work file. A demo project under *File ▸ Open demo* |
+| `rigbytron/thumbnail.png` | Rigbytron's card in the Open demo picker (480×360) |
 | `rigbytron/export/` | Rigbytron exported for the runtime (`.skel`, `.json`, `.atlas`, `.png`), played by the splash screen |
+| `nila/nila.rigby` | NILA, the female mascot: layered meshes, physics, face poses, voiceover with viseme lip-sync, and the `idle`, `wave` and 70-second `promo` animations. A demo project under *File ▸ Open demo* |
+| `nila/thumbnail.png` | NILA's card in the Open demo picker (480×360) |
 
 Use the lockups on charcoal or near-black backgrounds, keep clear space of at least a quarter of
 the icon height around them, and do not recolor, stretch or rearrange their parts.

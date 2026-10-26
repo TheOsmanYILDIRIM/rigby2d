@@ -67,7 +67,8 @@ export const PRESETS = {
       'tool.scale': ['x'],
       'tool.shear': ['z'],
       'mode.toggle': ['tab'],
-      'play.forward': ['d'],
+      // Space plays and stops, as in most animation tools (and as the tutorials teach).
+      'play.forward': ['space', 'd'],
       'play.backward': ['a'],
       'time.start': ['q'],
       'time.end': ['e'],
@@ -82,7 +83,7 @@ export const PRESETS = {
       'key.tool': ['l'],
       'key.transforms': ['ctrl+l'],
       'key.shown': ['ctrl+shift+l'],
-      'select.none': ['space', 'escape'],
+      'select.none': ['escape'],
       'view.fit': ['ctrl+shift+f'],
       'view.actual': ['ctrl+f'],
     },

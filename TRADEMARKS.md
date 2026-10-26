@@ -12,6 +12,8 @@ the Rigby2D or Hoverlabs names, logos or other brand assets.
 - **Rigbytron**, the Rigby2D mascot: its name, character design, artwork and animation (the files
   in [`branding/rigbytron/`](branding/rigbytron/) and their copies in `runtimes/godot/demo/rigbytron/`),
   including the splash screen and the demo projects that show it.
+- **NILA**, the Rigby2D female mascot: her name, character design, artwork, voice and animation (the
+  files in [`branding/nila/`](branding/nila/)), including the NILA demo project and the promo film.
 - Any other branding that identifies Rigby2D or Hoverlabs as the source of a product.
 
 These are trademarks and brand assets of Hoverlabs. All rights reserved.
@@ -26,8 +28,8 @@ These are trademarks and brand assets of Hoverlabs. All rights reserved.
 ## What needs permission
 
 - Distributing a modified or forked version under the Rigby2D name, with the Rigby2D logo or with
-  Rigbytron. Forks must use a different name and different branding, and replace the splash
-  screen and the demo project.
+  Rigbytron or NILA. Forks must use a different name and different branding, and replace the splash
+  screen and the demo projects.
 - Using the names or logos in a way that suggests endorsement by, or affiliation with, Hoverlabs.
 - Using the names or logos in your own product names, company names, domain names or app icons.
 

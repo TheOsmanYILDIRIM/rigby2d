@@ -28,6 +28,7 @@ import { createTutorials } from './tutorials/index.js';
 import { openAiConnect } from './aiconnect.js';
 import { installPanelSync } from './panelsync.js';
 import { windowLayoutsMenuItem } from './layoutui.js';
+import { openDemoPicker } from './demoui.js';
 import { startAnalytics } from './analytics.js';
 
 // Anonymous visit and feature counts, only on the public website's browser editor (analytics.js).
@@ -60,8 +61,7 @@ function menus() {
     File: [
       { label: 'New game project', action: () => app.newDocument('game') },
       { label: 'New film project', action: () => app.newDocument('film') },
-      { label: 'Open demo (Rigbytron)', action: () => app.openDemo() },
-      { label: 'New sample (robot)', action: () => app.newSample() },
+      { label: 'Open demo…', action: () => openDemoPicker(app) },
       { label: 'Open… (.rigby, or import .json / .skel)', shortcut: 'Ctrl+O', action: () => app.openDialog() },
       'separator',
       { label: 'Save', shortcut: 'Ctrl+S', action: () => app.save(false) },
@@ -391,8 +391,9 @@ function frame(now) {
 
 requestAnimationFrame(frame);
 
-// New users start in the demo project, and are offered the tour once.
-app.openDemo(false).then(() => setTimeout(() => tutorials.welcome(), 1200));
+// The editor starts with an empty project (demos are under File > Open demo); new users are
+// offered the tour once.
+setTimeout(() => tutorials.welcome(), 1200);
 
 // The window starts hidden while the splash screen plays; the splash opens it when done. Show it
 // anyway if the splash never does.

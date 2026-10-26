@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://jaisurya-dev-art.github.io/rigby2d/"><img alt="Try it in your browser: the full editor, nothing to install" src="https://img.shields.io/badge/%E2%96%B6%20Try%20it%20in%20your%20browser-the%20full%20editor%2C%20nothing%20to%20install-b5d3e7?style=for-the-badge&labelColor=0a0a0b" height="40"></a><br>
-  <sub><a href="https://jaisurya-dev-art.github.io/rigby2d/editor/"><b>Open the editor</b></a> with the Rigbytron demo, tutorials and Python scripting · <a href="https://jaisurya-dev-art.github.io/rigby2d/">Website</a></sub>
+  <sub><a href="https://jaisurya-dev-art.github.io/rigby2d/editor/"><b>Open the editor</b></a> with the Rigbytron and NILA demos, tutorials and Python scripting · <a href="https://jaisurya-dev-art.github.io/rigby2d/">Website</a></sub>
 </p>
 
 <p align="center">
@@ -136,7 +136,7 @@ the [scripting guide](docs/scripting.md).
 - **Skeleton import/export**: opens and exports the widely used skeleton formats: `.json` (3.8, 4.2, 4.3) and binary `.skel` (4.3), with `.atlas` texture atlases. Meshes, weights, skins, constraints, events, deform and draw-order keys round-trip losslessly.
 - **Runtimes included**: a small dependency-free JavaScript runtime (`src/core`) with animation tracks, events, image sequences, IK, transform, path, physics and slider constraints, plus a reference WebGL renderer (`src/webgl`). A Rust port of it, 3 to 4× faster, powers the Godot runtime (preview, [`runtimes/`](runtimes/)).
 - **Built-in tutorials**: interactive lessons in *Help ▸ Tutorials*, with a practice character included, so beginners learn by doing.
-- **Demo project**: the editor opens with Rigbytron, the Rigby2D mascot, rigged and animated, so you can explore a real rig right away (*File ▸ Open demo (Rigbytron)* reopens it). *File ▸ New sample (robot)* gives a simpler character drawn by the editor.
+- **Demo projects**: *File ▸ Open demo* lists the bundled demos with a thumbnail: Rigbytron, the Rigby2D mascot, rigged and animated, and NILA, a layered character with mesh deformation, physics, face poses, a voiceover with viseme lip-sync and the 70-second promo film. Open one to explore a real rig.
 
 ## In progress
 
@@ -166,7 +166,7 @@ playback fix.
 
 **[Open the editor](https://jaisurya-dev-art.github.io/rigby2d/editor/)** on the
 [Rigby2D website](https://jaisurya-dev-art.github.io/rigby2d/): the full editor with the Rigbytron
-demo, the tutorials and Python scripting, with nothing to install. Files open and save through your
+and NILA demos, the tutorials and Python scripting, with nothing to install. Files open and save through your
 browser (folder access where the browser supports it, otherwise a download). Detachable panels and
 window layouts need the desktop app. The website and its editor follow the `develop` branch.
 
@@ -236,7 +236,7 @@ to `develop` deploys it to GitHub Pages through `.github/workflows/pages.yml`.
 
 **New to animation tools? Start with the built-in tutorials:** *Help ▸ Tutorials*. They are short, hands-on lessons that point at the buttons to use and move on as you go. They take you from finding your way around to rigging a character with AutoRig, drawing bones by hand, and making your first animation. The first time the editor opens, it offers the tour.
 
-The editor opens with the Rigbytron demo; *File ▸ New game project* or *New film project* starts an empty one.
+The editor opens with an empty project; *File ▸ Open demo* opens Rigbytron or NILA, and *File ▸ New game project* or *New film project* starts a new one.
 
 1. **Import art:** *File ▸ Import PSD…* or *File ▸ Import PNG images…*
 2. **Draw bones:** pick the *Create* tool in the viewport toolbar and drag. Select a bone first to chain children from it.
@@ -351,7 +351,7 @@ src/splash/     Splash screen (plays the Rigbytron animation with the runtime)
 src/mcp/        Model Context Protocol server for AI assistants
 src/editor/scripting/  Python scripting: the rigby module, script host and script editor
 runtimes/       Rust runtime and the Godot 4 node (preview); see runtimes/README.md
-branding/       Logo, lockups, icons and Rigbytron (proprietary, see TRADEMARKS.md)
+branding/       Logo, lockups, icons, Rigbytron and NILA (proprietary, see TRADEMARKS.md)
 examples/       WebGL player example
 site/           Website (GitHub Pages): landing page with Rigbytron playing live on the runtime
 src-tauri/      Native desktop shell (editor and splash windows, file dialog/fs plugins only)
@@ -381,8 +381,8 @@ The editor distributes Pyodide and CPython for Python scripting under their own 
 
 ## Trademarks
 
-**Rigby2D**, **Hoverlabs** and **Rigbytron**, and the Rigby2D logo, lockups, icons and the Rigbytron
-mascot in [`branding/`](branding/), are proprietary trademarks of Hoverlabs. They are not covered by the MIT or Apache 2.0 licenses. Forks
+**Rigby2D**, **Hoverlabs**, **Rigbytron** and **NILA**, and the Rigby2D logo, lockups, icons and the Rigbytron
+and NILA mascots in [`branding/`](branding/), are proprietary trademarks of Hoverlabs. They are not covered by the MIT or Apache 2.0 licenses. Forks
 and modified versions must use their own name and branding. See [TRADEMARKS.md](TRADEMARKS.md).
 
 ## Disclaimer

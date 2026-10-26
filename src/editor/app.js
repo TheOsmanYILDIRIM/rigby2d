@@ -10,15 +10,11 @@ import * as edit from './edit.js';
 import { Images } from './images.js';
 import * as io from './io.js';
 import * as platform from './platform.js';
-import * as sample from './sample.js';
 import { addSound, sounds, stopAudio } from './audio.js';
 import { WORKSPACES, workspace as workspaceDef } from './workspaces.js';
 import * as onion from './onion.js';
 import { track } from './analytics.js';
-import demoUrl from '../../branding/rigbytron/rigbytron.rigby?url&no-inline';
-
-/** The bundled demo project: Rigbytron, the Rigby2D mascot. */
-const DEMO_FILE = 'rigbytron.rigby';
+import { demoById } from './demos.js';
 
 /** Default onion-skin tint colors (future = cool, past = warm), shared with the UI. */
 export const ONION_DEFAULTS = { futureColor: [0.55, 0.75, 1], pastColor: [1, 0.55, 0.55] };
@@ -113,7 +109,7 @@ export class App {
     this.playing = false;
     this.looping = true;
     this.selectedKeys.clear();
-    this.status = 'Welcome to Rigby2D. Open the Rigbytron demo or a sample from the File menu, or import a PSD / PNGs.';
+    this.status = 'Welcome to Rigby2D. Open a demo (File ▸ Open demo), or import a PSD / PNGs.';
     this.showBones = true;
     /** Shows the output frame (resolution and framing) in the viewport. */
     this.showFrame = false;
@@ -479,40 +475,34 @@ export class App {
     this.setStatus(`New ${ws.label.toLowerCase()} project`);
   }
 
-  /**
-   * Opens Rigbytron, the demo project bundled with the editor, playing its animation. It is not
-   * tied to a file: Save asks where to keep a copy. `ask` confirms discarding unsaved changes.
-   */
-  /** The demo project (Rigbytron) with its images loaded; the open document is not replaced. */
-  async demoDocument() {
-    const blob = await (await fetch(demoUrl)).blob();
-    return io.openProject(DEMO_FILE, platform.memoryFs([new File([blob], DEMO_FILE)]), this.images);
+  /** A bundled demo project (see demos.js) with its images loaded; the open document is not replaced. */
+  async demoDocument(id = 'rigbytron') {
+    const demo = demoById(id);
+    const blob = await (await fetch(demo.url)).blob();
+    return io.openProject(demo.file, platform.memoryFs([new File([blob], demo.file)]), this.images);
   }
 
-  async openDemo(ask = true) {
+  /**
+   * Opens a bundled demo project (with its sounds), playing its animation. It is not tied to a file:
+   * Save asks where to keep a copy. `ask` confirms discarding unsaved changes.
+   */
+  async openDemo(id = 'rigbytron', ask = true) {
     if (ask && !(await this.confirmDiscard())) return;
+    const demo = demoById(id);
     try {
-      const { doc, warnings } = await this.demoDocument();
-      this.loadDocument(doc, DEMO_FILE);
+      const blob = await (await fetch(demo.url)).blob();
+      await this.openFrom(demo.file, platform.memoryFs([new File([blob], demo.file)]));
+      if (this.path !== demo.file) return; // openFrom reported what went wrong
       this.saveTarget = null;
-      this.anim = Math.max(0, doc.animations.findIndex((a) => a.name === 'release'));
+      this.anim = Math.max(0, this.doc.animations.findIndex((a) => a.name === demo.animation));
       this.mode = Mode.Animate;
       this.playing = true;
+      this.playDirection = 1;
       this.frameRequest = true;
-      this.setStatus(warnings.length ? `Demo opened with warnings: ${warnings.join('; ')}` : 'Rigbytron demo: explore the rig and its hold and release animations. Save keeps a copy.');
+      this.setStatus(`${demo.name} demo: ${demo.description} Save keeps a copy.`);
     } catch (e) {
       this.setStatus(`Could not open the demo: ${errorText(e)}`);
     }
-  }
-
-  async newSample() {
-    if (!(await this.confirmDiscard())) return;
-    this.images.clear();
-    this.loadDocument(sample.robot(this.images), null);
-    this.saveTarget = null;
-    this.mode = Mode.Animate;
-    this.playing = true;
-    this.setStatus('Sample robot loaded. The Help menu lists the shortcuts.');
   }
 
   async openDialog() {

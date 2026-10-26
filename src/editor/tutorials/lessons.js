@@ -28,7 +28,7 @@ export const LESSONS = [
     steps: [
       {
         text: '<b>Welcome to Rigby2D!</b> In a few minutes you will know your way around. This lesson uses <b>Rigbytron</b>, the demo character. Nothing you do here can break anything. Click <b>Open Rigbytron</b> to begin.',
-        action: { label: 'Open Rigbytron', run: ({ app }) => app.openDemo(true) },
+        action: { label: 'Open Rigbytron', run: ({ app }) => app.openDemo('rigbytron', true) },
         target: 'coach:action',
         done: ({ app }) => app.path === 'rigbytron.rigby',
         student: (ctx) => click(ctx, 'coach:action'),
