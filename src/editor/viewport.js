@@ -9,6 +9,7 @@ import { Pose } from '../core/pose.js';
 import { FPS, Mode, TOOLS, selBone, selSlot } from './app.js';
 import * as edit from './edit.js';
 import { GLView } from './glview.js';
+import { fitZoom } from './viewfit.js';
 import { MeshTool } from './meshtool.js';
 import { ShapeTool } from './shapetool.js';
 
@@ -200,7 +201,7 @@ export class Viewport {
       app.view = { panX: 0, panY: this.height * 0.25, zoom: 1 };
       return;
     }
-    const zoom = Math.min(20, Math.max(0.0001, Math.min(this.width / Math.max(1, x1 - x0), this.height / Math.max(1, y1 - y0)) * 0.8));
+    const zoom = fitZoom(this.width, this.height, x1 - x0, y1 - y0);
     const cx = (x0 + x1) * 0.5;
     const cy = (y0 + y1) * 0.5;
     app.view = { panX: -cx * zoom, panY: cy * zoom, zoom };
