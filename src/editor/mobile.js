@@ -68,6 +68,7 @@ function installGestures(app, viewport, state) {
   }, { capture: true, passive: false });
   canvas.addEventListener('pointermove', (event) => {
     if (!state.active || event.pointerType !== 'touch' || !pointers.has(event.pointerId)) return;
+    if (event.buttons === 0) { finish(event); return; }
     const next = location(event);
     pointers.set(event.pointerId, next);
     if (pointers.size >= 2) {
@@ -89,7 +90,7 @@ function installGestures(app, viewport, state) {
     const wasGesture = state.active && (pinch !== null || state.pan);
     pointers.delete(event.pointerId);
     if (pointers.size < 2) pinch = null;
-    if (!pointers.size) lastPan = null;
+    lastPan = pointers.size === 1 && state.pan ? [...pointers.values()][0] : null;
     if (wasGesture) {
       stopPress();
       event.stopImmediatePropagation();
@@ -97,7 +98,12 @@ function installGestures(app, viewport, state) {
   }
   canvas.addEventListener('pointerup', finish, true);
   canvas.addEventListener('pointercancel', finish, true);
-  window.addEventListener('blur', () => { pointers.clear(); pinch = null; lastPan = null; });
+  const resetGestures = () => { pointers.clear(); pinch = null; lastPan = null; stopPress(); };
+  const finishOutside = (e) => { if (pointers.has(e.pointerId)) finish(e); };
+  window.addEventListener('pointerup', finishOutside, true);
+  window.addEventListener('pointercancel', finishOutside, true);
+  window.addEventListener('blur', resetGestures);
+  return resetGestures;
 }
 
 export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarget, onDelete, showPopup } = {}) {
@@ -243,6 +249,7 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   function setPanel(name) {
     if (!PANELS.includes(name)) return;
     state.panel = name;
+    resetGestures?.();
     fileMenu.hidden = true;
     refresh();
   }
@@ -263,12 +270,12 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   function applyMedia() {
     state.active = query.matches || new URLSearchParams(window.location.search).get('mobile') === '1';
     root.classList.toggle('mobile-layout', state.active);
-    if (!state.active) { state.pan = false; fileMenu.hidden = true; }
+    if (!state.active) { state.pan = false; resetGestures?.(); fileMenu.hidden = true; }
     refresh();
   }
   query.addEventListener?.('change', applyMedia);
   applyMedia();
-  installGestures(app, viewport, state);
+  const resetGestures = installGestures(app, viewport, state);
   let revision = -1;
   const interval = window.setInterval(() => {
     if (!state.active) return;
