@@ -200,6 +200,7 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
       clear(); fired=false; captured=e.pointerId; start={x:e.clientX,y:e.clientY};
       timer=globalThis.setTimeout(()=>{
         timer=null; fired=true;
+        viewport.press=null; viewport.drag=null; viewport.panning=null;
         callback({x:start.x,y:start.y,target:e.target});
         globalThis.navigator?.vibrate?.(15);
       },550);
