@@ -130,3 +130,22 @@ body:has(#app.mobile-layout) .popup .item {
  #app.mobile-layout .avenox-mobile-brand {font-size:9px;min-width:44px}
  #app.mobile-layout #avenox-mobile-header button {font-size:11px;padding:5px}
 }
+
+/* Full frame clipboard and Auto Key controls remain available on narrow phones. */
+#app.mobile-layout #avenox-mobile-transport {
+  justify-content:flex-start;
+  overflow-x:auto;
+  overscroll-behavior-x:contain;
+  scrollbar-width:thin;
+}
+#app.mobile-layout #avenox-mobile-transport button{
+  flex:0 0 auto;
+  min-width:78px;
+  max-width:none;
+  padding-left:10px;
+  padding-right:10px;
+}
+#app.mobile-layout #avenox-mobile-transport button.active {
+  background:#2a755e!important;
+  border-color:#74caa9!important;
+}
