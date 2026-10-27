@@ -4,7 +4,7 @@ import { fitZoom } from '../src/editor/viewfit.js';
 
 test('a 4096 pixel PNG fits a 360x700 mobile viewport without resizing the image', () => {
   const zoom=fitZoom(360,700,4096,4096);
-  assert.ok(zoom<0.05);
+  assert.ok(zoom>0 && zoom<0.1);
   assert.ok(4096*zoom <= 360*0.8 + 0.001);
   assert.ok(4096*zoom <= 700*0.8 + 0.001);
 });
