@@ -106,7 +106,7 @@ function installGestures(app, viewport, state) {
   return resetGestures;
 }
 
-export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarget, onDelete, showPopup } = {}) {
+export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarget, onDelete, showPopup, frameClipboard, seedInitialPose } = {}) {
   const root = document.getElementById('app');
   if (!root) throw new Error('Rigby2D #app element missing');
   const query = window.matchMedia(MEDIA);
@@ -122,7 +122,7 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   fileMenu.hidden = true;
   fileMenu.setAttribute('role', 'menu');
   const openMenu = makeButton('☰ Dosya', 'Dosya seçeneklerini göster', () => { fileMenu.hidden = !fileMenu.hidden; });
-  const mode = makeButton('Rig modu', 'Rig / animasyon modu', () => { if (app.mode === 'setup') { app.toggleMode(); app.autoKey = true; app.playing = false; app.changed(); } else { app.toggleMode(); } refresh(); });
+  const mode = makeButton('Rig modu', 'Rig / animasyon modu', () => { if (app.mode === 'setup') { app.toggleMode(); app.autoKey = true; app.playing = false; seedInitialPose?.(app); app.changed(); } else { app.toggleMode(); } refresh(); });
   const undo = makeButton('↶', 'Geri al', () => app.undo());
   const redo = makeButton('↷', 'İleri al', () => app.redo());
   const more = makeButton('⋮ Komutlar', 'Tüm masaüstü menü komutları', () => { fileMenu.hidden = true; showDesktopCommands(); });
@@ -181,7 +181,9 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
     if (!app.autoKey && app.pending?.size) app.setStatus('Unkeyed edits must be keyed before switching frames');
     app.changed(); refresh();
   });
-  transport.append(prev, play, next, key, autoKey);
+  const copyFrame = makeButton('⧉ Kopyala', 'Bu karedeki tüm kemik ve attachment pozunu kopyala', () => frameClipboard?.copy(app));
+  const pasteFrame = makeButton('▣ Yapıştır', 'Kopyalanan rig pozunu bu kareye keyframe olarak yapıştır', () => { frameClipboard?.paste(app); refresh(); });
+  transport.append(prev, play, next, key, autoKey, copyFrame, pasteFrame);
 
   const nav = document.createElement('nav');
   nav.id = 'avenox-mobile-bottom';
@@ -277,6 +279,8 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
     mode.textContent = app.mode === 'animate' ? 'Animasyon' : 'Rig modu';
     play.textContent = app.playing ? '⏸ Duraklat' : '▶ Oynat';
     key.disabled = app.mode !== 'animate' || typeof onKey !== 'function';
+    copyFrame.disabled = app.mode !== 'animate' || !frameClipboard;
+    pasteFrame.disabled = app.mode !== 'animate' || !frameClipboard?.canPaste;
     autoKey.disabled = app.mode !== 'animate';
     autoKey.classList.toggle('active', app.mode === 'animate' && app.autoKey);
     autoKey.textContent = app.autoKey ? '● Auto Key' : '○ Auto Key';
