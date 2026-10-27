@@ -2,9 +2,6 @@
 // Avenox mobile interface for the upstream Rigby2D skeletal editor.
 // The upstream skeleton, IK, weighted meshes and animation document remain authoritative.
 
-import { popupMenu } from './widgets.js';
-import * as edit from './edit.js';
-
 const MEDIA = '(max-width: 850px), (pointer: coarse) and (max-width: 1024px)';
 const PANELS = ['canvas', 'tree', 'inspector', 'timeline'];
 
@@ -103,7 +100,7 @@ function installGestures(app, viewport, state) {
   window.addEventListener('blur', () => { pointers.clear(); pinch = null; lastPan = null; });
 }
 
-export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarget } = {}) {
+export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarget, onDelete, showPopup } = {}) {
   const root = document.getElementById('app');
   if (!root) throw new Error('Rigby2D #app element missing');
   const query = window.matchMedia(MEDIA);
@@ -134,7 +131,7 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
     ...(onAutoRig ? [['🦴 AutoRig', onAutoRig]] : []),
     ...(onRetarget ? [['↔ Animasyon aktar', onRetarget]] : []),
     ['📤 İskelet JSON dışa aktar', () => app.exportSkeletonJson(app.saveVersion())],
-    ['🗑 Seçili kemik / slot sil', () => { if(app.mode==='setup') { edit.deleteSelection(app); app.changed(); } else app.setStatus('Switch to SETUP before deleting'); }],
+    ['🗑 Seçili kemik / slot sil', () => { if(app.mode==='setup') { onDelete?.(); app.changed(); } else app.setStatus('Switch to SETUP before deleting'); }],
   ];
   for (const [title, callback] of commands) {
     fileMenu.append(makeButton(title, title, () => {
@@ -186,7 +183,7 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   function showDesktopCommands() {
     const categories = [...document.querySelectorAll('#menubar .menu-title')]
       .filter(button => button.textContent.trim());
-    popupMenu(Math.max(4, window.innerWidth - 280), 54, categories.map(button=>({
+    showPopup?.(Math.max(4, window.innerWidth - 280), 54, categories.map(button=>({
       label: button.textContent.trim(),
       action: () => button.click(),
     })));
@@ -233,9 +230,9 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
     const pos=viewport.eventPos({clientX:x,clientY:y});
     const hit=viewport.hitTest(app.pose(),pos);
     if(hit) app.select(hit);
-    popupMenu(x,y,[
+    showPopup?.(x,y,[
       {label: 'Select object',disabled:!hit,action:()=>hit&&app.select(hit)},
-      {label: 'Delete selected bone / slot',disabled:!hit||app.mode!=='setup',action:()=>{edit.deleteSelection(app);app.changed();}},
+      {label: 'Delete selected bone / slot',disabled:!hit||app.mode!=='setup',action:()=>{onDelete?.();app.changed();}},
       {label: 'Open properties',disabled:!hit,action:()=>setPanel('inspector')},
       {label: 'Open image list / skeleton',action:()=>setPanel('tree')},
       {label: 'Fit view',action:()=>{app.frameRequest=true;app.changed();}},
