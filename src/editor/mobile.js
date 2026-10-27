@@ -156,7 +156,7 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
     tools.append(btn);
   }
   const pan = makeButton('✥ Kaydır', 'Tek parmakla tuvali kaydır', () => { state.pan = !state.pan; refresh(); });
-  const zoom = (factor) => { app.view.zoom = Math.max(.05, Math.min(20, app.view.zoom * factor)); app.changed(); };
+  const zoom = (factor) => { app.view.zoom = Math.max(.0001, Math.min(20, app.view.zoom * factor)); app.changed(); };
   tools.append(
     pan,
     makeButton('−', 'Uzaklaştır', () => zoom(0.8)),
