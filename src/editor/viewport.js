@@ -200,7 +200,7 @@ export class Viewport {
       app.view = { panX: 0, panY: this.height * 0.25, zoom: 1 };
       return;
     }
-    const zoom = Math.min(20, Math.max(0.05, Math.min(this.width / Math.max(1, x1 - x0), this.height / Math.max(1, y1 - y0)) * 0.8));
+    const zoom = Math.min(20, Math.max(0.0001, Math.min(this.width / Math.max(1, x1 - x0), this.height / Math.max(1, y1 - y0)) * 0.8));
     const cx = (x0 + x1) * 0.5;
     const cy = (y0 + y1) * 0.5;
     app.view = { panX: -cx * zoom, panY: cy * zoom, zoom };
@@ -529,7 +529,7 @@ export class Viewport {
     if (Math.abs(factor - 1) <= 1e-4) return;
     const cursor = this.eventPos(e);
     const old = app.view.zoom;
-    const zoom = Math.min(20, Math.max(0.05, old * factor));
+    const zoom = Math.min(20, Math.max(0.0001, old * factor));
     const rel = [cursor[0] - this.width / 2 - app.view.panX, cursor[1] - this.height / 2 - app.view.panY];
     app.view.panX += rel[0] - rel[0] * (zoom / old);
     app.view.panY += rel[1] - rel[1] * (zoom / old);
