@@ -19,6 +19,7 @@ class FakeElement {
     if(!this.listeners.has(name))this.listeners.set(name,[]);
     this.listeners.get(name).push(fn);
   }
+  removeEventListener(name,fn){this.listeners.set(name,(this.listeners.get(name)||[]).filter(x=>x!==fn));}
   dispatch(name,props={}){
     const event={pointerType:'touch',pointerId:1,clientX:40,clientY:40,
       preventDefault(){},stopImmediatePropagation(){},...props};
