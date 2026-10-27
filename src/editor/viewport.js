@@ -489,7 +489,7 @@ export class Viewport {
         const t = this.toScreen(pose.world[i].apply([b.length, 0]));
         const d = distToSegment(pos, o, t);
         const len = Math.hypot(t[0] - o[0], t[1] - o[1]);
-        const reach = len < 4 ? 8 : Math.min(12, Math.max(5, len * 0.1));
+        const reach = this.touchInput ? 15 : (len < 4 ? 8 : Math.min(12, Math.max(5, len * 0.1)));
         if (d <= reach && (best === null || d < best.d)) best = { d, i };
       });
       if (best) return { bone: best.i };
@@ -538,6 +538,7 @@ export class Viewport {
   }
 
   onPointerDown(e) {
+    this.touchInput = e.pointerType === 'touch';
     try {
       this.canvas.setPointerCapture(e.pointerId);
     } catch {
@@ -573,7 +574,7 @@ export class Viewport {
       app.changed();
     }
     if (this.press && e.buttons & 1) {
-      if (!this.press.started && Math.hypot(pos[0] - this.press.pos[0], pos[1] - this.press.pos[1]) > DRAG_THRESHOLD) {
+      if (!this.press.started && Math.hypot(pos[0] - this.press.pos[0], pos[1] - this.press.pos[1]) > (this.touchInput ? 9 : DRAG_THRESHOLD)) {
         this.press.started = true;
         this.dragStart(this.press.pos);
       }
