@@ -87,3 +87,21 @@ test('single-finger pan and pinch zoom do not commit skeleton drags',()=>{
   assert.equal(viewport.press,null);
   assert.equal(viewport.drag,null);
 });
+
+test('mobile Animate enables Auto Key and shows active frame for key saving',()=>{
+ const {root,app,control}=setup();
+ const [header,,tools,transport]=root.children;
+ header.children[3].click();
+ assert.equal(app.mode,'animate');
+ assert.equal(app.autoKey,true);
+ assert.equal(transport.children[4].textContent,'● Auto Key');
+ assert.equal(transport.children[4].disabled,false);
+ transport.children[4].click();
+ assert.equal(app.autoKey,false);
+ transport.children[4].click();
+ assert.equal(app.autoKey,true);
+ app.time=0.5; app.changed();
+ transport.children[3].click();
+ assert.equal(transport.children[3].textContent,'◆ Key F15');
+ control.dispose();
+});
