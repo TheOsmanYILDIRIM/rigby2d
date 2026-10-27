@@ -107,3 +107,26 @@
   #app.mobile-layout #avenox-mobile-transport button{min-height:34px}
   #app.mobile-layout #avenox-mobile-bottom button{min-height:38px}
 }
+
+/* Context menus are usable with fingers and do not escape the viewport. */
+#app.mobile-layout ~ .popup,
+body:has(#app.mobile-layout) .popup {
+  max-height: min(65dvh, 480px);
+  max-width: calc(100vw - 10px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+body:has(#app.mobile-layout) .popup .item {
+  min-height: 46px;
+  padding: 11px 14px;
+  white-space: normal;
+}
+#app.mobile-layout .tree-scroll .row {min-height: 42px;display:flex;align-items:center;gap:8px}
+#app.mobile-layout .tree-scroll .image-remove {margin-left:auto;min-width:44px;min-height:38px;font-size:17px}
+#app.mobile-layout #avenox-mobile-header{gap:4px}
+#app.mobile-layout #avenox-mobile-header button {font-size:12px}
+@media(max-width:390px) {
+ #app.mobile-layout .avenox-mobile-brand {font-size:9px;min-width:44px}
+ #app.mobile-layout #avenox-mobile-header button {font-size:11px;padding:5px}
+}
