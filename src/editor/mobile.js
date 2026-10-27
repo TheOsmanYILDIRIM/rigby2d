@@ -2,6 +2,9 @@
 // Avenox mobile interface for the upstream Rigby2D skeletal editor.
 // The upstream skeleton, IK, weighted meshes and animation document remain authoritative.
 
+import { popupMenu } from './widgets.js';
+import * as edit from './edit.js';
+
 const MEDIA = '(max-width: 850px), (pointer: coarse) and (max-width: 1024px)';
 const PANELS = ['canvas', 'tree', 'inspector', 'timeline'];
 
@@ -119,16 +122,19 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   const mode = makeButton('Rig modu', 'Rig / animasyon modu', () => { app.toggleMode(); refresh(); });
   const undo = makeButton('↶', 'Geri al', () => app.undo());
   const redo = makeButton('↷', 'İleri al', () => app.redo());
-  header.append(brand, openMenu, mode, undo, redo);
+  const more = makeButton('⋮ Komutlar', 'Tüm masaüstü menü komutları', () => { fileMenu.hidden = true; showDesktopCommands(); });
+  header.append(brand, openMenu, more, mode, undo, redo);
 
   const commands = [
     ['📂 Proje aç', () => app.openDialog()],
     ['💾 Kaydet', () => app.save(false)],
+    ['📑 Farklı kaydet', () => app.save(true)],
     ['📥 PNG içe aktar', () => app.importImages()],
     ['🧩 PSD içe aktar', () => app.importPsd()],
     ...(onAutoRig ? [['🦴 AutoRig', onAutoRig]] : []),
     ...(onRetarget ? [['↔ Animasyon aktar', onRetarget]] : []),
     ['📤 İskelet JSON dışa aktar', () => app.exportSkeletonJson(app.saveVersion())],
+    ['🗑 Seçili kemik / slot sil', () => { if(app.mode==='setup') { edit.deleteSelection(app); app.changed(); } else app.setStatus('Switch to SETUP before deleting'); }],
   ];
   for (const [title, callback] of commands) {
     fileMenu.append(makeButton(title, title, () => {
@@ -141,7 +147,7 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   const tools = document.createElement('div');
   tools.id = 'avenox-mobile-tools';
   const toolButtons = new Map();
-  for (const [id, label] of [['pose','✋ Poz'],['create','🦴 Kemik'],['rotate','⟳ Döndür'],['translate','✥ Taşı'],['scale','⤢ Ölçek']]) {
+  for (const [id, label] of [['pose','✋ Poz'],['create','🦴 Kemik'],['rotate','⟳ Döndür'],['translate','✥ Taşı'],['scale','⤢ Ölçek'],['shear','⧄ Eğme']]) {
     const btn = makeButton(label, label, () => { app.tool = id; app.changed(); state.pan = false; refresh(); });
     toolButtons.set(id, btn);
     tools.append(btn);
@@ -174,6 +180,67 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
     nav.append(btn);
   }
   root.append(header, fileMenu, tools, transport, nav);
+
+  // Expose every original desktop command: File / Edit / View / Scripts / Help.
+  // Keep command implementations in upstream menubar, rather than duplicate them.
+  function showDesktopCommands() {
+    const categories = [...document.querySelectorAll('#menubar .menu-title')]
+      .filter(button => button.textContent.trim());
+    popupMenu(Math.max(4, window.innerWidth - 280), 54, categories.map(button=>({
+      label: button.textContent.trim(),
+      action: () => button.click(),
+    })));
+  }
+
+  // Long-press invokes the very same contextmenu events as a desktop right click.
+  // A multi-touch gesture or movement never opens a menu.
+  const holdCleanup = [];
+  function longPress(target, callback) {
+    let timer = null, start = null, captured = null, fired = false;
+    const clear = () => { if(timer!==null) window.clearTimeout(timer); timer=null; };
+    const down = e => {
+      if(!state.active || e.pointerType!=='touch' || !e.isPrimary) { clear(); return; }
+      clear(); fired=false; captured=e.pointerId; start={x:e.clientX,y:e.clientY};
+      timer=window.setTimeout(()=>{
+        timer=null; fired=true;
+        callback({x:start.x,y:start.y,target:e.target});
+        if(navigator.vibrate) navigator.vibrate(15);
+      },550);
+    };
+    const move = e => {
+      if(e.pointerId!==captured) { clear(); return; }
+      if(start && Math.hypot(e.clientX-start.x,e.clientY-start.y)>12) clear();
+    };
+    const finish=e=>{
+      if(e.pointerId===captured){ clear(); captured=null; }
+      if(fired){ e.preventDefault(); e.stopImmediatePropagation(); fired=false; }
+    };
+    const menu=e=>{ if(state.active){ e.preventDefault(); } };
+    target.addEventListener('pointerdown',down,{capture:true});
+    target.addEventListener('pointermove',move,{capture:true});
+    target.addEventListener('pointerup',finish,{capture:true});
+    target.addEventListener('pointercancel',finish,{capture:true});
+    target.addEventListener('contextmenu',menu);
+    holdCleanup.push(()=>{ clear(); target.removeEventListener('pointerdown',down,true);target.removeEventListener('pointermove',move,true);target.removeEventListener('pointerup',finish,true);target.removeEventListener('pointercancel',finish,true);target.removeEventListener('contextmenu',menu);});
+  }
+  const tree = document.getElementById('tree');
+  if(tree) longPress(tree,({x,y,target})=>{
+    const row=target.closest?.('.row');
+    if(!row) return;
+    row.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:x,clientY:y}));
+  });
+  longPress(viewport.canvas,({x,y})=>{
+    const pos=viewport.eventPos({clientX:x,clientY:y});
+    const hit=viewport.hitTest(app.pose(),pos);
+    if(hit) app.select(hit);
+    popupMenu(x,y,[
+      {label: 'Select object',disabled:!hit,action:()=>hit&&app.select(hit)},
+      {label: 'Delete selected bone / slot',disabled:!hit||app.mode!=='setup',action:()=>{edit.deleteSelection(app);app.changed();}},
+      {label: 'Open properties',disabled:!hit,action:()=>setPanel('inspector')},
+      {label: 'Open image list / skeleton',action:()=>setPanel('tree')},
+      {label: 'Fit view',action:()=>{app.frameRequest=true;app.changed();}},
+    ]);
+  });
 
   function setPanel(name) {
     if (!PANELS.includes(name)) return;
@@ -209,5 +276,5 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
     if (!state.active) return;
     if (revision !== app.version || app.playing) { revision = app.version; refresh(); }
   }, 200);
-  return { setPanel, getState: () => ({ ...state }), dispose: () => { window.clearInterval(interval); query.removeEventListener?.('change', applyMedia); } };
+  return { setPanel, getState: () => ({ ...state }), dispose: () => { window.clearInterval(interval); holdCleanup.forEach(fn=>fn()); query.removeEventListener?.('change', applyMedia); } };
 }
