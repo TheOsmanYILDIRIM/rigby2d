@@ -9,6 +9,7 @@ import './style.css';
 import './mobile.css';
 import { installMobileEditor } from './mobile.js';
 import { App, Mode, saveSetting } from './app.js';
+import { createFrameClipboard, seedInitialPose } from './frameclipboard.js';
 import { ACTIONS, PRESETS, shortcutLabel } from './keymap.js';
 import { installKeyboard, isTyping, runAction } from './keys.js';
 import { openRenderDialog } from './renderui.js';
@@ -280,7 +281,7 @@ sync = installPanelSync(app, {
 const dopesheet = new Dopesheet(app, $('#dopesheet'), $('#dopesheet canvas'));
 const graph = new GraphEditor(app, $('#graph'), $('#graph canvas'));
 installKeyboard(app, { viewport, zoomActual, deleteSelectedKeys, closeMenu, isMenuOpen });
-installMobileEditor(app, viewport, { onKey: () => { if (app.sel?.slot !== undefined) { app.setStatus('To animate PNG movement, select its parent bone in the Skeleton tree (not the image/slot).'); return; } edit.keySelection(app); }, onDelete: () => edit.deleteSelection(app), showPopup: popupMenu, onAutoRig: () => openAutoRig(app), onRetarget: () => openRetarget(app) });
+installMobileEditor(app, viewport, { frameClipboard: createFrameClipboard(), seedInitialPose, onKey: () => { if (app.sel?.slot !== undefined) { app.setStatus('To animate PNG movement, select its parent bone in the Skeleton tree (not the image/slot).'); return; } edit.keySelection(app); }, onDelete: () => edit.deleteSelection(app), showPopup: popupMenu, onAutoRig: () => openAutoRig(app), onRetarget: () => openRetarget(app) });
 const renderMenuBar = buildMenuBar();
 const tutorials = createTutorials(app, viewport, { refresh: () => renderNow() });
 
