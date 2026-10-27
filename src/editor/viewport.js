@@ -760,6 +760,12 @@ export class Viewport {
 
   dragSlot(pose, s, last, cur) {
     const app = this.app;
+    // Attachment offsets are setup-only data. Editing them in Animate mode
+    // changes every frame and cannot be saved as a bone keyframe.
+    if (app.mode === Mode.Animate) {
+      app.setStatus('Animate the slot bone instead. Switch to Setup to reposition artwork.');
+      return;
+    }
     const att = pose.slotAttachment(app.doc, s);
     if (!att) return;
     if (!att.offset) {
