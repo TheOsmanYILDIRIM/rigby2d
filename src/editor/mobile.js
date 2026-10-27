@@ -266,7 +266,16 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
     fileMenu.hidden = true;
     refresh();
   }
+  let lastMode = app.mode;
   function refresh() {
+    // The timeline can switch from Setup to Animate without using the mobile
+    // mode button. Keep Auto Key consistent for every mobile entry path.
+    if (state.active && app.mode === 'animate' && lastMode !== 'animate') {
+      app.autoKey = true;
+      seedInitialPose?.(app);
+      app.changed();
+    }
+    lastMode = app.mode;
     root.dataset.mobilePanel = state.panel;
     root.dataset.mobilePan = String(state.pan);
     for (const [id, btn] of navButtons) {
