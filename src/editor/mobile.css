@@ -1,0 +1,109 @@
+/* SPDX-License-Identifier: MIT OR Apache-2.0 */
+/* Avenox mobile layer; preserves Rigby2D desktop CSS and skeletal engine. */
+#avenox-mobile-header,#avenox-mobile-filemenu,#avenox-mobile-tools,
+#avenox-mobile-transport,#avenox-mobile-bottom{display:none}
+#app.mobile-layout{
+  --av-head:56px;--av-tools:54px;--av-transport:52px;--av-nav:72px;
+  --av-safe:env(safe-area-inset-bottom,0px);
+  display:grid;height:100dvh;min-height:0;overflow:hidden;
+  grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);
+  grid-template-areas:'center';background:#10161e;font-size:14px
+}
+#app.mobile-layout #menubar,#app.mobile-layout #status,
+#app.mobile-layout #split-right,#app.mobile-layout #split-bottom,
+#app.mobile-layout #split-tree,#app.mobile-layout .panel-detach-btn{display:none!important}
+#app.mobile-layout #center{grid-area:center;position:relative;min-width:0;min-height:0;background:radial-gradient(ellipse,#202e3c,#0f1620)}
+#app.mobile-layout #center>#viewport,
+#app.mobile-layout #center>#viewport-gl{
+  top:calc(var(--av-head) + var(--av-tools));
+  bottom:calc(var(--av-transport) + var(--av-nav) + var(--av-safe));
+  left:0;right:0;width:100%;
+  height:calc(100% - var(--av-head) - var(--av-tools) - var(--av-transport) - var(--av-nav) - var(--av-safe))
+}
+#app.mobile-layout #viewbar{display:none!important}
+#app.mobile-layout button{font:inherit}
+#app.mobile-layout button:focus-visible{outline:2px solid #71c5ff;outline-offset:2px}
+#app.mobile-layout button.active,#app.mobile-layout button[aria-selected='true']{background:#326c9b!important;border-color:#6ebefa!important;color:#fff}
+#app.mobile-layout button:disabled{opacity:.35}
+#app.mobile-layout #avenox-mobile-header{
+  display:flex;position:absolute;z-index:50;top:0;left:0;right:0;
+  height:var(--av-head);align-items:center;gap:6px;padding:6px 10px;
+  background:linear-gradient(90deg,#14202c,#202a37);border-bottom:1px solid #3d5366
+}
+#app.mobile-layout .avenox-mobile-brand{flex:1;min-width:65px;color:#e8f1fb;font-size:11px;font-weight:800;letter-spacing:.03em;white-space:nowrap}
+#app.mobile-layout #avenox-mobile-header button,
+#app.mobile-layout #avenox-mobile-tools button,
+#app.mobile-layout #avenox-mobile-transport button,
+#app.mobile-layout #avenox-mobile-bottom button{
+  flex-shrink:0;min-height:40px;padding:8px 10px;border:1px solid #405466;
+  border-radius:10px;color:#e1e9f5;background:#263544;cursor:pointer
+}
+#app.mobile-layout #avenox-mobile-filemenu:not([hidden]){
+  display:flex;position:absolute;z-index:70;top:var(--av-head);left:8px;right:8px;
+  flex-direction:column;gap:6px;max-height:65dvh;overflow-y:auto;
+  padding:10px;background:#1d2b38;border:1px solid #577085;border-radius:12px;
+  box-shadow:0 18px 28px #0009
+}
+#app.mobile-layout #avenox-mobile-filemenu button{
+  min-height:46px;padding:13px;text-align:left;
+  border:1px solid #42596e;border-radius:8px;background:#293b4b;color:#edf5ff
+}
+#app.mobile-layout #avenox-mobile-tools{
+  display:flex;position:absolute;z-index:40;top:var(--av-head);left:0;right:0;
+  height:var(--av-tools);align-items:center;gap:6px;padding:4px 8px;
+  background:rgba(22,33,45,.94);white-space:nowrap;overflow-x:auto;
+  overscroll-behavior-x:contain;scrollbar-width:none
+}
+#app.mobile-layout #avenox-mobile-tools::-webkit-scrollbar{display:none}
+#app.mobile-layout #avenox-mobile-tools button{min-height:42px;padding:7px 11px;font-size:12px}
+#app.mobile-layout #avenox-mobile-transport{
+  display:flex;position:absolute;z-index:41;left:0;right:0;
+  bottom:calc(var(--av-nav) + var(--av-safe));height:var(--av-transport);
+  align-items:center;justify-content:center;gap:7px;padding:4px 6px;
+  border-top:1px solid #304459;background:#192632
+}
+#app.mobile-layout #avenox-mobile-transport button{
+  flex:1;max-width:112px;min-width:0;min-height:39px;padding:7px 3px;font-size:12px
+}
+#app.mobile-layout #avenox-mobile-bottom{
+  display:grid;position:absolute;z-index:49;left:0;right:0;bottom:0;
+  grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;
+  height:calc(var(--av-nav) + var(--av-safe));
+  padding:6px 8px calc(6px + var(--av-safe));background:#101b27;border-top:1px solid #36516c
+}
+#app.mobile-layout #avenox-mobile-bottom button{
+  min-width:0;min-height:50px;padding:4px;white-space:pre-line;
+  line-height:1.4;font-size:12px;font-weight:650
+}
+#app.mobile-layout #side,#app.mobile-layout #timeline{
+  display:none;position:absolute;z-index:34;
+  top:calc(var(--av-head) + var(--av-tools));
+  bottom:calc(var(--av-transport) + var(--av-nav) + var(--av-safe));
+  left:0;right:0;width:auto;height:auto;min-width:0;min-height:0;
+  border:0;background:#1b2734;box-shadow:0 0 0 1px #334a5f
+}
+#app.mobile-layout[data-mobile-panel='tree'] #side,
+#app.mobile-layout[data-mobile-panel='inspector'] #side,
+#app.mobile-layout[data-mobile-panel='timeline'] #timeline{display:flex}
+#app.mobile-layout[data-mobile-panel='tree'] #tree{display:flex;flex:1;min-height:0}
+#app.mobile-layout[data-mobile-panel='tree'] #properties{display:none}
+#app.mobile-layout[data-mobile-panel='inspector'] #tree{display:none}
+#app.mobile-layout[data-mobile-panel='inspector'] #properties{display:flex;flex:1;min-height:0}
+#app.mobile-layout #tree,#app.mobile-layout #properties,#app.mobile-layout #timeline{font-size:14px}
+#app.mobile-layout #timeline{overflow:hidden}
+#app.mobile-layout #timeline #controls{flex:0 0 auto;max-width:100%;overflow-x:auto}
+#app.mobile-layout #timeline .dopesheet-wrap{flex:1;min-height:0;overflow:auto}
+#app.mobile-layout #side button,#app.mobile-layout #timeline button{min-height:34px;min-width:30px}
+#app.mobile-layout #side input,#app.mobile-layout #side select{min-height:36px;max-width:100%;font-size:16px}
+@media(max-width:390px){
+  #app.mobile-layout .avenox-mobile-brand{font-size:10px;letter-spacing:0}
+  #app.mobile-layout #avenox-mobile-header button{padding:6px 8px}
+  #app.mobile-layout #avenox-mobile-transport button{font-size:11px}
+}
+@media(orientation:landscape) and (max-height:520px){
+  #app.mobile-layout{--av-head:44px;--av-tools:45px;--av-transport:44px;--av-nav:52px}
+  #app.mobile-layout #avenox-mobile-header button{min-height:32px;padding:4px 8px}
+  #app.mobile-layout #avenox-mobile-tools button{min-height:35px}
+  #app.mobile-layout #avenox-mobile-transport button{min-height:34px}
+  #app.mobile-layout #avenox-mobile-bottom button{min-height:38px}
+}
