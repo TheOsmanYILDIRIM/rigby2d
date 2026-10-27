@@ -6,6 +6,8 @@ import { WORKSPACES, has } from './workspaces.js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import './style.css';
+import './mobile.css';
+import { installMobileEditor } from './mobile.js';
 import { App, Mode, saveSetting } from './app.js';
 import { ACTIONS, PRESETS, shortcutLabel } from './keymap.js';
 import { installKeyboard, isTyping, runAction } from './keys.js';
@@ -278,6 +280,7 @@ sync = installPanelSync(app, {
 const dopesheet = new Dopesheet(app, $('#dopesheet'), $('#dopesheet canvas'));
 const graph = new GraphEditor(app, $('#graph'), $('#graph canvas'));
 installKeyboard(app, { viewport, zoomActual, deleteSelectedKeys, closeMenu, isMenuOpen });
+installMobileEditor(app, viewport, { onKey: () => edit.keySelection(app), onAutoRig: () => openAutoRig(app), onRetarget: () => openRetarget(app) });
 const renderMenuBar = buildMenuBar();
 const tutorials = createTutorials(app, viewport, { refresh: () => renderNow() });
 
