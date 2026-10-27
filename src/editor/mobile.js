@@ -122,7 +122,7 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   fileMenu.hidden = true;
   fileMenu.setAttribute('role', 'menu');
   const openMenu = makeButton('☰ Dosya', 'Dosya seçeneklerini göster', () => { fileMenu.hidden = !fileMenu.hidden; });
-  const mode = makeButton('Rig modu', 'Rig / animasyon modu', () => { app.toggleMode(); refresh(); });
+  const mode = makeButton('Rig modu', 'Rig / animasyon modu', () => { if (app.mode === 'setup') { app.toggleMode(); app.autoKey = true; app.playing = false; app.changed(); } else { app.toggleMode(); } refresh(); });
   const undo = makeButton('↶', 'Geri al', () => app.undo());
   const redo = makeButton('↷', 'İleri al', () => app.redo());
   const more = makeButton('⋮ Komutlar', 'Tüm masaüstü menü komutları', () => { fileMenu.hidden = true; showDesktopCommands(); });
@@ -169,8 +169,19 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   const prev = makeButton('⟵ Kare', 'Önceki animasyon karesi', () => app.stepFrame(-1));
   const play = makeButton('▶ Oynat', 'Animasyonu oynat veya duraklat', () => { app.togglePlay(); refresh(); });
   const next = makeButton('Kare ⟶', 'Sonraki animasyon karesi', () => app.stepFrame(1));
-  const key = makeButton('◆ Key', 'Seçime keyframe ekle', () => onKey?.());
-  transport.append(prev, play, next, key);
+  const key = makeButton('◆ Key', 'Seçilen kemiğin pozunu bu kareye kaydet', () => {
+    if (app.mode !== 'animate') { app.setStatus('First switch to Animation mode'); return; }
+    if (app.playing) { app.playing = false; app.changed(); }
+    onKey?.();
+    refresh();
+  });
+  const autoKey = makeButton('● Auto Key', 'Düzenlemeleri bu kareye otomatik kaydet', () => {
+    if (app.mode !== 'animate') { app.setStatus('Auto Key requires Animate mode'); return; }
+    app.autoKey = !app.autoKey;
+    if (!app.autoKey && app.pending?.size) app.setStatus('Unkeyed edits must be keyed before switching frames');
+    app.changed(); refresh();
+  });
+  transport.append(prev, play, next, key, autoKey);
 
   const nav = document.createElement('nav');
   nav.id = 'avenox-mobile-bottom';
@@ -266,6 +277,12 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
     mode.textContent = app.mode === 'animate' ? 'Animasyon' : 'Rig modu';
     play.textContent = app.playing ? '⏸ Duraklat' : '▶ Oynat';
     key.disabled = app.mode !== 'animate' || typeof onKey !== 'function';
+    autoKey.disabled = app.mode !== 'animate';
+    autoKey.classList.toggle('active', app.mode === 'animate' && app.autoKey);
+    autoKey.textContent = app.autoKey ? '● Auto Key' : '○ Auto Key';
+    const frame = Math.round(app.time * (app.doc?.settings?.fps || 30));
+    key.textContent = `◆ Key F${frame}`;
+    key.title = `Save selected bone pose at frame ${frame}`;
   }
   function applyMedia() {
     state.active = query.matches || new URLSearchParams(window.location.search).get('mobile') === '1';
