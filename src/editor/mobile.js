@@ -197,14 +197,14 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   const holdCleanup = [];
   function longPress(target, callback) {
     let timer = null, start = null, captured = null, fired = false;
-    const clear = () => { if(timer!==null) window.clearTimeout(timer); timer=null; };
+    const clear = () => { if(timer!==null) globalThis.clearTimeout(timer); timer=null; };
     const down = e => {
       if(!state.active || e.pointerType!=='touch' || !e.isPrimary) { clear(); return; }
       clear(); fired=false; captured=e.pointerId; start={x:e.clientX,y:e.clientY};
-      timer=window.setTimeout(()=>{
+      timer=globalThis.setTimeout(()=>{
         timer=null; fired=true;
         callback({x:start.x,y:start.y,target:e.target});
-        if(navigator.vibrate) navigator.vibrate(15);
+        globalThis.navigator?.vibrate?.(15);
       },550);
     };
     const move = e => {
