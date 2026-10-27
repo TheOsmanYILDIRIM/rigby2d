@@ -1,53 +1,52 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { App, Mode } from '../src/editor/app.js';
-import { Animation } from '../src/core/animation.js';
-import { makeBone } from '../src/core/model.js';
-import { transform } from '../src/core/math.js';
-import { setBoneLocal } from '../src/editor/edit.js';
 import { seedInitialPose, createFrameClipboard } from '../src/editor/frameclipboard.js';
 
-function make() {
-  const app = new App();
-  app.doc.addBone(makeBone('arm', 0, transform(15, 30, 0), 60));
-  app.doc.animations.push(new Animation('walk', 1));
-  app.anim = 0;
-  app.time = 0;
-  app.mode = Mode.Animate;
-  app.autoKey = true;
-  return app;
+function fixture() {
+  const keyed = new Map();
+  const doc = {bones:[{name:'root',setup:{x:0,y:0,rotation:0}},{name:'arm',setup:{x:10,y:20,rotation:0}}],slots:[],animations:[{bones:[]}] ,settings:{fps:30}};
+  const app = {
+    doc, mode:'animate', autoKey:true, playing:false, time:0, pending:new Map(),
+    status:'', changed(){}, setStatus(s){this.status=s;},
+    currentAnimation(){return doc.animations[0];},
+    pose() {const f=Math.round(this.time*30);
+      return {local:doc.bones.map((b,i)=>({ ...b.setup,...(keyed.get(f)?.[i]||{}) })),attachment:[]};
+    },
+  };
+  const keyBoneTransform=(app,i,t)=>{
+    const f=Math.round(app.time*30), m=keyed.get(f)||{};
+    m[i]={...t};keyed.set(f,m);
+    if (!doc.animations[0].bones.some(x=>x.bone===i))
+      doc.animations[0].bones.push({bone:i,rotate:[{time:f/30,value:t.rotation}]});
+  };
+  const ops={keyBoneTransform,ensureAnimation(){return 0},setSlotAttachment(){}};
+  return {app,keyed,ops};
 }
-test('Auto Key animates only the edited frame when the rest pose has a frame-zero key', () => {
-  const app = make();
-  assert.equal(seedInitialPose(app), true);
-  app.time = 5 / 30;
-  setBoneLocal(app, 1, {...app.pose().local[1],rotation:35});
-  assert.ok(Math.abs(app.pose().local[1].rotation-35)<0.001);
-  app.time = 0;
-  assert.ok(Math.abs(app.pose().local[1].rotation)<0.001);
-  app.time = 5 / 30;
-  assert.ok(Math.abs(app.pose().local[1].rotation-35)<0.001);
+test('frame zero rest pose is seeded when no bone timeline exists',()=>{
+  const {app,keyed,ops}=fixture();
+  assert.equal(seedInitialPose(app,ops),true);
+  assert.equal(keyed.get(0)[1].rotation,0);
+  assert.equal(seedInitialPose(app,ops),false);
 });
-test('frame clipboard pastes evaluated bone poses onto a different frame', () => {
-  const app=make();
-  seedInitialPose(app);
-  app.time=5 / 30;
-  setBoneLocal(app,1,{...app.pose().local[1],rotation:28});
-  const clip=createFrameClipboard();
+test('copy frame 5 and paste as real keyed bone transforms at frame 10',()=>{
+  const {app,keyed,ops}=fixture();
+  seedInitialPose(app,ops);
+  app.time=5/30;
+  ops.keyBoneTransform(app,1,{x:10,y:20,rotation:33});
+  const clip=createFrameClipboard(ops);
   assert.equal(clip.copy(app),true);
-  app.time=10 / 30;
+  app.time=10/30;
   assert.equal(clip.paste(app),true);
-  assert.ok(Math.abs(app.pose().local[1].rotation-28)<0.001);
-  app.time=0;
-  assert.ok(Math.abs(app.pose().local[1].rotation)<0.001);
+  assert.equal(keyed.get(10)[1].rotation,33);
+  assert.equal(keyed.get(0)[1].rotation,0);
 });
-test('copy requires Animate mode and paste rejects changed skeleton',()=>{
-  const app=make(); const clip=createFrameClipboard();
-  app.mode=Mode.Setup;
+test('clipboard refuses setup mode and incompatible rig',()=>{
+  const {app,ops}=fixture(),clip=createFrameClipboard(ops);
+  app.mode='setup';
   assert.equal(clip.copy(app),false);
-  app.mode=Mode.Animate;
+  app.mode='animate';
   assert.equal(clip.copy(app),true);
-  app.doc.bones[1].name='renamed';
+  app.doc.bones[1].name='other';
   assert.equal(clip.paste(app),false);
 });
