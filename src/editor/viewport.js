@@ -8,6 +8,7 @@ import { makeBone } from '../core/model.js';
 import { Pose } from '../core/pose.js';
 import { FPS, Mode, TOOLS, selBone, selSlot } from './app.js';
 import * as edit from './edit.js';
+import { shiftBonePivotKeepArtwork } from './pivotedit.js';
 import { GLView } from './glview.js';
 import { fitZoom } from './viewfit.js';
 import { MeshTool } from './meshtool.js';
@@ -617,7 +618,10 @@ export class Viewport {
     const start = this.toWorld(press);
     const add = this.press?.add;
     let drag = null;
-    if (app.tool === 'create') {
+    if (app.tool === 'pivot') {
+      if (app.mode !== Mode.Setup) app.setStatus('Switch to Setup to reposition a bone pivot');
+      else { const b=selBone(app.sel); if (b !== null && b !== 0) drag={kind:'pivot',index:b}; else app.setStatus('Select a non-root bone first'); }
+    } else if (app.tool === 'create') {
       if (app.mode === Mode.Animate) app.setStatus('Bones can only be created in Setup mode (Tab)');
       else drag = { kind: 'create', index: selBone(app.sel) ?? 0 };
     } else if (add) {
@@ -661,7 +665,13 @@ export class Viewport {
       d.to = pos;
     } else {
       const pose = app.pose();
-      if (d.kind === 'bones') {
+      if (d.kind === 'pivot') {
+        const bone=d.index;
+        const parentId=app.doc.bones[bone].parent;
+        const inverse=parentId == null ? new Affine() : pose.world[parentId].inverse();
+        const localDelta=inverse.applyVector([world[0]-d.last[0],world[1]-d.last[1]]);
+        shiftBonePivotKeepArtwork(app,bone,localDelta[0],localDelta[1]);
+      } else if (d.kind === 'bones') {
         for (const b of this.topLevel(app.selectedBones())) this.dragBone(pose, b, d.last, world, app.tool);
       } else if (d.kind === 'poseTranslate') {
         this.dragBone(pose, d.index, d.last, world, 'translate');
