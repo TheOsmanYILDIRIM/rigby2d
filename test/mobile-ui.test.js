@@ -111,12 +111,14 @@ test('mobile frame back never calls undo and top bar has no ambiguous history ar
  let undone=0,redone=0;
  app.undo=()=>{undone++};app.redo=()=>{redone++};
  const [header,,tools,transport]=root.children;
- assert.equal(header.children.length,4);
+ assert.equal(header.children.length,6);
  transport.children[0].click();
  assert.equal(app.step,-1);
  transport.children[2].click();
  assert.equal(app.step,1);
  assert.equal(undone,0);assert.equal(redone,0);
+ header.children[4].click(); assert.equal(undone,1);
+ header.children[5].click(); assert.equal(redone,1);
  assert.ok(transport.children[0].textContent.includes('Önceki kare'));
  control.dispose();
 });
