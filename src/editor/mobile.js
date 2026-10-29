@@ -304,7 +304,7 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
     pasteFrame.disabled = app.mode !== 'animate' || !frameClipboard?.canPaste;
     startPose.disabled = app.mode !== 'animate' || !twoPose;
     endPose.disabled = app.mode !== 'animate' || !twoPose || twoPose.startFrame === null;
-    endPose.title = twoPose?.startFrame === null ? 'Önce Başlangıç seç' : `Başlangıç F${twoPose.startFrame}; hedef pozda bitir`;
+    endPose.title = twoPose?.startFrame == null ? 'Önce Başlangıç seç' : `Başlangıç F${twoPose.startFrame}; hedef pozda bitir`;
     autoKey.disabled = app.mode !== 'animate';
     autoKey.classList.toggle('active', app.mode === 'animate' && app.autoKey);
     autoKey.textContent = app.autoKey ? '● Auto Key' : '○ Auto Key';
