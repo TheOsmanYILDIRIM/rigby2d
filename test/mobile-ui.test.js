@@ -105,3 +105,18 @@ test('mobile Animate enables Auto Key and shows active frame for key saving',()=
  assert.equal(transport.children[3].textContent,'◆ Key F15');
  control.dispose();
 });
+
+test('mobile frame back never calls undo and top bar has no ambiguous history arrows',()=>{
+ const {root,app,control}=setup();
+ let undone=0,redone=0;
+ app.undo=()=>{undone++};app.redo=()=>{redone++};
+ const [header,,tools,transport]=root.children;
+ assert.equal(header.children.length,4);
+ transport.children[0].click();
+ assert.equal(app.step,-1);
+ transport.children[2].click();
+ assert.equal(app.step,1);
+ assert.equal(undone,0);assert.equal(redone,0);
+ assert.ok(transport.children[0].textContent.includes('Önceki kare'));
+ control.dispose();
+});
