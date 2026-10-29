@@ -106,7 +106,7 @@ function installGestures(app, viewport, state) {
   return resetGestures;
 }
 
-export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarget, onDelete, showPopup, frameClipboard, seedInitialPose } = {}) {
+export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarget, onDelete, showPopup, frameClipboard, seedInitialPose, onStep, twoPose } = {}) {
   const root = document.getElementById('app');
   if (!root) throw new Error('Rigby2D #app element missing');
   const query = window.matchMedia(MEDIA);
@@ -158,6 +158,16 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   const pan = makeButton('✥ Kaydır', 'Tek parmakla tuvali kaydır', () => { state.pan = !state.pan; refresh(); });
   const zoom = (factor) => { app.view.zoom = Math.max(.0001, Math.min(20, app.view.zoom * factor)); app.changed(); };
   tools.append(
+    makeButton('🦴 Rig düzelt', 'AutoRig kemiklerini Setup modunda düzenle', () => {
+      if (app.mode !== 'setup') app.toggleMode();
+      const slot = app.sel?.slot;
+      if (slot !== undefined && app.doc.slots[slot]) app.select({bone:app.doc.slots[slot].bone});
+      app.tool = 'translate';
+      state.pan = false;
+      setPanel('tree');
+      app.setStatus('Rig düzenleme: İskelet bölümünden kemiği seç, Tuval’e dönüp Taşı/Döndür ile düzelt. Özellikler kısmında ebeveyn ve uzunluğu ayarlayabilirsin.');
+      app.changed(); refresh();
+    }),
     pan,
     makeButton('−', 'Uzaklaştır', () => zoom(0.8)),
     makeButton('⊡', 'İskeleti sığdır', () => { app.frameRequest = true; app.changed(); }),
@@ -166,9 +176,9 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
 
   const transport = document.createElement('div');
   transport.id = 'avenox-mobile-transport';
-  const prev = makeButton('⟵ Kare', 'Önceki animasyon karesi', () => app.stepFrame(-1));
+  const prev = makeButton('⟵ Kare', 'Önceki animasyon karesi', () => { (onStep ? onStep(app,-1) : app.stepFrame(-1)); refresh(); });
   const play = makeButton('▶ Oynat', 'Animasyonu oynat veya duraklat', () => { app.togglePlay(); refresh(); });
-  const next = makeButton('Kare ⟶', 'Sonraki animasyon karesi', () => app.stepFrame(1));
+  const next = makeButton('Kare ⟶', 'Sonraki animasyon karesi', () => { (onStep ? onStep(app,1) : app.stepFrame(1)); refresh(); });
   const key = makeButton('◆ Key', 'Seçilen kemiğin pozunu bu kareye kaydet', () => {
     if (app.mode !== 'animate') { app.setStatus('First switch to Animation mode'); return; }
     if (app.playing) { app.playing = false; app.changed(); }
@@ -183,7 +193,9 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   });
   const copyFrame = makeButton('⧉ Kopyala', 'Bu karedeki tüm kemik ve attachment pozunu kopyala', () => frameClipboard?.copy(app));
   const pasteFrame = makeButton('▣ Yapıştır', 'Kopyalanan rig pozunu bu kareye keyframe olarak yapıştır', () => { frameClipboard?.paste(app); refresh(); });
-  transport.append(prev, play, next, key, autoKey, copyFrame, pasteFrame);
+  const startPose = makeButton('① Başlangıç', 'Mevcut kareyi hareketin başlangıcı olarak kaydet', () => { twoPose?.begin(app); refresh(); });
+  const endPose = makeButton('② Bitiş', 'Kareler arasında otomatik kemik hareketi oluştur', () => { twoPose?.end(app); refresh(); });
+  transport.append(prev, play, next, key, autoKey, copyFrame, pasteFrame, startPose, endPose);
 
   const nav = document.createElement('nav');
   nav.id = 'avenox-mobile-bottom';
@@ -290,6 +302,9 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
     key.disabled = app.mode !== 'animate' || typeof onKey !== 'function';
     copyFrame.disabled = app.mode !== 'animate' || !frameClipboard;
     pasteFrame.disabled = app.mode !== 'animate' || !frameClipboard?.canPaste;
+    startPose.disabled = app.mode !== 'animate' || !twoPose;
+    endPose.disabled = app.mode !== 'animate' || !twoPose || twoPose.startFrame === null;
+    endPose.title = twoPose?.startFrame === null ? 'Önce Başlangıç seç' : `Başlangıç F${twoPose.startFrame}; hedef pozda bitir`;
     autoKey.disabled = app.mode !== 'animate';
     autoKey.classList.toggle('active', app.mode === 'animate' && app.autoKey);
     autoKey.textContent = app.autoKey ? '● Auto Key' : '○ Auto Key';
