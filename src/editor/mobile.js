@@ -150,7 +150,7 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   const tools = document.createElement('div');
   tools.id = 'avenox-mobile-tools';
   const toolButtons = new Map();
-  for (const [id, label] of [['pose','✋ Poz'],['create','🦴 Kemik'],['rotate','⟳ Döndür'],['translate','✥ Taşı'],['scale','⤢ Ölçek'],['shear','⧄ Eğme']]) {
+  for (const [id, label] of [['pose','✋ Poz'],['create','🦴 Kemik'],['rotate','⟳ Döndür'],['translate','✥ Taşı'],['scale','⤢ Ölçek'],['shear','⧄ Eğme'],['pivot','◎ Pivot']]) {
     const btn = makeButton(label, label, () => { app.tool = id; app.changed(); state.pan = false; refresh(); });
     toolButtons.set(id, btn);
     tools.append(btn);
@@ -162,10 +162,10 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
       if (app.mode !== 'setup') app.toggleMode();
       const slot = app.sel?.slot;
       if (slot !== undefined && app.doc.slots[slot]) app.select({bone:app.doc.slots[slot].bone});
-      app.tool = 'translate';
+      app.tool = 'pivot';
       state.pan = false;
       setPanel('tree');
-      app.setStatus('Rig düzenleme: İskelet bölümünden kemiği seç, Tuval’e dönüp Taşı/Döndür ile düzelt. Özellikler kısmında ebeveyn ve uzunluğu ayarlayabilirsin.');
+      app.setStatus('Pivot düzenleme: İskelet bölümünden kemiği seç, Tuval’e dön ve ◎ Pivot aracıyla sürükle. PNG yerinde kalır (region). Mesh/weighted bağlantılarında güvenli rebind gereklidir.');
       app.changed(); refresh();
     }),
     pan,
