@@ -126,7 +126,7 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   const undo = makeButton('↶', 'Geri al', () => app.undo());
   const redo = makeButton('↷', 'İleri al', () => app.redo());
   const more = makeButton('⋮ Komutlar', 'Tüm masaüstü menü komutları', () => { fileMenu.hidden = true; showDesktopCommands(); });
-  header.append(brand, openMenu, more, mode);
+  header.append(brand, openMenu, more, mode, undo, redo);
 
   const commands = [
     ['↶ Son işlemi geri al (Undo)', () => app.undo()],
