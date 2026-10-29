@@ -161,8 +161,12 @@ export function render(app, el) {
   // Draw order: front of the list is drawn on top.
   const n = doc.slots.length;
   const move = (from, to) => () => {
+    if (from === to || to < 0 || to >= doc.slots.length) return;
     doc.moveSlot(from, to);
     app.select({ slot: to });
+    // A touch pointerdown can temporarily suspend main's tree render.
+    // Rebuild after the button's click so the list immediately reflects the new order.
+    window.setTimeout(() => render(app, el), 0);
   };
   const order = [];
   for (let i = n - 1; i >= 0; i--) {
