@@ -9,6 +9,7 @@ on:
       - 'index.html'
       - 'vite.config.js'
       - 'package*.json'
+      - 'test/mobile-ui.test.js'
       - '.github/workflows/mobile-pages.yml'
   workflow_dispatch:
 
