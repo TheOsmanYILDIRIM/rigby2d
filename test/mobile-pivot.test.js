@@ -26,11 +26,29 @@ test('moving a bone pivot preserves region PNG and child world position',()=>{
  near(kid,updated.world[child].apply([0,0]));
  assert.equal(app.doc.bones[bone].setup.x,32);
 });
-test('mesh attachments are blocked instead of silently deforming artwork',()=>{
- const {app,bone}=fixture('mesh');
- assert.equal(shiftBonePivotKeepArtwork(app,bone,10,0),false);
- assert.equal(app.doc.bones[bone].setup.x,20);
- assert.ok(app.status.includes('mesh'));
+test('unweighted mesh stays in place after pivot shift',()=>{
+ const {app,bone,attachment}=fixture('mesh');
+ attachment.uvs=[0,0,1,0,1,1,0,1];
+ attachment.vertices=[0,0,30,0,30,20,0,20];
+ attachment.triangles=[0,1,2,0,2,3];
+ const before=new Pose(app.doc).worldVertices(app.doc,0,attachment);
+ assert.equal(shiftBonePivotKeepArtwork(app,bone,10,4),true);
+ const after=new Pose(app.doc).worldVertices(app.doc,0,attachment);
+ for(let i=0;i<before.length;i++)assert.ok(Math.abs(before[i]-after[i])<0.001);
+});
+test('weighted mesh keeps its world vertices when a contributing bone pivot moves',()=>{
+ const {app,bone,attachment}=fixture('mesh');
+ attachment.uvs=[0,0,1,0,1,1];
+ attachment.triangles=[0,1,2];
+ attachment.weights=[
+ [{bone,x:0,y:0,weight:1}],
+ [{bone,x:30,y:0,weight:1}],
+ [{bone,x:30,y:20,weight:1}]
+ ];
+ const before=new Pose(app.doc).worldVertices(app.doc,0,attachment);
+ assert.equal(shiftBonePivotKeepArtwork(app,bone,12,-8),true);
+ const after=new Pose(app.doc).worldVertices(app.doc,0,attachment);
+ for(let i=0;i<before.length;i++)assert.ok(Math.abs(before[i]-after[i])<0.001);
 });
 test('setup only; no shifting root or animating pivot',()=>{
  const {app,bone}=fixture();
