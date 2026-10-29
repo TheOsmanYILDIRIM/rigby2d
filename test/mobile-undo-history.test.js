@@ -51,7 +51,7 @@ test('three independent completed gestures yield three history records without a
    await Promise.resolve();
  }
  assert.equal(app.history.undo.length,3);
- assert.deepEqual(app.history.undo.map(x=>JSON.parse(x).bones[0].setup.x),[0,1,2]);
+ assert.equal(JSON.stringify(app.history.undo.map(x=>JSON.parse(x).bones[0].setup.x)),'[0,1,2]');
  app.undo();
  assert.equal(app.doc.bones[0].setup.x,2);
  assert.equal(app.history.undo.length,2);
@@ -70,6 +70,6 @@ test('click edits are captured even when pointerup completed before click', asyn
  target.emit('click');await Promise.resolve();
  edit(app,20);
  target.emit('pointerup');target.emit('click');await Promise.resolve();
- assert.deepEqual(app.history.undo.map(x=>JSON.parse(x).bones[0].setup.x),[0,10]);
+ assert.equal(JSON.stringify(app.history.undo.map(x=>JSON.parse(x).bones[0].setup.x)),'[0,10]');
  app.undo();assert.equal(app.doc.bones[0].setup.x,10);
 });
