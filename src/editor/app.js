@@ -377,6 +377,9 @@ export class App {
   }
 
   undo() {
+    // The last pointer edit may not have reached the animation-frame history commit.
+    // Commit that one change before consuming exactly one undo entry.
+    this.commitHistory(false);
     this.syncJson();
     const prev = this.history.undo.pop();
     if (prev === undefined) return;
