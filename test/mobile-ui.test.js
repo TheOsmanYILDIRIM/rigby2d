@@ -73,13 +73,13 @@ test('mobile rig tools, panels, playback and setup mode',()=>{
 });
 test('single-finger pan and pinch zoom do not commit skeleton drags',()=>{
   const{canvas,app,viewport,root}=setup();
-  root.children[2].children[7].click();
+  root.children[2].children[8].click();
   canvas.dispatch('pointerdown',{pointerId:1,clientX:10,clientY:10});
   canvas.dispatch('pointermove',{pointerId:1,clientX:40,clientY:50});
   assert.equal(app.view.panX,30);
   assert.equal(app.view.panY,40);
   canvas.dispatch('pointerup',{pointerId:1});
-  root.children[2].children[7].click();
+  root.children[2].children[8].click();
   canvas.dispatch('pointerdown',{pointerId:10,clientX:80,clientY:120});
   canvas.dispatch('pointerdown',{pointerId:11,clientX:160,clientY:120});
   canvas.dispatch('pointermove',{pointerId:11,clientX:220,clientY:120});
