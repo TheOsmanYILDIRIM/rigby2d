@@ -9,6 +9,7 @@ import * as edit from './edit.js';
 import { onionBonePanel, rgbCss } from './onionui.js';
 import { createEvent, createSkin } from './skineventui.js';
 import { h, popupMenu } from './widgets.js';
+import { removeImportedImage, imageUsage } from './imageactions.js';
 
 /** Collapsed sections and bones (kept for the session). */
 const collapsed = new Set(['images', 'events']);
@@ -37,10 +38,10 @@ function section(app, id, title, count, children, actions = null) {
   );
 }
 
-function row(label, { depth = 0, selected = false, cls = '', onclick, extra = null, title, tut = null } = {}) {
+function row(label, { depth = 0, selected = false, cls = '', onclick, oncontextmenu, extra = null, title, tut = null } = {}) {
   return h(
     'div',
-    { class: `row${selected ? ' selected' : ''}${cls ? ` ${cls}` : ''}`, 'data-tut': tut, style: { paddingLeft: `${depth * 14 + 4}px` }, onclick, title },
+    { class: `row${selected ? ' selected' : ''}${cls ? ` ${cls}` : ''}`, 'data-tut': tut, style: { paddingLeft: `${depth * 14 + 4}px` }, onclick, oncontextmenu, title },
     label,
     extra,
   );
@@ -51,6 +52,8 @@ export function render(app, el) {
   const selected = new Set(app.selectedBones());
   const select = (item) => (e) => app.select(item, e.ctrlKey || e.metaKey);
   const pose = app.pose();
+  const menu = (e, items) => { e.preventDefault(); e.stopPropagation(); popupMenu(e.clientX, e.clientY, items); };
+  const deleteSelected = (sel) => { if (app.mode !== Mode.Setup) return; app.select(sel); edit.deleteSelection(app); app.changed(); };
 
   // Skeleton: bones nested by parent, each bone's slots, each slot's attachments.
   const skeleton = [];
@@ -110,12 +113,20 @@ export function render(app, el) {
         depth,
         selected: selected.has(bone),
         onclick: select({ bone }),
+        oncontextmenu: (e) => menu(e, [
+          { label: 'Select bone', action: () => app.select({ bone }) },
+          { label: 'Add child bone', disabled: app.mode !== Mode.Setup, action: () => edit.addChildBone(app, bone) },
+          { label: 'Delete bone', disabled: app.mode !== Mode.Setup || bone === 0, action: () => deleteSelected({ bone }) },
+        ]),
         extra: [marks, onionBtn, twisty],
       }),
     );
     if (!open) return;
     for (const [slot, i] of slots) {
-      skeleton.push(row(`▣ ${slot.name}`, { tut: `slot:${slot.name}`, depth: depth + 1, cls: 'slot', selected: selSlot(app.sel) === i, onclick: select({ slot: i }) }));
+      skeleton.push(row(`▣ ${slot.name}`, { tut: `slot:${slot.name}`, depth: depth + 1, cls: 'slot', selected: selSlot(app.sel) === i, onclick: select({ slot: i }), oncontextmenu: (e) => menu(e, [
+        { label: 'Select slot', action: () => app.select({ slot: i }) },
+        { label: 'Delete slot', disabled: app.mode !== Mode.Setup, action: () => deleteSelected({ slot: i }) },
+      ]) }));
       const names = new Set(slot.attachments.map((a) => a.name));
       if (doc.skin) for (const a of doc.skinAttachments(i, doc.skin)) names.add(a.name);
       for (const name of names) {
@@ -125,6 +136,11 @@ export function render(app, el) {
             depth: depth + 2,
             cls: `attachment${visible ? ' visible' : ''}`,
             title: visible ? 'Visible attachment' : 'Click to show this attachment (keys it in Animate mode)',
+            oncontextmenu: (e) => menu(e, [
+              { label: 'Show / hide attachment', action: () => { app.select({ slot: i }); edit.setSlotAttachment(app, i, visible ? null : name); } },
+              { label: 'Open attachment properties', action: () => app.select({ slot: i }) },
+              { label: 'Remove PNG attachment (Inspector)', disabled: app.mode !== Mode.Setup, action: () => app.select({ slot: i }) },
+            ]),
             onclick: () => {
               app.select({ slot: i });
               edit.setSlotAttachment(app, i, visible ? null : name);
@@ -145,8 +161,12 @@ export function render(app, el) {
   // Draw order: front of the list is drawn on top.
   const n = doc.slots.length;
   const move = (from, to) => () => {
+    if (from === to || to < 0 || to >= doc.slots.length) return;
     doc.moveSlot(from, to);
     app.select({ slot: to });
+    // A touch pointerdown can temporarily suspend main's tree render.
+    // Rebuild after the button's click so the list immediately reflects the new order.
+    window.setTimeout(() => render(app, el), 0);
   };
   const order = [];
   for (let i = n - 1; i >= 0; i--) {
@@ -255,7 +275,13 @@ export function render(app, el) {
       section(app, 'constraints', 'Constraints', constraints.length, constraints, newConstraint),
       section(app, 'events', 'Events', doc.events.length, events, newEvent),
       section(app, 'animations', 'Animations', doc.animations.length, animations),
-      section(app, 'images', 'Images', doc.images.length, doc.images.map((i) => row(`🖼 ${i.name}`, { title: `${i.width}×${i.height}` }))),
+      section(app, 'images', 'Images', doc.images.length, doc.images.map((i) => row(`🖼 ${i.name}`, {
+        title: `${i.width}×${i.height} — long press/right click for actions`,
+        oncontextmenu: (e) => menu(e, [
+          { label: `Remove PNG: ${i.name} (${imageUsage(doc,i.name)} uses)`, disabled: app.mode !== Mode.Setup, action: () => removeImportedImage(app,i.name) },
+        ]),
+        extra: [h('button', { class: 'small image-remove', disabled: app.mode !== Mode.Setup, title: 'Remove imported PNG and associated attachments', onclick: (e) => { e.stopPropagation(); removeImportedImage(app,i.name); } }, '🗑')],
+      }))),
     ),
   );
   el.querySelector('.tree-scroll').scrollTop = scrolled;

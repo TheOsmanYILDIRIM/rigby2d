@@ -8,7 +8,9 @@ import { makeBone } from '../core/model.js';
 import { Pose } from '../core/pose.js';
 import { FPS, Mode, TOOLS, selBone, selSlot } from './app.js';
 import * as edit from './edit.js';
+import { shiftBonePivotKeepArtwork } from './pivotedit.js';
 import { GLView } from './glview.js';
+import { fitZoom } from './viewfit.js';
 import { MeshTool } from './meshtool.js';
 import { ShapeTool } from './shapetool.js';
 
@@ -200,7 +202,7 @@ export class Viewport {
       app.view = { panX: 0, panY: this.height * 0.25, zoom: 1 };
       return;
     }
-    const zoom = Math.min(20, Math.max(0.05, Math.min(this.width / Math.max(1, x1 - x0), this.height / Math.max(1, y1 - y0)) * 0.8));
+    const zoom = fitZoom(this.width, this.height, x1 - x0, y1 - y0);
     const cx = (x0 + x1) * 0.5;
     const cy = (y0 + y1) * 0.5;
     app.view = { panX: -cx * zoom, panY: cy * zoom, zoom };
@@ -489,7 +491,7 @@ export class Viewport {
         const t = this.toScreen(pose.world[i].apply([b.length, 0]));
         const d = distToSegment(pos, o, t);
         const len = Math.hypot(t[0] - o[0], t[1] - o[1]);
-        const reach = len < 4 ? 8 : Math.min(12, Math.max(5, len * 0.1));
+        const reach = this.touchInput ? 15 : (len < 4 ? 8 : Math.min(12, Math.max(5, len * 0.1)));
         if (d <= reach && (best === null || d < best.d)) best = { d, i };
       });
       if (best) return { bone: best.i };
@@ -529,7 +531,7 @@ export class Viewport {
     if (Math.abs(factor - 1) <= 1e-4) return;
     const cursor = this.eventPos(e);
     const old = app.view.zoom;
-    const zoom = Math.min(20, Math.max(0.05, old * factor));
+    const zoom = Math.min(20, Math.max(0.0001, old * factor));
     const rel = [cursor[0] - this.width / 2 - app.view.panX, cursor[1] - this.height / 2 - app.view.panY];
     app.view.panX += rel[0] - rel[0] * (zoom / old);
     app.view.panY += rel[1] - rel[1] * (zoom / old);
@@ -538,6 +540,7 @@ export class Viewport {
   }
 
   onPointerDown(e) {
+    this.touchInput = e.pointerType === 'touch';
     try {
       this.canvas.setPointerCapture(e.pointerId);
     } catch {
@@ -573,7 +576,7 @@ export class Viewport {
       app.changed();
     }
     if (this.press && e.buttons & 1) {
-      if (!this.press.started && Math.hypot(pos[0] - this.press.pos[0], pos[1] - this.press.pos[1]) > DRAG_THRESHOLD) {
+      if (!this.press.started && Math.hypot(pos[0] - this.press.pos[0], pos[1] - this.press.pos[1]) > (this.touchInput ? 9 : DRAG_THRESHOLD)) {
         this.press.started = true;
         this.dragStart(this.press.pos);
       }
@@ -615,7 +618,10 @@ export class Viewport {
     const start = this.toWorld(press);
     const add = this.press?.add;
     let drag = null;
-    if (app.tool === 'create') {
+    if (app.tool === 'pivot') {
+      if (app.mode !== Mode.Setup) app.setStatus('Switch to Setup to reposition a bone pivot');
+      else { const b=selBone(app.sel); if (b !== null && b !== 0) drag={kind:'pivot',index:b}; else app.setStatus('Select a non-root bone first'); }
+    } else if (app.tool === 'create') {
       if (app.mode === Mode.Animate) app.setStatus('Bones can only be created in Setup mode (Tab)');
       else drag = { kind: 'create', index: selBone(app.sel) ?? 0 };
     } else if (add) {
@@ -659,7 +665,13 @@ export class Viewport {
       d.to = pos;
     } else {
       const pose = app.pose();
-      if (d.kind === 'bones') {
+      if (d.kind === 'pivot') {
+        const bone=d.index;
+        const parentId=app.doc.bones[bone].parent;
+        const inverse=parentId == null ? new Affine() : pose.world[parentId].inverse();
+        const localDelta=inverse.applyVector([world[0]-d.last[0],world[1]-d.last[1]]);
+        shiftBonePivotKeepArtwork(app,bone,localDelta[0],localDelta[1]);
+      } else if (d.kind === 'bones') {
         for (const b of this.topLevel(app.selectedBones())) this.dragBone(pose, b, d.last, world, app.tool);
       } else if (d.kind === 'poseTranslate') {
         this.dragBone(pose, d.index, d.last, world, 'translate');
@@ -758,6 +770,12 @@ export class Viewport {
 
   dragSlot(pose, s, last, cur) {
     const app = this.app;
+    // Attachment offsets are setup-only data. Editing them in Animate mode
+    // changes every frame and cannot be saved as a bone keyframe.
+    if (app.mode === Mode.Animate) {
+      app.setStatus('Animate the slot bone instead. Switch to Setup to reposition artwork.');
+      return;
+    }
     const att = pose.slotAttachment(app.doc, s);
     if (!att) return;
     if (!att.offset) {
