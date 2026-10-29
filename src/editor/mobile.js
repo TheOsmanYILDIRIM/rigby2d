@@ -126,9 +126,11 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
   const undo = makeButton('↶', 'Geri al', () => app.undo());
   const redo = makeButton('↷', 'İleri al', () => app.redo());
   const more = makeButton('⋮ Komutlar', 'Tüm masaüstü menü komutları', () => { fileMenu.hidden = true; showDesktopCommands(); });
-  header.append(brand, openMenu, more, mode, undo, redo);
+  header.append(brand, openMenu, more, mode);
 
   const commands = [
+    ['↶ Son işlemi geri al (Undo)', () => app.undo()],
+    ['↷ Geri alınan işlemi yinele (Redo)', () => app.redo()],
     ['📂 Proje aç', () => app.openDialog()],
     ['💾 Kaydet', () => app.save(false)],
     ['📑 Farklı kaydet', () => app.save(true)],
@@ -176,9 +178,9 @@ export function installMobileEditor(app, viewport, { onKey, onAutoRig, onRetarge
 
   const transport = document.createElement('div');
   transport.id = 'avenox-mobile-transport';
-  const prev = makeButton('⟵ Kare', 'Önceki animasyon karesi', () => { (onStep ? onStep(app,-1) : app.stepFrame(-1)); refresh(); });
+  const prev = makeButton('◀ Önceki kare', 'Önceki ANİMASYON karesi (Undo değil)', () => { (onStep ? onStep(app,-1) : app.stepFrame(-1)); refresh(); });
   const play = makeButton('▶ Oynat', 'Animasyonu oynat veya duraklat', () => { app.togglePlay(); refresh(); });
-  const next = makeButton('Kare ⟶', 'Sonraki animasyon karesi', () => { (onStep ? onStep(app,1) : app.stepFrame(1)); refresh(); });
+  const next = makeButton('Sonraki kare ▶', 'Sonraki ANİMASYON karesi (Redo değil)', () => { (onStep ? onStep(app,1) : app.stepFrame(1)); refresh(); });
   const key = makeButton('◆ Key', 'Seçilen kemiğin pozunu bu kareye kaydet', () => {
     if (app.mode !== 'animate') { app.setStatus('First switch to Animation mode'); return; }
     if (app.playing) { app.playing = false; app.changed(); }
