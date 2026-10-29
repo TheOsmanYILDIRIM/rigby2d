@@ -49,6 +49,7 @@ export function shiftBonePivotKeepArtwork(app, bone, dx, dy) {
  // Preserve direct child bone joints in the same world locations.
  for(const child of sk.children(bone))
    sk.bones[child].setup=compensation.mul(toAffine(sk.bones[child].setup)).decompose();
+ app.setStatus('Pivot repositioned without shifting setup artwork. Review existing animated poses after rig edits.');
  app.changed();
  return true;
 }
