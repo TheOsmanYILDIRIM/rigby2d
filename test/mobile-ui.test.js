@@ -239,6 +239,8 @@ test('one-touch mesh conversion and vertex/weight/finish workflow is reachable o
   const x=setup();selectRegion(x);
   x.find('av-mesh-open').click();
   assert.equal(x.app.doc.attachment(0,'arm').type,'mesh');
+  assert.equal(x.app.doc.attachment(0,'arm').vertices.length,32);
+  assert.equal(x.app.meshEdit.warp,true);
   assert.equal(x.app.meshEdit.mode,'vertices');
   assert.equal(x.control.getState().panel,'canvas');
   assert.equal(x.find('av-mesh-vertices').hidden,false);
@@ -260,5 +262,20 @@ test('mesh shortcut without a selected image guides to skeleton rather than muta
   x.find('av-mesh-open').click();
   assert.equal(x.control.getState().panel,'tree');
   assert.equal(JSON.stringify(x.app.doc),before);
+  x.control.dispose();
+});
+
+test('old four-corner image meshes get an explicit safe 4x4 warp refinement',()=>{
+  const x=setup();selectRegion(x);
+  const part=x.app.doc.attachment(0,'arm');
+  // Legacy direct conversion remains a four-corner mesh on desktop.
+  const four={...part, type:'mesh', uvs:[0,0,1,0,1,1,0,1], vertices:[-40,60,40,60,40,-60,-40,-60], hull:4, triangles:[0,1,2,0,2,3]};
+  delete four.offset;
+  x.app.doc.slots[0].attachments[0]=four;
+  x.app.changed();x.tick();x.find('av-mesh-open').click();
+  assert.equal(x.find('av-warp-refine').hidden,false);
+  x.find('av-warp-refine').click();
+  assert.equal(x.app.doc.attachment(0,'arm').vertices.length,32);
+  assert.equal(x.app.meshEdit.warp,true);
   x.control.dispose();
 });

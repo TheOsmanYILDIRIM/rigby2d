@@ -3,7 +3,7 @@
 // painting weights. Editing happens on the setup pose, in world space; the mesh is written back
 // in the slot bone's space (unweighted) or each bone's space (weighted).
 
-import { autoWeights, paintWeights, triangulateMesh, uvAt, weightsAt } from '../core/meshgeom.js';
+import { autoWeights, paintWeights, triangulateMesh, uvAt, weightsAt, warpMoveVertices } from '../core/meshgeom.js';
 import { Pose } from '../core/pose.js';
 import { setKey } from '../core/animation.js';
 import { FPS, Mode } from './app.js';
@@ -149,7 +149,8 @@ export class MeshTool {
 
   vertexAt(state, pos) {
     let best = -1;
-    let bestD = VERTEX_HIT;
+    // A finger needs a larger hit target than a mouse, particularly on dense warp cages.
+    let bestD = this.viewport.touchInput ? 18 : VERTEX_HIT;
     state.points.forEach((p, i) => {
       const s = this.screen(p);
       const d = Math.hypot(s[0] - pos[0], s[1] - pos[1]);
@@ -272,8 +273,15 @@ export class MeshTool {
       deformVertices(this.app, t.slot, t.att, d.indices.map((i) => [i, [d.shown[i][0] + delta[0], d.shown[i][1] + delta[1]]]));
       return;
     }
-    // Move the vertices over the image: their texture coordinates follow their positions.
+    // Image Warp keeps UV coordinates glued to their original image pixels; moving control
+    // points therefore bends the artwork instead of sliding the texture with the point.
     const start = d.start;
+    if (t.edit.warp) {
+      const state = warpMoveVertices(start, d.indices, delta);
+      this.commit(t, state, { topology: false });
+      return;
+    }
+    // Desktop's legacy mesh/UV editing remains available when Warp is not selected.
     const state = { ...start, points: start.points.slice(), uvs: start.uvs.slice() };
     for (const i of d.indices) {
       const p = [start.points[i][0] + delta[0], start.points[i][1] + delta[1]];
@@ -368,7 +376,7 @@ export class MeshTool {
     pts.forEach((p, i) => {
       const picked = sel.has(i);
       ctx.beginPath();
-      ctx.arc(p[0], p[1], picked ? 5 : 3.5, 0, Math.PI * 2);
+      ctx.arc(p[0], p[1], picked ? (this.viewport.touchInput ? 7 : 5) : (this.viewport.touchInput ? 5.5 : 3.5), 0, Math.PI * 2);
       ctx.fillStyle = weightsMode ? heat(weightOf(i)).replace(/[\d.]+\)$/, '1)') : picked ? 'white' : i < state.hull ? 'rgb(255,170,40)' : 'rgb(120,200,255)';
       ctx.fill();
       ctx.strokeStyle = picked ? 'rgb(255,170,40)' : 'black';

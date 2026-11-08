@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Mobile workspace. Original panels, menus and document operations remain authoritative.
-import { regionToMesh } from './meshconvert.js';
+import { regionToMesh, refineImageQuad } from './meshconvert.js';
 const MEDIA = '(max-width: 850px), (pointer: coarse) and (max-width: 1024px)';
 const PANELS = ['canvas', 'tree', 'inspector', 'timeline', 'workspace'];
 const LABELS = { canvas: 'Tuval', tree: 'İskelet', inspector: 'Özellikler', timeline: 'Zaman çizelgesi', workspace: 'Araçlar ve menüler' };
@@ -111,17 +111,18 @@ export function installMobileEditor(app, viewport, options = {}) {
         app.setStatus('Mesh oluşturmak için önce Rig moduna geç.');
         return;
       }
-      regionToMesh(app.doc, part.slot, part.att);
+      regionToMesh(app.doc, part.slot, part.att, { segments: 3 });
     } else if (part.att.type !== 'mesh') {
       app.setStatus('Bu ek türü mesh olarak düzenlenemez.');
       return;
     }
-    app.meshEdit = { slot: part.slot, name: part.name, mode: editMode, radius: 40, strength: 0.5, subtract: false, selected: null };
+    app.meshEdit = { slot: part.slot, name: part.name, mode: editMode, warp: app.mode === 'setup', radius: 40, strength: 0.5, subtract: false, selected: null };
     state.pan = false;
     app.changed();
     setPanel('canvas');
+    if (app.mode === 'setup') app.setStatus('Görsel Bükme: turuncu/mavi noktaları sürükleyerek PNG yüzeyini eğ. Boş alana dokunarak ek nokta oluştur; iki parmak yakınlaştırır.');
   };
-  const meshOpen = button('av-mesh-open', '▦ Mesh', 'Seçili görseli mesh yap veya düzenle', () => run(() => beginMesh(activePart())));
+  const meshOpen = button('av-mesh-open', '✥ Bük', 'PNG yüzeyini 4×4 kafesle yerel olarak bük', () => run(() => beginMesh(activePart())));
   const vertices = button('av-mesh-vertices', '◇ Nokta', 'Mesh noktalarını ekle ve taşı', () => run(() => {
     if (!app.meshEdit) return;
     app.meshEdit.mode = 'vertices'; state.pan = false; app.changed(); setPanel('canvas');
@@ -138,6 +139,15 @@ export function installMobileEditor(app, viewport, options = {}) {
   const deleteVertex = button('av-mesh-delete', '⌫ Nokta sil', 'Seçili mesh noktalarını sil', () => run(() => {
     if (!viewport.meshTool?.deleteSelected?.()) app.setStatus('Silmek için önce tuvalden mesh noktası seç.');
     app.changed(); refresh();
+  }));
+  const refineGrid = button('av-warp-refine', '▦ 4×4', 'Eski dört köşeli PNG meshini 4×4 kontrol kafesine dönüştür', () => run(() => {
+    const part = activePart();
+    if (!part || !app.meshEdit || app.mode !== 'setup') return;
+    const changed = refineImageQuad(app.doc, part.slot, part.att, { segments: 3 });
+    if (!changed) return app.setStatus('Bu mesh önceden deforme edilmiş, animasyonlu veya ağırlıklı. Güvenli dönüştürme yapılamaz; boş alana dokunarak nokta ekle.');
+    app.meshEdit.selection = new Set(); app.meshEdit.selected = null;
+    app.changed(); setPanel('canvas');
+    app.setStatus('Mevcut dört köşelik görsel, 4×4 bükme kafesine yükseltildi.');
   }));
   const meshSettings = button('av-mesh-settings', '⚙ Ayar', 'Mesh, kemik bağlama ve fırça özellikleri', () => setPanel('inspector'));
   const meshDone = button('av-mesh-done', '✓ Bitti', 'Mesh düzenlemeyi bitir', () => run(() => {
@@ -177,7 +187,7 @@ export function installMobileEditor(app, viewport, options = {}) {
   listen(scaleX, 'change', () => changeScale('scale_x', scaleX));
   listen(scaleY, 'change', () => changeScale('scale_y', scaleY));
   scaleControls.append(scaleLabel, el('span', '', 'X'), scaleX, el('span', '', 'Y'), scaleY, lock);
-  partTools.append(meshOpen, vertices, weights, deleteVertex, meshSettings, meshDone, scaleControls);
+  partTools.append(meshOpen, vertices, refineGrid, weights, deleteVertex, meshSettings, meshDone, scaleControls);
   tools.insertBefore(partTools, tools.children[0] || null);
 
   const transport = el('div'); transport.id = 'avenox-mobile-transport';
@@ -371,9 +381,10 @@ export function installMobileEditor(app, viewport, options = {}) {
     const editing = !!(part && app.meshEdit?.slot === part.slot && app.meshEdit.name === part.name && part.att.type === 'mesh');
     const mesh = part?.att?.type === 'mesh';
     meshOpen.hidden = editing;
-    meshOpen.textContent = mesh ? '✎ Mesh' : '▦ Mesh';
+    meshOpen.textContent = mesh ? '✥ Bük' : '✥ Görsel Bük';
     vertices.hidden = !editing || app.mode !== 'setup';
     weights.hidden = !editing || app.mode !== 'setup';
+    refineGrid.hidden = !editing || app.mode !== 'setup' || !!part?.att?.weights || part?.att?.vertices?.length !== 8;
     deleteVertex.hidden = !editing || app.mode !== 'setup';
     meshSettings.hidden = !editing;
     meshDone.hidden = !editing;
@@ -422,7 +433,7 @@ export function installMobileEditor(app, viewport, options = {}) {
   // Single-touch edits continue through the original viewport. Only pan/pinch are intercepted.
   const pointers = new Map(); let pinch = null, lastPan = null, gesture = false;
   const point = event => { const r = viewport.canvas.getBoundingClientRect(); return { x: event.clientX - r.left, y: event.clientY - r.top }; };
-  const stopPress = () => { viewport.press = null; viewport.drag = null; viewport.panning = null; viewport.meshPress = false; };
+  const stopPress = () => { viewport.press = null; viewport.drag = null; viewport.panning = null; viewport.meshPress = false; if (viewport.meshTool) viewport.meshTool.drag = null; };
   function resetGestures() { pointers.clear(); pinch = null; lastPan = null; gesture = false; stopPress(); }
   function updatePinch() {
     const [a, b] = [...pointers.values()]; if (!a || !b) return;
