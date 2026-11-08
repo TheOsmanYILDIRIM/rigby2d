@@ -45,9 +45,11 @@ test('moving a local warp node bends the image while leaving every UV and triang
   assert.deepEqual(moved.triangles,state.triangles);
   assert.deepEqual(moved.points[12],[point[0]+12,point[1]-7]);
   assert.deepEqual(state.points[12],point);
-  const samplingBefore=uvAt(point,state.points,state.uvs,state.triangles);
-  const samplingAfter=uvAt(point,moved.points,moved.uvs,moved.triangles);
-  assert.ok(Math.hypot(samplingAfter[0]-samplingBefore[0],samplingAfter[1]-samplingBefore[1])>1e-3);
+  // The moved control point still samples its ORIGINAL texel. At that same new screen
+  // position, the unwarped image would sample a different texel.
+  const unwarpedTexel=uvAt(moved.points[12],state.points,state.uvs,state.triangles);
+  const warpedTexel=moved.uvs[12];
+  assert.ok(Math.hypot(warpedTexel[0]-unwarpedTexel[0],warpedTexel[1]-unwarpedTexel[1])>1e-3);
   assert.deepEqual(moved.uvs[12],originalUV);
 });
 

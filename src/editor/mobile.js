@@ -136,6 +136,16 @@ export function installMobileEditor(app, viewport, options = {}) {
       setPanel('inspector');
     } else setPanel('canvas');
   }));
+  const allVertices = button('av-warp-all', '▣ Tümünü taşı', 'Kafesin bütün noktalarını seçerek PNG parçayı birlikte taşı', () => run(() => {
+    const part = activePart(), edit = app.meshEdit;
+    if (!part || !edit || edit.mode !== 'vertices') return;
+    const count = part.att.uvs?.length / 2 ?? 0;
+    if (!count) return;
+    if (edit.selection?.size === count) { edit.selection = new Set(); edit.selected = null; }
+    else { edit.selection = new Set(Array.from({length: count}, (_, i) => i)); edit.selected = 0; }
+    app.changed(); setPanel('canvas');
+    if (edit.selection.size) app.setStatus('Tüm noktalar seçildi. Kafesin herhangi bir noktasını sürükle: PNG bütünüyle taşınır. Tekrar dokunarak seçimi kaldır.');
+  }));
   const deleteVertex = button('av-mesh-delete', '⌫ Nokta sil', 'Seçili mesh noktalarını sil', () => run(() => {
     if (!viewport.meshTool?.deleteSelected?.()) app.setStatus('Silmek için önce tuvalden mesh noktası seç.');
     app.changed(); refresh();
@@ -187,7 +197,7 @@ export function installMobileEditor(app, viewport, options = {}) {
   listen(scaleX, 'change', () => changeScale('scale_x', scaleX));
   listen(scaleY, 'change', () => changeScale('scale_y', scaleY));
   scaleControls.append(scaleLabel, el('span', '', 'X'), scaleX, el('span', '', 'Y'), scaleY, lock);
-  partTools.append(meshOpen, vertices, refineGrid, weights, deleteVertex, meshSettings, meshDone, scaleControls);
+  partTools.append(meshOpen, vertices, allVertices, refineGrid, weights, deleteVertex, meshSettings, meshDone, scaleControls);
   tools.insertBefore(partTools, tools.children[0] || null);
 
   const transport = el('div'); transport.id = 'avenox-mobile-transport';
@@ -384,6 +394,9 @@ export function installMobileEditor(app, viewport, options = {}) {
     meshOpen.textContent = mesh ? '✥ Bük' : '✥ Görsel Bük';
     vertices.hidden = !editing || app.mode !== 'setup';
     weights.hidden = !editing || app.mode !== 'setup';
+    allVertices.hidden = !editing || app.mode !== 'setup';
+    allVertices.disabled = !editing || app.meshEdit.mode !== 'vertices';
+    toggle(allVertices, editing && app.meshEdit.selection?.size === part.att.uvs.length / 2);
     refineGrid.hidden = !editing || app.mode !== 'setup' || !!part?.att?.weights || part?.att?.vertices?.length !== 8;
     deleteVertex.hidden = !editing || app.mode !== 'setup';
     meshSettings.hidden = !editing;

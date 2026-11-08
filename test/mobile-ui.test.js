@@ -279,3 +279,14 @@ test('old four-corner image meshes get an explicit safe 4x4 warp refinement',()=
   assert.equal(x.app.meshEdit.warp,true);
   x.control.dispose();
 });
+
+test('selecting all mesh control points allows whole-image movement without UV changes',()=>{
+  const x=setup();selectRegion(x);x.find('av-mesh-open').click();
+  const count=x.app.doc.attachment(0,'arm').uvs.length/2;
+  x.find('av-warp-all').click();
+  assert.equal(x.app.meshEdit.selection.size,count);
+  assert.equal(x.find('av-warp-all').classList.contains('active'),true);
+  x.find('av-warp-all').click();
+  assert.equal(x.app.meshEdit.selection.size,0);
+  x.control.dispose();
+});
