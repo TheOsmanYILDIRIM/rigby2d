@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Mobile workspace. Original panels, menus and document operations remain authoritative.
-import { regionToMesh } from './meshtool.js';
+import { regionToMesh } from './meshconvert.js';
 const MEDIA = '(max-width: 850px), (pointer: coarse) and (max-width: 1024px)';
 const PANELS = ['canvas', 'tree', 'inspector', 'timeline', 'workspace'];
 const LABELS = { canvas: 'Tuval', tree: 'İskelet', inspector: 'Özellikler', timeline: 'Zaman çizelgesi', workspace: 'Araçlar ve menüler' };

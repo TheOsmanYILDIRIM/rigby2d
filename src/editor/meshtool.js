@@ -3,7 +3,6 @@
 // painting weights. Editing happens on the setup pose, in world space; the mesh is written back
 // in the slot bone's space (unweighted) or each bone's space (weighted).
 
-import { toAffine } from '../core/math.js';
 import { autoWeights, paintWeights, triangulateMesh, uvAt, weightsAt } from '../core/meshgeom.js';
 import { Pose } from '../core/pose.js';
 import { setKey } from '../core/animation.js';
@@ -11,20 +10,6 @@ import { FPS, Mode } from './app.js';
 
 const VERTEX_HIT = 7;
 const EDGE_HIT = 8;
-
-/** Every list holding attachments (default skin per slot, then named skins). */
-function attachmentLists(doc) {
-  const lists = doc.slots.map((s) => s.attachments);
-  for (const skin of doc.skins) for (const e of skin.slots) lists.push(e.attachments);
-  return lists;
-}
-
-function replaceAttachment(doc, old, neu) {
-  for (const list of attachmentLists(doc)) {
-    const i = list.indexOf(old);
-    if (i >= 0) list[i] = neu;
-  }
-}
 
 /** Removes deform keys of an attachment (they no longer match its vertices). Returns how many. */
 function dropDeformKeys(doc, slot, name) {
@@ -37,32 +22,7 @@ function dropDeformKeys(doc, slot, name) {
   return removed;
 }
 
-/** Replaces a region attachment with a 4-vertex mesh covering the same image. */
-export function regionToMesh(doc, slot, att) {
-  const m = toAffine(att.offset);
-  const hw = att.width / 2;
-  const hh = att.height / 2;
-  const corners = [
-    [-hw, hh],
-    [hw, hh],
-    [hw, -hh],
-    [-hw, -hh],
-  ].map((p) => m.apply(p));
-  const mesh = {
-    name: att.name,
-    type: 'mesh',
-    image: att.image,
-    uvs: [0, 0, 1, 0, 1, 1, 0, 1],
-    triangles: [0, 1, 2, 0, 2, 3],
-    hull: 4,
-    vertices: corners.flat(),
-    width: att.width,
-    height: att.height,
-  };
-  for (const key of ['color', 'sequence', 'sourceName', 'extra']) if (att[key] !== undefined) mesh[key] = att[key];
-  replaceAttachment(doc, att, mesh);
-  return mesh;
-}
+export { regionToMesh } from './meshconvert.js';
 
 /** The mesh as editable world-space data: { points, uvs, weights (or null), hull }. */
 export function meshState(doc, slot, att) {
