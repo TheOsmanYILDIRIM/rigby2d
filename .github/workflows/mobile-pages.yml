@@ -1,0 +1,53 @@
+name: Publish Rigby2D mobile experiment (Pages)
+
+on:
+  push:
+    branches:
+      - experiment/mobile-touch-editor-20261027
+    paths:
+      - 'src/**'
+      - 'index.html'
+      - 'vite.config.js'
+      - 'package*.json'
+      - 'test/mobile-ui.test.js'
+      - 'test/mobile-undo-history.test.js'
+      - '.github/workflows/mobile-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: rigby-mobile-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - name: Build experimental mobile editor for repository Pages path
+        run: npm run web:build -- --base=/rigby2d/
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy experimental branch build to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

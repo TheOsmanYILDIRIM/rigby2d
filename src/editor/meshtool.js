@@ -3,28 +3,13 @@
 // painting weights. Editing happens on the setup pose, in world space; the mesh is written back
 // in the slot bone's space (unweighted) or each bone's space (weighted).
 
-import { toAffine } from '../core/math.js';
-import { autoWeights, paintWeights, triangulateMesh, uvAt, weightsAt } from '../core/meshgeom.js';
+import { autoWeights, paintWeights, triangulateMesh, uvAt, weightsAt, warpMoveVertices } from '../core/meshgeom.js';
 import { Pose } from '../core/pose.js';
 import { setKey } from '../core/animation.js';
 import { FPS, Mode } from './app.js';
 
 const VERTEX_HIT = 7;
 const EDGE_HIT = 8;
-
-/** Every list holding attachments (default skin per slot, then named skins). */
-function attachmentLists(doc) {
-  const lists = doc.slots.map((s) => s.attachments);
-  for (const skin of doc.skins) for (const e of skin.slots) lists.push(e.attachments);
-  return lists;
-}
-
-function replaceAttachment(doc, old, neu) {
-  for (const list of attachmentLists(doc)) {
-    const i = list.indexOf(old);
-    if (i >= 0) list[i] = neu;
-  }
-}
 
 /** Removes deform keys of an attachment (they no longer match its vertices). Returns how many. */
 function dropDeformKeys(doc, slot, name) {
@@ -37,32 +22,7 @@ function dropDeformKeys(doc, slot, name) {
   return removed;
 }
 
-/** Replaces a region attachment with a 4-vertex mesh covering the same image. */
-export function regionToMesh(doc, slot, att) {
-  const m = toAffine(att.offset);
-  const hw = att.width / 2;
-  const hh = att.height / 2;
-  const corners = [
-    [-hw, hh],
-    [hw, hh],
-    [hw, -hh],
-    [-hw, -hh],
-  ].map((p) => m.apply(p));
-  const mesh = {
-    name: att.name,
-    type: 'mesh',
-    image: att.image,
-    uvs: [0, 0, 1, 0, 1, 1, 0, 1],
-    triangles: [0, 1, 2, 0, 2, 3],
-    hull: 4,
-    vertices: corners.flat(),
-    width: att.width,
-    height: att.height,
-  };
-  for (const key of ['color', 'sequence', 'sourceName', 'extra']) if (att[key] !== undefined) mesh[key] = att[key];
-  replaceAttachment(doc, att, mesh);
-  return mesh;
-}
+export { regionToMesh } from './meshconvert.js';
 
 /** The mesh as editable world-space data: { points, uvs, weights (or null), hull }. */
 export function meshState(doc, slot, att) {
@@ -189,7 +149,8 @@ export class MeshTool {
 
   vertexAt(state, pos) {
     let best = -1;
-    let bestD = VERTEX_HIT;
+    // A finger needs a larger hit target than a mouse, particularly on dense warp cages.
+    let bestD = this.viewport.touchInput ? 18 : VERTEX_HIT;
     state.points.forEach((p, i) => {
       const s = this.screen(p);
       const d = Math.hypot(s[0] - pos[0], s[1] - pos[1]);
@@ -312,8 +273,15 @@ export class MeshTool {
       deformVertices(this.app, t.slot, t.att, d.indices.map((i) => [i, [d.shown[i][0] + delta[0], d.shown[i][1] + delta[1]]]));
       return;
     }
-    // Move the vertices over the image: their texture coordinates follow their positions.
+    // Image Warp keeps UV coordinates glued to their original image pixels; moving control
+    // points therefore bends the artwork instead of sliding the texture with the point.
     const start = d.start;
+    if (t.edit.warp) {
+      const state = warpMoveVertices(start, d.indices, delta);
+      this.commit(t, state, { topology: false });
+      return;
+    }
+    // Desktop's legacy mesh/UV editing remains available when Warp is not selected.
     const state = { ...start, points: start.points.slice(), uvs: start.uvs.slice() };
     for (const i of d.indices) {
       const p = [start.points[i][0] + delta[0], start.points[i][1] + delta[1]];
@@ -408,7 +376,7 @@ export class MeshTool {
     pts.forEach((p, i) => {
       const picked = sel.has(i);
       ctx.beginPath();
-      ctx.arc(p[0], p[1], picked ? 5 : 3.5, 0, Math.PI * 2);
+      ctx.arc(p[0], p[1], picked ? (this.viewport.touchInput ? 7 : 5) : (this.viewport.touchInput ? 5.5 : 3.5), 0, Math.PI * 2);
       ctx.fillStyle = weightsMode ? heat(weightOf(i)).replace(/[\d.]+\)$/, '1)') : picked ? 'white' : i < state.hull ? 'rgb(255,170,40)' : 'rgb(120,200,255)';
       ctx.fill();
       ctx.strokeStyle = picked ? 'rgb(255,170,40)' : 'black';

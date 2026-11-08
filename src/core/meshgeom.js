@@ -221,3 +221,18 @@ export function paintWeights(points, weights, bone, center, radius, strength, su
   });
   return changed;
 }
+
+/** Move mesh control points without changing their UV coordinates.
+ *  This is image warping (texture follows displaced vertices), not UV editing.
+ *  Caller preserves triangle topology while dragging to avoid re-meshing jumps.
+ */
+export function warpMoveVertices(state, indices, [dx, dy]) {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) throw new RangeError('Warp displacement must be finite');
+  const points = state.points.map(p => p.slice());
+  for (const i of indices) {
+    if (!Number.isInteger(i) || i < 0 || i >= points.length) throw new RangeError('Warp vertex index out of bounds');
+    points[i][0] += dx;
+    points[i][1] += dy;
+  }
+  return { ...state, points, uvs: state.uvs.map(uv => uv.slice()) };
+}

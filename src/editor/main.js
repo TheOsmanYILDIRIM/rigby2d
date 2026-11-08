@@ -6,7 +6,12 @@ import { WORKSPACES, has } from './workspaces.js';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import './style.css';
+import './mobile.css';
+import { installMobileEditor } from './mobile.js';
+import { installGestureHistoryCommits } from './historygestures.js';
 import { App, Mode, saveSetting } from './app.js';
+import { createFrameClipboard, seedInitialPose } from './frameclipboard.js';
+import { mobileStepFrame, makeTwoPoseMotion } from './mobilemotion.js';
 import { ACTIONS, PRESETS, shortcutLabel } from './keymap.js';
 import { installKeyboard, isTyping, runAction } from './keys.js';
 import { openRenderDialog } from './renderui.js';
@@ -278,6 +283,8 @@ sync = installPanelSync(app, {
 const dopesheet = new Dopesheet(app, $('#dopesheet'), $('#dopesheet canvas'));
 const graph = new GraphEditor(app, $('#graph'), $('#graph canvas'));
 installKeyboard(app, { viewport, zoomActual, deleteSelectedKeys, closeMenu, isMenuOpen });
+installGestureHistoryCommits(app);
+installMobileEditor(app, viewport, { getMenus: menus, timelineEditors: { dopesheet, graph }, actions: ACTIONS, onAction: action => runAction(app, action, { viewport, zoomActual, deleteSelectedKeys, closeMenu }), onStep: mobileStepFrame, twoPose: makeTwoPoseMotion({keyBoneTransform:edit.keyBoneTransform}), frameClipboard: createFrameClipboard({keyBoneTransform:edit.keyBoneTransform,setSlotAttachment:edit.setSlotAttachment,ensureAnimation:edit.ensureAnimation}), seedInitialPose: a => seedInitialPose(a,{keyBoneTransform:edit.keyBoneTransform}), onKey: () => { if (app.sel?.slot !== undefined) { app.setStatus('To animate PNG movement, select its parent bone in the Skeleton tree (not the image/slot).'); return; } edit.keySelection(app); }, onDelete: () => edit.deleteSelection(app), showPopup: popupMenu, onAutoRig: () => openAutoRig(app), onRetarget: () => openRetarget(app) });
 const renderMenuBar = buildMenuBar();
 const tutorials = createTutorials(app, viewport, { refresh: () => renderNow() });
 

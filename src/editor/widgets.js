@@ -124,8 +124,11 @@ export function select(options, value, onChange, { disabled = false, placeholder
 }
 
 let openMenu = null;
+let menuDismissLayer = null;
 
 export function closeMenu() {
+  menuDismissLayer?.remove();
+  menuDismissLayer = null;
   if (openMenu) {
     openMenu.remove();
     openMenu = null;
@@ -197,8 +200,17 @@ export function submenuItem(label, items, { title } = {}) {
  */
 export function popupMenu(x, y, items) {
   closeMenu();
+  // Touch devices: a dedicated backdrop catches taps on empty canvas/panels,
+  // even when gesture handlers stop event propagation.
+  const layer = h('div', { class: 'popup-dismiss-layer', 'aria-hidden': 'true' });
+  Object.assign(layer.style, { position: 'fixed', inset: '0', zIndex: '149', background: 'transparent', touchAction: 'manipulation' });
+  layer.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); closeMenu(); });
+  document.body.append(layer);
+  menuDismissLayer = layer;
   const menu = h('div', { class: 'popup' }, items.filter(Boolean).map(menuEntry));
   document.body.append(menu);
+  // Stay above the transparent dismiss layer.
+  menu.style.zIndex = '150';
   const r = menu.getBoundingClientRect();
   menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - r.width - 4))}px`;
   menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - r.height - 4))}px`;
