@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Mobile workspace. Original panels, menus and document operations remain authoritative.
+import { regionToMesh } from './meshtool.js';
 const MEDIA = '(max-width: 850px), (pointer: coarse) and (max-width: 1024px)';
 const PANELS = ['canvas', 'tree', 'inspector', 'timeline', 'workspace'];
 const LABELS = { canvas: 'Tuval', tree: 'İskelet', inspector: 'Özellikler', timeline: 'Zaman çizelgesi', workspace: 'Araçlar ve menüler' };
@@ -11,7 +12,7 @@ export function installMobileEditor(app, viewport, options = {}) {
   const root = document.getElementById('app');
   if (!root) throw new Error('Rigby2D #app element missing');
   const query = window.matchMedia(MEDIA);
-  const state = { active: false, panel: 'canvas', pan: false, expanded: false, multi: false, fine: false, alt: false, timelinePan: false };
+  const state = { active: false, panel: 'canvas', pan: false, expanded: false, multi: false, fine: false, alt: false, timelinePan: false, ratioLocked: false };
   const cleanup = [], owned = [], docked = [];
   let disposed = false, previousPanel = 'canvas', lastMode = app.mode, lastWorkspace = null;
   let renderedCommands = [], revision = -1, timeRevision = -1;
@@ -73,6 +74,111 @@ export function installMobileEditor(app, viewport, options = {}) {
   const fit = button('av-fit', '⊡ Sığdır', 'İskeleti tuvale sığdır', () => { app.frameRequest = true; app.changed(); });
   const zoom = factor => { app.view.zoom = Math.max(0.05, Math.min(20, app.view.zoom * factor)); app.changed(); };
   tools.append(pan, fit, button('av-zoom-out', '−', 'Tuvali uzaklaştır', () => zoom(0.8)), button('av-zoom-in', '+', 'Tuvali yakınlaştır', () => zoom(1.25)));
+
+
+  // One-touch attachment editing: use the native mesh engine, not a mobile-only mesh format.
+  // Keep the full inspector for binding and brush settings, but make common actions accessible
+  // while the canvas is visible.
+  const partTools = el('div', 'av-context-tools');
+  partTools.id = 'av-context-tools';
+  const activePart = () => {
+    const selected = Number.isInteger(app.sel?.slot) ? app.sel.slot : null;
+    const editing = Number.isInteger(app.meshEdit?.slot) ? app.meshEdit.slot : null;
+    const slot = selected ?? editing;
+    if (slot === null || !app.doc?.slots?.[slot]) return null;
+    const name = editing === slot
+      ? app.meshEdit.name
+      : app.pose()?.attachment?.[slot] ?? app.doc.slots[slot].attachment;
+    if (!name) return null;
+    const att = app.doc.attachment?.(slot, name)
+      ?? app.doc.slots[slot].attachments?.find(a => a.name === name);
+    return att ? { slot, name, att } : null;
+  };
+  const beginMesh = (part, editMode = 'vertices') => {
+    if (app.mode !== 'setup' && app.mode !== 'animate') return;
+    if (!part) {
+      app.setStatus('Mesh için önce İskelet bölümünden bir görsel/slot seç.');
+      setPanel('tree');
+      return;
+    }
+    if (part.att.type === 'linkedmesh') {
+      app.setStatus('Linked mesh: ana mesh seçilerek düzenlenir.');
+      setPanel('inspector');
+      return;
+    }
+    if (part.att.offset) {
+      if (app.mode !== 'setup') {
+        app.setStatus('Mesh oluşturmak için önce Rig moduna geç.');
+        return;
+      }
+      regionToMesh(app.doc, part.slot, part.att);
+    } else if (part.att.type !== 'mesh') {
+      app.setStatus('Bu ek türü mesh olarak düzenlenemez.');
+      return;
+    }
+    app.meshEdit = { slot: part.slot, name: part.name, mode: editMode, radius: 40, strength: 0.5, subtract: false, selected: null };
+    state.pan = false;
+    app.changed();
+    setPanel('canvas');
+  };
+  const meshOpen = button('av-mesh-open', '▦ Mesh', 'Seçili görseli mesh yap veya düzenle', () => run(() => beginMesh(activePart())));
+  const vertices = button('av-mesh-vertices', '◇ Nokta', 'Mesh noktalarını ekle ve taşı', () => run(() => {
+    if (!app.meshEdit) return;
+    app.meshEdit.mode = 'vertices'; state.pan = false; app.changed(); setPanel('canvas');
+  }));
+  const weights = button('av-mesh-weights', '◉ Ağırlık', 'Kemik ağırlıklarını boya veya bağlama ayarlarını aç', () => run(() => {
+    const part = activePart();
+    if (!app.meshEdit || !part || part.att.type !== 'mesh') return;
+    app.meshEdit.mode = 'weights'; state.pan = false; app.changed();
+    if (!part.att.weights) {
+      app.setStatus('Önce Özellikler panelinden kemikleri seçip mesh bağla; ardından tuvalde boya.');
+      setPanel('inspector');
+    } else setPanel('canvas');
+  }));
+  const deleteVertex = button('av-mesh-delete', '⌫ Nokta sil', 'Seçili mesh noktalarını sil', () => run(() => {
+    if (!viewport.meshTool?.deleteSelected?.()) app.setStatus('Silmek için önce tuvalden mesh noktası seç.');
+    app.changed(); refresh();
+  }));
+  const meshSettings = button('av-mesh-settings', '⚙ Ayar', 'Mesh, kemik bağlama ve fırça özellikleri', () => setPanel('inspector'));
+  const meshDone = button('av-mesh-done', '✓ Bitti', 'Mesh düzenlemeyi bitir', () => run(() => {
+    app.meshEdit = null; state.pan = false; app.changed(); refresh();
+  }));
+  const scaleControls = el('div', 'av-part-scale');
+  scaleControls.id = 'av-part-scale';
+  const scaleLabel = el('span', '', 'Görsel');
+  const scaleX = el('input'); scaleX.id = 'av-part-scale-x'; scaleX.type = 'number'; scaleX.step = '0.05'; scaleX.inputMode = 'decimal'; scaleX.title = 'Görsel yatay ölçeği (tuval yakınlaştırması değil)'; scaleX.setAttribute('aria-label', 'Görsel yatay ölçeği X');
+  const scaleY = el('input'); scaleY.id = 'av-part-scale-y'; scaleY.type = 'number'; scaleY.step = '0.05'; scaleY.inputMode = 'decimal'; scaleY.title = 'Görsel dikey ölçeği'; scaleY.setAttribute('aria-label', 'Görsel dikey ölçeği Y');
+  const lock = button('av-scale-lock', '⇲ Serbest', 'X/Y oranını kilitle veya bağımsız ayarla', () => {
+    state.ratioLocked = !state.ratioLocked; refresh();
+  });
+  const changeScale = (axis, input) => {
+    const part = activePart(), offset = part?.att?.offset;
+    if (!offset || app.mode !== 'setup') return;
+    const old = Number(offset[axis]), value = Number(input.value);
+    if (!Number.isFinite(value) || Math.abs(value) < 0.0001 || Math.abs(value) > 100) {
+      app.setStatus('Ölçek sıfır olamaz; -100 ile 100 arasında bir sayı gir.');
+      refresh(); return;
+    }
+    const other = axis === 'scale_x' ? 'scale_y' : 'scale_x';
+    if (state.ratioLocked) {
+      if (!Number.isFinite(old) || Math.abs(old) < 0.0001) {
+        app.setStatus('Oranı kilitlemek için mevcut eksen sıfır olmamalı.');
+        refresh(); return;
+      }
+      const nextOther = Number(offset[other]) * value / old;
+      if (!Number.isFinite(nextOther) || Math.abs(nextOther) > 100) {
+        app.setStatus('Oran kilidiyle hesaplanan ölçek sınır dışında.');
+        refresh(); return;
+      }
+      offset[other] = nextOther;
+    }
+    offset[axis] = value; app.changed(); refresh();
+  };
+  listen(scaleX, 'change', () => changeScale('scale_x', scaleX));
+  listen(scaleY, 'change', () => changeScale('scale_y', scaleY));
+  scaleControls.append(scaleLabel, el('span', '', 'X'), scaleX, el('span', '', 'Y'), scaleY, lock);
+  partTools.append(meshOpen, vertices, weights, deleteVertex, meshSettings, meshDone, scaleControls);
+  tools.insertBefore(partTools, tools.children[0] || null);
 
   const transport = el('div'); transport.id = 'avenox-mobile-transport';
   transport.setAttribute('role', 'toolbar'); transport.setAttribute('aria-label', 'Animasyon oynatma ve kare kaydı');
@@ -260,6 +366,28 @@ export function installMobileEditor(app, viewport, options = {}) {
       node.setAttribute('aria-current', state.panel === id ? 'page' : 'false');
     }
     for (const [id, node] of toolButtons) toggle(node, app.tool === id && !state.pan);
+
+    const part = activePart();
+    const editing = !!(part && app.meshEdit?.slot === part.slot && app.meshEdit.name === part.name && part.att.type === 'mesh');
+    const mesh = part?.att?.type === 'mesh';
+    meshOpen.hidden = editing;
+    meshOpen.textContent = mesh ? '✎ Mesh' : '▦ Mesh';
+    vertices.hidden = !editing || app.mode !== 'setup';
+    weights.hidden = !editing || app.mode !== 'setup';
+    deleteVertex.hidden = !editing || app.mode !== 'setup';
+    meshSettings.hidden = !editing;
+    meshDone.hidden = !editing;
+    toggle(vertices, editing && app.meshEdit.mode === 'vertices');
+    toggle(weights, editing && app.meshEdit.mode === 'weights');
+    const vertexSelection = app.meshEdit?.selection;
+    deleteVertex.disabled = !(app.meshEdit?.selected !== null && app.meshEdit?.selected !== undefined) && !vertexSelection?.size;
+    scaleControls.hidden = !part?.att?.offset || app.mode !== 'setup';
+    if (!scaleControls.hidden && document.activeElement !== scaleX && document.activeElement !== scaleY) {
+      scaleX.value = String(part.att.offset.scale_x);
+      scaleY.value = String(part.att.offset.scale_y);
+    }
+    lock.textContent = state.ratioLocked ? '🔗 Kilitli' : '⇲ Serbest';
+    toggle(lock, state.ratioLocked);
     toggle(pan, state.pan); toggle(multi, state.multi); toggle(fine, state.fine); toggle(alt, state.alt);
     toggle(timelinePan, state.timelinePan);
     for (const node of graphButtons) node.hidden = app.timelineView !== 'graph' || !timelineEditors.graph;

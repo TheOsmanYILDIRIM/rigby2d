@@ -207,3 +207,58 @@ test('graph zoom, pan and fit buttons use the native graph API',()=>{
 test('canvas Pan does not disable tree context menus',()=>{
   const x=setup();x.find('av-pan').click();x.tree.dispatch('pointerdown');assert.equal(x.timers.size,1);x.control.dispose();
 });
+
+
+function selectRegion(x) {
+  const att = { name:'arm', type:'region', image:'arm', width:80, height:120,
+    offset:{x:0,y:0,rotation:0,scale_x:1,scale_y:1,shear_x:0,shear_y:0} };
+  x.app.doc.slots=[{bone:0,attachment:'arm',attachments:[att]}];
+  x.app.doc.skins=[]; x.app.doc.animations=[];
+  x.app.doc.attachment=(slot,name)=>x.app.doc.slots[slot].attachments.find(a=>a.name===name);
+  x.app.pose=()=>({attachment:['arm']});
+  x.app.sel={slot:0};x.app.changed();x.tick();
+  return att;
+}
+test('mobile attachment controls keep independent and locked X/Y scaling separate from zoom',()=>{
+  const x=setup();const part=selectRegion(x);
+  const sx=x.find('av-part-scale-x'), sy=x.find('av-part-scale-y');
+  assert.equal(x.find('av-part-scale').hidden,false);
+  sx.value='2';sx.dispatch('change');
+  assert.equal(part.offset.scale_x,2);assert.equal(part.offset.scale_y,1);
+  assert.equal(x.app.view.zoom,1);
+  x.find('av-scale-lock').click();
+  sx.value='4';sx.dispatch('change');
+  assert.equal(part.offset.scale_x,4);assert.equal(part.offset.scale_y,2);
+  sy.value='3';sy.dispatch('change');
+  assert.equal(part.offset.scale_x,6);assert.equal(part.offset.scale_y,3);
+  sx.value='0';sx.dispatch('change');
+  assert.equal(part.offset.scale_x,6);assert.match(x.app.status,/sıfır/);
+  x.control.dispose();
+});
+test('one-touch mesh conversion and vertex/weight/finish workflow is reachable on mobile',()=>{
+  const x=setup();selectRegion(x);
+  x.find('av-mesh-open').click();
+  assert.equal(x.app.doc.attachment(0,'arm').type,'mesh');
+  assert.equal(x.app.meshEdit.mode,'vertices');
+  assert.equal(x.control.getState().panel,'canvas');
+  assert.equal(x.find('av-mesh-vertices').hidden,false);
+  assert.equal(x.find('av-part-scale').hidden,true);
+  x.find('av-mesh-weights').click();
+  assert.equal(x.app.meshEdit.mode,'weights');
+  assert.equal(x.control.getState().panel,'inspector');
+  x.find('av-mesh-vertices').click();
+  assert.equal(x.control.getState().panel,'canvas');
+  x.app.meshEdit.selected=2;x.app.changed();x.tick();
+  let deleted=0;x.viewport.meshTool={deleteSelected:()=>{deleted++;return true;}};
+  x.find('av-mesh-delete').click();assert.equal(deleted,1);
+  x.find('av-mesh-settings').click();assert.equal(x.control.getState().panel,'inspector');
+  x.find('av-mesh-done').click();assert.equal(x.app.meshEdit,null);
+  x.control.dispose();
+});
+test('mesh shortcut without a selected image guides to skeleton rather than mutating document',()=>{
+  const x=setup();const before=JSON.stringify(x.app.doc);
+  x.find('av-mesh-open').click();
+  assert.equal(x.control.getState().panel,'tree');
+  assert.equal(JSON.stringify(x.app.doc),before);
+  x.control.dispose();
+});

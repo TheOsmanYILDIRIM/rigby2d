@@ -225,3 +225,12 @@ body.avenox-mobile .float-window :is(.log-body,.script-body) { min-height:0; min
 #app.mobile-layout :is(#dopesheet,#graph) { overflow:auto; overscroll-behavior:contain; }
 #app.mobile-layout #avenox-timeline-tools { display:flex; flex:0 0 50px; gap:6px; align-items:center; padding:3px 8px; overflow-x:auto; overscroll-behavior-x:contain; border-bottom:1px solid var(--av-line); }
 #app.mobile-layout #avenox-timeline-tools button { flex:0 0 auto; font-size:12px; }
+
+/* Contextual attachment controls share the existing horizontal toolbar, without adding
+   another permanent row over the canvas. Native desktop tools and layout remain unchanged. */
+#app.mobile-layout #av-context-tools { display:flex; flex:0 0 auto; align-items:center; gap:6px; }
+#app.mobile-layout #av-context-tools > button { flex:0 0 auto; white-space:nowrap; }
+#app.mobile-layout #av-part-scale { display:flex; flex:0 0 auto; align-items:center; gap:5px; padding:0 7px; border-left:1px solid var(--av-line); }
+#app.mobile-layout #av-part-scale span { font-size:12px; color:var(--av-muted); white-space:nowrap; }
+#app.mobile-layout #av-part-scale input[type='number'] { width:68px; min-height:38px; padding:5px 6px; font-variant-numeric:tabular-nums; background:var(--av-panel); border:1px solid var(--av-line); border-radius:8px; color:var(--av-text); }
+#app.mobile-layout #av-scale-lock { font-size:12px; min-height:38px; }
